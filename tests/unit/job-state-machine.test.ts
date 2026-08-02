@@ -55,14 +55,14 @@ function job(state: CaptureJob["state"] = "created"): CaptureJob {
 describe("job state machine", () => {
   it("applies a valid transition and increments stateRevision", () => {
     const result = transitionJob(job(), "preparing", updatedAt);
-    expect(result).toEqual({
-      ok: true,
-      value: expect.objectContaining({
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value).toMatchObject({
         state: "preparing",
         stateRevision: 1,
         updatedAt,
-      }),
-    });
+      });
+    }
   });
 
   it("rejects transitions outside the locked transition table", () => {
