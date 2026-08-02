@@ -52,7 +52,7 @@ jobs:
           tar -xzf /tmp/s04-payload.tar.gz
           rm -rf s04-payload
 
-      - name: Apply lint corrections
+      - name: Apply typed corrections
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -96,6 +96,42 @@ jobs:
               "let storedArtifact: ArtifactRecord | undefined;",
           )
           path.write_text(text, encoding="utf-8")
+
+          path = Path("vite.config.ts")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "function extensionIconPlugin(): Plugin {",
+              '''function offscreenHtmlPlugin(): Plugin {
+            return {
+              name: "webcap-offscreen-html",
+              apply: "build",
+              generateBundle() {
+                this.emitFile({
+                  type: "asset",
+                  fileName: "offscreen.html",
+                  source:
+                    '<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>WebCap Offscreen Processor</title></head><body><script type="module" src="./offscreen.js"></script></body></html>',
+                });
+              },
+            };
+          }
+
+          function extensionIconPlugin(): Plugin {''',
+          )
+          text = text.replace(
+              "plugins: [react(), extensionIconPlugin()],",
+              "plugins: [react(), extensionIconPlugin(), offscreenHtmlPlugin()],",
+          )
+          text = text.replace(
+              'offscreen: resolve(offscreenRoot, "offscreen.html"),',
+              'offscreen: resolve(offscreenRoot, "entry.ts"),',
+          )
+          text = text.replace(
+              '          chunkInfo.name === "service-worker"\n            ? "service-worker.js"\n            : "assets/[name]-[hash].js",',
+              '          chunkInfo.name === "service-worker"\n            ? "service-worker.js"\n            : chunkInfo.name === "offscreen"\n              ? "offscreen.js"\n              : "assets/[name]-[hash].js",',
+          )
+          path.write_text(text, encoding="utf-8")
+          Path("src/offscreen/offscreen.html").unlink()
           PY
 
       - name: Format implementation
