@@ -37,6 +37,33 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Finalize S03 plan snapshot
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("PLAN.md")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              "current_session: S03": "current_session: S04",
+              "| S03 | M1 | Visible capture coordinator và Chrome adapter | S02 | 16k–24k | NEXT |": "| S03 | M1 | Visible capture coordinator và Chrome adapter | S02 | 16k–24k | DONE |",
+              "| S04 | M1 | Offscreen processing, artifact storage và download | S03 | 18k–26k | READY |": "| S04 | M1 | Offscreen processing, artifact storage và download | S03 | 18k–26k | NEXT |",
+              "**Commit gợi ý:** `Implement visible capture coordinator`.\n\n---": "**Commit gợi ý:** `Implement visible capture coordinator`.\n\n**Hoàn thành:** 2026-08-02 · PR #7 · validation head `710ce8d`.\n\n**Ghi chú kỹ thuật:** visible/PNG đã hoạt động qua typed Chrome adapter và coordinator in-memory; runtime chỉ truyền metadata, request trùng được dedupe, capture cạnh tranh bị chặn và cancel được normalize. CI sạch pass format, lint, typecheck, 52 unit tests và build. Pixel persistence, offscreen processing và download được chuyển đúng sang S04.\n\n---",
+          }
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"Expected exactly one match for {old!r}, found {count}")
+              text = text.replace(old, new)
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Upload finalized plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: s03-final-plan
+          path: PLAN.md
+
       - name: Check formatting
         run: pnpm format:check
 
