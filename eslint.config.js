@@ -2,6 +2,8 @@ import js from "@eslint/js";
 import eslintConfigPrettier from "eslint-config-prettier";
 import tseslint from "typescript-eslint";
 
+const typescriptFiles = ["**/*.{ts,tsx}"];
+
 export default tseslint.config(
   {
     ignores: [
@@ -12,10 +14,16 @@ export default tseslint.config(
       "pnpm-lock.yaml",
     ],
   },
-  js.configs.recommended,
-  ...tseslint.configs.recommendedTypeChecked,
   {
-    files: ["**/*.{ts,tsx}"],
+    ...js.configs.recommended,
+    files: ["**/*.{js,mjs,cjs}"],
+  },
+  ...tseslint.configs.recommendedTypeChecked.map((config) => ({
+    ...config,
+    files: typescriptFiles,
+  })),
+  {
+    files: typescriptFiles,
     languageOptions: {
       parserOptions: {
         projectService: true,
