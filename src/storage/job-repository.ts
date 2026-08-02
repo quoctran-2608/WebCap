@@ -71,7 +71,7 @@ export class IndexedDbJobRepository implements JobRepositoryPort {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.jobs, "readwrite");
       const store = transaction.objectStore(WEBCAP_STORES.jobs);
-      const existing = await requestResult(store.get(validated.id));
+      const existing = await requestResult<unknown>(store.get(validated.id));
       if (existing !== undefined) {
         throw revisionConflict(validated.id, 0, parseJob(existing).stateRevision);
       }
@@ -86,7 +86,9 @@ export class IndexedDbJobRepository implements JobRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.jobs, "readonly");
-      const value = await requestResult(transaction.objectStore(WEBCAP_STORES.jobs).get(jobId));
+      const value = await requestResult<unknown>(
+        transaction.objectStore(WEBCAP_STORES.jobs).get(jobId),
+      );
       await transactionDone(transaction);
       return value === undefined ? undefined : parseJob(value);
     } catch (error) {
@@ -100,7 +102,7 @@ export class IndexedDbJobRepository implements JobRepositoryPort {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.jobs, "readwrite");
       const store = transaction.objectStore(WEBCAP_STORES.jobs);
-      const value = await requestResult(store.get(validated.id));
+      const value = await requestResult<unknown>(store.get(validated.id));
       if (value === undefined) {
         throw revisionConflict(validated.id, expectedRevision, "missing");
       }
@@ -135,7 +137,7 @@ export class IndexedDbJobRepository implements JobRepositoryPort {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.jobs, "readwrite");
       const store = transaction.objectStore(WEBCAP_STORES.jobs);
-      const existing = await requestResult(store.get(jobId));
+      const existing = await requestResult<unknown>(store.get(jobId));
       if (existing === undefined) {
         await transactionDone(transaction);
         return false;
@@ -152,7 +154,9 @@ export class IndexedDbJobRepository implements JobRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.jobs, "readonly");
-      const values = await requestResult(transaction.objectStore(WEBCAP_STORES.jobs).getAll());
+      const values = await requestResult<unknown[]>(
+        transaction.objectStore(WEBCAP_STORES.jobs).getAll(),
+      );
       await transactionDone(transaction);
       return values
         .map(parseJob)
