@@ -6,7 +6,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 ## Current status
 
-**S00 — Foundation** establishes the TypeScript workspace and quality toolchain. Chrome extension entry points and the Manifest V3 build are intentionally introduced in S01.
+**S00 — Foundation is complete.** The next session is S01, which introduces the Manifest V3 multi-entry build, popup shell, service worker, and typed popup-to-worker handshake.
 
 ## Requirements
 
