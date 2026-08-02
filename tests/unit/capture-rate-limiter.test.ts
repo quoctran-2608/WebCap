@@ -9,20 +9,21 @@ describe("CaptureRateLimiter", () => {
     const limiter = new CaptureRateLimiter({
       minimumIntervalMs: 550,
       now: () => now,
-      sleep: async (milliseconds) => {
+      sleep: (milliseconds) => {
         sleeps.push(milliseconds);
         now += milliseconds;
+        return Promise.resolve();
       },
     });
     const starts: number[] = [];
 
-    const first = limiter.run(async () => {
+    const first = limiter.run(() => {
       starts.push(now);
-      return "first";
+      return Promise.resolve("first");
     });
-    const second = limiter.run(async () => {
+    const second = limiter.run(() => {
       starts.push(now);
-      return "second";
+      return Promise.resolve("second");
     });
 
     await expect(Promise.all([first, second])).resolves.toEqual(["first", "second"]);
@@ -34,12 +35,12 @@ describe("CaptureRateLimiter", () => {
     const limiter = new CaptureRateLimiter({
       minimumIntervalMs: 0,
       now: () => 1,
-      sleep: async () => undefined,
+      sleep: () => Promise.resolve(),
     });
 
-    await expect(limiter.run(async () => Promise.reject(new Error("capture failed")))).rejects.toThrow(
-      "capture failed",
-    );
-    await expect(limiter.run(async () => "recovered")).resolves.toBe("recovered");
+    await expect(
+      limiter.run(() => Promise.reject(new Error("capture failed"))),
+    ).rejects.toThrow("capture failed");
+    await expect(limiter.run(() => Promise.resolve("recovered"))).resolves.toBe("recovered");
   });
 });
