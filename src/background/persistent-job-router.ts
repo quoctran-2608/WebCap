@@ -150,7 +150,18 @@ async function executeJobRequest(
         ...(request.payload.preferredEngine === undefined
           ? {}
           : { preferredEngine: request.payload.preferredEngine }),
-        ...(request.payload.source === undefined ? {} : { source: request.payload.source }),
+        ...(request.payload.source === undefined
+          ? {}
+          : {
+              source: {
+                ...(request.payload.source.title === undefined
+                  ? {}
+                  : { title: request.payload.source.title }),
+                ...(request.payload.source.origin === undefined
+                  ? {}
+                  : { origin: request.payload.source.origin }),
+              },
+            }),
       });
     case "JOB_GET": {
       const job = await dependencies.jobs.get(request.payload.jobId);
