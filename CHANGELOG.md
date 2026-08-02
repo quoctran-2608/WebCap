@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- IndexedDB artifact storage with Blob-backed source/output records and expiry cleanup.
+- Race-safe offscreen document processing for PNG, JPEG, and WebP image artifacts.
+- Sanitized title/domain/timestamp filenames and Chrome download lifecycle with Blob URL revocation.
+- Metadata-only export/download runtime contracts with retry and request deduplication that avoid recapture.
 - Visible viewport capture through a typed Chrome tabs adapter and in-memory coordinator.
 - Active-tab capability checks for supported web/file URLs and normalized restricted-page errors.
 - Metadata-only capture protocol with request deduplication, single-job locking, rate limiting, and cancellation.

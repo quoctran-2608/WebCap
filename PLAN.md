@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S04
+current_session: S05
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -102,8 +102,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | S01 | M0 | Manifest V3 multi-entry và popup ↔ worker handshake | S00 | 14k–22k | DONE |
 | S02 | M0 | Shared contracts, settings, errors và CI | S01 | 16k–24k | DONE |
 | S03 | M1 | Visible capture coordinator và Chrome adapter | S02 | 16k–24k | DONE |
-| S04 | M1 | Offscreen processing, artifact storage và download | S03 | 18k–26k | NEXT |
-| S05 | M1 | Preview UI và visible-capture E2E | S04 | 16k–24k | READY |
+| S04 | M1 | Offscreen processing, artifact storage và download | S03 | 18k–26k | DONE |
+| S05 | M1 | Preview UI và visible-capture E2E | S04 | 16k–24k | NEXT |
 | S06 | M2 | Persistent job state machine và repositories | S05 | 16k–24k | READY |
 | S07 | M2 | Debugger client, page metrics và 2D tile planner | S06 | 20k–28k | READY |
 | S08 | M2 | Page preparation, lazy settle và restoration | S07 | 20k–28k | READY |
@@ -265,6 +265,10 @@ pnpm build
 **Exit criteria:** artifact survives popup close; download tên file đúng; lỗi quota/offscreen/download có user-safe code.
 
 **Commit gợi ý:** `Add offscreen image export and download`.
+
+**Hoàn thành:** 2026-08-02 · PR #8 · validation head `a4eeaa5`.
+
+**Ghi chú kỹ thuật:** source/output image được lưu bằng Blob trong IndexedDB; offscreen manager chống race bằng runtime.getContexts(), encode PNG/JPEG/WebP và quản lý Blob URL; download luôn revoke URL trong finally; retry export/download không gọi captureVisibleTab lại. CI sạch pass format, lint, typecheck, 69 unit tests và build có offscreen.html/offscreen.js. Manual Chrome E2E được giữ đúng phạm vi S05.
 
 ---
 
@@ -782,8 +786,8 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S01 | DONE | 2026-08-02 | 461a6b8560d3 | format, lint, typecheck, unit, build, Chrome smoke | Manifest V3 load được; popup kết nối service worker bằng PING/PONG typed. |
 | S02 | DONE | 2026-08-02 | 6e6a76659173 | format, lint, typecheck, unit, build, Chrome smoke | Shared Zod contracts, settings migration/repository, error model, safe logger và CI đã được xác thực. |
 | S03 | DONE | 2026-08-02 | PR #7 / 710ce8d | format, lint, typecheck, 52 unit, build | Visible capture coordinator, typed Chrome adapter, metadata-only protocol, dedupe, rate limit và cancel đã được xác thực. |
-| S04 | NEXT | — | — | — | Sẵn sàng triển khai offscreen processing, artifact storage và download. |
-| S05 | READY | — | — | — | — |
+| S04 | DONE | 2026-08-02 | PR #8 / a4eeaa5 | format, lint, typecheck, 69 unit, build | Blob artifact persistence, offscreen PNG/JPEG/WebP processing, filename sanitizer, download lifecycle và retry không recapture đã được xác thực. |
+| S05 | NEXT | — | — | — | Sẵn sàng hoàn tất preview UI và visible-capture E2E. |
 | S06 | READY | — | — | — | — |
 | S07 | READY | — | — | — | — |
 | S08 | READY | — | — | — | — |
@@ -802,12 +806,12 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S04 — Offscreen processing, artifact storage và download**.
+Session kế tiếp là **S05 — Preview UI và visible-capture E2E**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S04.
-2. Đọc SPEC §11–12, §21 và §23–25.
-3. Kiểm tra repo/branch và kết quả CI S03.
-4. Chỉ triển khai S04.
-5. Kết thúc với offscreen processing, artifact storage và download được unit/integration test đầy đủ.
+1. Đọc `PLAN.md` phần S05.
+2. Đọc PRD acceptance criteria cho visible/image export, SPEC UI M1 và §27.
+3. Kiểm tra repo/branch và kết quả CI S04.
+4. Chỉ triển khai S05.
+5. Kết thúc với preview UI, popup state synchronization và visible-capture E2E smoke đầy đủ.
