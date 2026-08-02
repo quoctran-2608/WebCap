@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S00
+current_session: S01
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -98,8 +98,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 
 | Session | SPEC milestone | Capability hoàn thành | Phụ thuộc | Token mục tiêu | Trạng thái |
 | --- | --- | --- | --- | ---: | --- |
-| S00 | M0 | Bootstrap workspace và quality toolchain | Docs hiện có | 14k–22k | NEXT |
-| S01 | M0 | Manifest V3 multi-entry và popup ↔ worker handshake | S00 | 14k–22k | READY |
+| S00 | M0 | Bootstrap workspace và quality toolchain | Docs hiện có | 14k–22k | DONE |
+| S01 | M0 | Manifest V3 multi-entry và popup ↔ worker handshake | S00 | 14k–22k | NEXT |
 | S02 | M0 | Shared contracts, settings, errors và CI | S01 | 16k–24k | READY |
 | S03 | M1 | Visible capture coordinator và Chrome adapter | S02 | 16k–24k | READY |
 | S04 | M1 | Offscreen processing, artifact storage và download | S03 | 18k–26k | READY |
@@ -774,8 +774,8 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 
 | Session | Status | Date | Commit/PR | Tests | Notes |
 | --- | --- | --- | --- | --- | --- |
-| S00 | NEXT | — | — | — | Bắt đầu từ workspace trống ngoài ba file tài liệu. |
-| S01 | READY | — | — | — | — |
+| S00 | DONE | 2026-08-02 | 44757499ab7f | format, lint, typecheck, unit, build | Workspace và lockfile đã được xác thực trên GitHub Actions. |
+| S01 | NEXT | — | — | — | Sẵn sàng triển khai Manifest V3 và popup ↔ worker handshake. |
 | S02 | READY | — | — | — | — |
 | S03 | READY | — | — | — | — |
 | S04 | READY | — | — | — | — |
@@ -798,12 +798,12 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S00 — Bootstrap workspace và quality toolchain**.
+Session kế tiếp là **S01 — Manifest V3 multi-entry và popup ↔ worker handshake**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S00.
-2. Đọc SPEC §3–5, §27–29 và §31–33.
-3. Kiểm tra repo/branch/CI hiện tại.
-4. Chỉ triển khai S00.
-5. Kết thúc với build xanh, cập nhật nhật ký và chuyển `current_session` sang `S01`.
+1. Đọc `PLAN.md` phần S01.
+2. Đọc SPEC §5–6, §8 và UI M0 ở §26.
+3. Kiểm tra repo/branch và kết quả validation S00.
+4. Chỉ triển khai S01.
+5. Kết thúc với extension unpacked build được và popup ping service worker thành công.

@@ -6,13 +6,7 @@ const typescriptFiles = ["**/*.{ts,tsx}"];
 
 export default tseslint.config(
   {
-    ignores: [
-      "artifacts/**",
-      "coverage/**",
-      "dist/**",
-      "node_modules/**",
-      "pnpm-lock.yaml",
-    ],
+    ignores: ["artifacts/**", "coverage/**", "dist/**", "node_modules/**", "pnpm-lock.yaml"],
   },
   {
     ...js.configs.recommended,
@@ -31,10 +25,7 @@ export default tseslint.config(
       },
     },
     rules: {
-      "@typescript-eslint/consistent-type-imports": [
-        "error",
-        { fixStyle: "inline-type-imports" },
-      ],
+      "@typescript-eslint/consistent-type-imports": ["error", { fixStyle: "inline-type-imports" }],
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-misused-promises": "error",
