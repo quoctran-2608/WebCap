@@ -5,12 +5,10 @@ import {
   type PersistentJobRouterDependencies,
 } from "@background/persistent-job-router";
 import type {
-  CreatePersistentJobOptions,
   JobCleanupReport,
   PersistentJobCoordinatorPort,
 } from "@background/job-coordinator";
-import type { JobInvariantContext, JobTransitionPatch } from "@background/job-state-machine";
-import type { CaptureJob, JobState } from "@shared/contracts/domain";
+import type { CaptureJob } from "@shared/contracts/domain";
 import type { StoredDedupeRecord } from "@shared/contracts/job";
 import { createJobCreateMessage, createJobGetMessage } from "@shared/contracts/job-messages";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
@@ -66,7 +64,7 @@ class FakeCoordinator implements PersistentJobCoordinatorPort {
     return Promise.resolve();
   }
 
-  create(_options: CreatePersistentJobOptions): Promise<CaptureJob> {
+  create(): Promise<CaptureJob> {
     this.createCalls += 1;
     return Promise.resolve(job());
   }
@@ -76,12 +74,7 @@ class FakeCoordinator implements PersistentJobCoordinatorPort {
     return Promise.resolve(this.current);
   }
 
-  transition(
-    _jobId: string,
-    _nextState: JobState,
-    _patch?: JobTransitionPatch,
-    _context?: JobInvariantContext,
-  ): Promise<CaptureJob> {
+  transition(): Promise<CaptureJob> {
     return Promise.resolve(job());
   }
 
