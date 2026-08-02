@@ -3,6 +3,7 @@ export interface ActiveTabSnapshot {
   windowId: number;
   active: boolean;
   url?: string;
+  title?: string;
 }
 
 export interface TabsCaptureAdapter {
@@ -23,6 +24,7 @@ export function createChromeTabsAdapter(): TabsCaptureAdapter {
         windowId: tab.windowId,
         active: tab.active,
         ...(tab.url === undefined ? {} : { url: tab.url }),
+        ...(tab.title === undefined ? {} : { title: tab.title }),
       };
     },
     captureVisibleTab: (windowId) => chrome.tabs.captureVisibleTab(windowId, { format: "png" }),

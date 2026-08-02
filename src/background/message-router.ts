@@ -1,7 +1,10 @@
 import { FOUNDATION_CAPABILITIES, type CaptureCapabilities } from "@shared/capabilities";
+import type { ArtifactMetadata } from "@shared/contracts/artifact";
 import {
+  createArtifactDownloadStartedMessage,
   createCapabilitiesResponseMessage,
   createErrorResponseMessage,
+  createImageExportSuccessMessage,
   createPongMessage,
   createTabCapabilityResponseMessage,
   createVisibleCaptureCancelledMessage,
@@ -10,19 +13,34 @@ import {
   type BackgroundResponse,
 } from "@shared/contracts/messages";
 import { normalizeError } from "@shared/errors/normalize-error";
+import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
 
 import { createChromeTabsAdapter, type TabsCaptureAdapter } from "./chrome-tabs-adapter";
+import { DownloadService } from "./download-service";
+import { ImageExportService } from "./image-export-service";
+import { OffscreenService } from "./offscreen-service";
 import { inspectActiveTab } from "./tab-capability";
 import {
   VisibleCaptureCoordinator,
   type VisibleCaptureCoordinatorPort,
 } from "./visible-capture-coordinator";
 
+export interface ImageExportCoordinatorPort {
+  exportCapture(options: {
+    requestId: string;
+    sourceArtifactId: string;
+    format: "png" | "jpeg" | "webp";
+    quality: number;
+  }): Promise<ArtifactMetadata>;
+  downloadArtifact(artifactId: string): Promise<number>;
+}
+
 export interface MessageRouterDependencies {
   workerVersion: string;
   capabilities: CaptureCapabilities;
   tabs: TabsCaptureAdapter;
   visibleCapture: VisibleCaptureCoordinatorPort;
+  imageExport: ImageExportCoordinatorPort;
   now: () => Date;
 }
 
@@ -34,13 +52,19 @@ function defaultDependencies(): MessageRouterDependencies {
   }
 
   const tabs = createChromeTabsAdapter();
+  const artifacts = new IndexedDbArtifactRepository();
+  const offscreen = new OffscreenService();
+  const downloads = new DownloadService({ artifacts, objectUrls: offscreen });
+  const imageExport = new ImageExportService({ artifacts, offscreen, downloads });
   sharedDependencies = {
     workerVersion: chrome.runtime.getManifest().version,
     capabilities: FOUNDATION_CAPABILITIES,
     tabs,
-    visibleCapture: new VisibleCaptureCoordinator({ tabs }),
+    visibleCapture: new VisibleCaptureCoordinator({ tabs, artifacts }),
+    imageExport,
     now: () => new Date(),
   };
+  void artifacts.deleteExpired(new Date().toISOString()).catch(() => undefined);
   return sharedDependencies;
 }
 
@@ -114,13 +138,43 @@ export async function routeRuntimeMessage(
           accepted: dependencies.visibleCapture.cancel(parsed.value.payload.captureRequestId),
           sentAt: dependencies.now().toISOString(),
         });
+      case "IMAGE_EXPORT_START":
+        return createImageExportSuccessMessage({
+          requestId: parsed.value.requestId,
+          artifact: await dependencies.imageExport.exportCapture({
+            requestId: parsed.value.requestId,
+            sourceArtifactId: parsed.value.payload.sourceArtifactId,
+            format: parsed.value.payload.format,
+            quality: parsed.value.payload.quality,
+          }),
+          sentAt: dependencies.now().toISOString(),
+        });
+      case "ARTIFACT_DOWNLOAD_START":
+        return createArtifactDownloadStartedMessage({
+          requestId: parsed.value.requestId,
+          artifactId: parsed.value.payload.artifactId,
+          downloadId: await dependencies.imageExport.downloadArtifact(
+            parsed.value.payload.artifactId,
+          ),
+          sentAt: dependencies.now().toISOString(),
+        });
     }
   } catch (error) {
     return createErrorResponseMessage({
       requestId: parsed.value.requestId,
       error: normalizeError(error, {
-        stage: "capture",
-        userMessageKey: "errors.captureFailed",
+        stage:
+          parsed.value.type === "ARTIFACT_DOWNLOAD_START"
+            ? "export"
+            : parsed.value.type === "IMAGE_EXPORT_START"
+              ? "process"
+              : "capture",
+        userMessageKey:
+          parsed.value.type === "ARTIFACT_DOWNLOAD_START"
+            ? "errors.downloadFailed"
+            : parsed.value.type === "IMAGE_EXPORT_START"
+              ? "errors.exportFailed"
+              : "errors.captureFailed",
         retryable: true,
         fallbackAllowed: false,
       }),
@@ -130,16 +184,22 @@ export async function routeRuntimeMessage(
 }
 
 export function registerMessageRouter(): void {
-  chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-    if (!targetsBackground(message)) {
-      return false;
-    }
-
-    void routeRuntimeMessage(message, defaultDependencies()).then((response) => {
-      if (response !== undefined) {
-        sendResponse(response);
+  chrome.runtime.onMessage.addListener(
+    (
+      message: unknown,
+      _sender: chrome.runtime.MessageSender,
+      sendResponse: (response?: unknown) => void,
+    ) => {
+      if (!targetsBackground(message)) {
+        return false;
       }
-    });
-    return true;
-  });
+
+      void routeRuntimeMessage(message, defaultDependencies()).then((response) => {
+        if (response !== undefined) {
+          sendResponse(response);
+        }
+      });
+      return true;
+    },
+  );
 }

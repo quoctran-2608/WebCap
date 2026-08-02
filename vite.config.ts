@@ -6,9 +6,25 @@ import { defineConfig, type Plugin } from "vite";
 
 const projectRoot = import.meta.dirname;
 const popupRoot = resolve(projectRoot, "src/popup");
+const offscreenRoot = resolve(projectRoot, "src/offscreen");
 const iconData = JSON.parse(
   readFileSync(resolve(projectRoot, "assets/icons.json"), "utf8"),
 ) as Record<string, string>;
+
+function offscreenHtmlPlugin(): Plugin {
+  return {
+    name: "webcap-offscreen-html",
+    apply: "build",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "offscreen.html",
+        source:
+          '<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>WebCap Offscreen Processor</title></head><body><script type="module" src="./offscreen.js"></script></body></html>',
+      });
+    },
+  };
+}
 
 function extensionIconPlugin(): Plugin {
   return {
@@ -35,11 +51,12 @@ export default defineConfig({
   root: popupRoot,
   base: "./",
   publicDir: resolve(projectRoot, "public"),
-  plugins: [react(), extensionIconPlugin()],
+  plugins: [react(), extensionIconPlugin(), offscreenHtmlPlugin()],
   resolve: {
     alias: {
       "@background": resolve(projectRoot, "src/background"),
       "@popup": resolve(projectRoot, "src/popup"),
+      "@offscreen": resolve(projectRoot, "src/offscreen"),
       "@shared": resolve(projectRoot, "src/shared"),
       "@storage": resolve(projectRoot, "src/storage"),
     },
@@ -52,11 +69,16 @@ export default defineConfig({
     rolldownOptions: {
       input: {
         popup: resolve(popupRoot, "popup.html"),
+        offscreen: resolve(offscreenRoot, "entry.ts"),
         "service-worker": resolve(projectRoot, "src/background/service-worker.ts"),
       },
       output: {
         entryFileNames: (chunkInfo) =>
-          chunkInfo.name === "service-worker" ? "service-worker.js" : "assets/[name]-[hash].js",
+          chunkInfo.name === "service-worker"
+            ? "service-worker.js"
+            : chunkInfo.name === "offscreen"
+              ? "offscreen.js"
+              : "assets/[name]-[hash].js",
         chunkFileNames: "assets/[name]-[hash].js",
         assetFileNames: "assets/[name]-[hash][extname]",
       },

@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { routeRuntimeMessage } from "@background/message-router";
 import type { TabsCaptureAdapter } from "@background/chrome-tabs-adapter";
+import { routeRuntimeMessage, type ImageExportCoordinatorPort } from "@background/message-router";
 import type { VisibleCaptureCoordinatorPort } from "@background/visible-capture-coordinator";
 import { FOUNDATION_CAPABILITIES } from "@shared/capabilities";
 import {
   PROTOCOL_VERSION,
+  createArtifactDownloadStartMessage,
   createCapabilitiesGetMessage,
+  createImageExportStartMessage,
   createPingMessage,
   createTabCapabilityGetMessage,
   createVisibleCaptureCancelMessage,
@@ -32,11 +34,28 @@ const visibleCapture: VisibleCaptureCoordinatorPort = {
     }),
   cancel: () => true,
 };
+const imageExport: ImageExportCoordinatorPort = {
+  exportCapture: (options) =>
+    Promise.resolve({
+      artifactId: "artifact-1",
+      sourceArtifactId: options.sourceArtifactId,
+      format: options.format,
+      mimeType: options.format === "jpeg" ? "image/jpeg" : "image/png",
+      filename: "capture.jpg",
+      byteLength: 64,
+      width: 1,
+      height: 1,
+      createdAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 1_000).toISOString(),
+    }),
+  downloadArtifact: () => Promise.resolve(77),
+};
 const dependencies = {
   workerVersion: "0.1.0",
   capabilities: FOUNDATION_CAPABILITIES,
   tabs,
   visibleCapture,
+  imageExport,
   now: () => now,
 };
 
@@ -114,6 +133,36 @@ describe("routeRuntimeMessage", () => {
     expect(cancelled).toMatchObject({
       type: "VISIBLE_CAPTURE_CANCELLED",
       payload: { captureRequestId: "request-capture", accepted: true },
+    });
+  });
+
+  it("routes image processing and artifact download without recapture", async () => {
+    const exported = await routeRuntimeMessage(
+      createImageExportStartMessage({
+        requestId: "request-export",
+        sourceArtifactId: "capture-1",
+        format: "jpeg",
+        quality: 0.9,
+        sentAt: now.toISOString(),
+      }),
+      dependencies,
+    );
+    expect(exported).toMatchObject({
+      type: "IMAGE_EXPORT_SUCCESS",
+      payload: { artifactId: "artifact-1", sourceArtifactId: "capture-1" },
+    });
+
+    const downloaded = await routeRuntimeMessage(
+      createArtifactDownloadStartMessage({
+        requestId: "request-download",
+        artifactId: "artifact-1",
+        sentAt: now.toISOString(),
+      }),
+      dependencies,
+    );
+    expect(downloaded).toMatchObject({
+      type: "ARTIFACT_DOWNLOAD_STARTED",
+      payload: { artifactId: "artifact-1", downloadId: 77 },
     });
   });
 

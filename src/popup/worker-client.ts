@@ -1,13 +1,19 @@
 import type { CaptureCapabilities } from "@shared/capabilities";
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@shared/constants";
+import type { ArtifactMetadata } from "@shared/contracts/artifact";
+import type { ImageFormat } from "@shared/contracts/domain";
 import {
+  createArtifactDownloadStartMessage,
   createCapabilitiesGetMessage,
+  createImageExportStartMessage,
   createPingMessage,
   createTabCapabilityGetMessage,
   createVisibleCaptureCancelMessage,
   createVisibleCaptureStartMessage,
+  isArtifactDownloadStartedMessage,
   isCapabilitiesResponseMessage,
   isErrorResponseMessage,
+  isImageExportSuccessMessage,
   isPongMessage,
   isTabCapabilityResponseMessage,
   isVisibleCaptureCancelledMessage,
@@ -33,6 +39,13 @@ export interface WorkerRequestOptions {
 
 export interface VisibleCaptureRequestOptions extends WorkerRequestOptions {
   captureRequestId?: string;
+}
+
+export interface ImageExportRequestOptions extends WorkerRequestOptions {
+  sourceArtifactId: string;
+  format: ImageFormat;
+  quality: number;
+  exportRequestId?: string;
 }
 
 const chromeRuntimeMessenger: RuntimeMessenger = {
@@ -200,4 +213,57 @@ export async function cancelVisibleCapture(
   }
 
   return response.payload.accepted;
+}
+
+export async function exportImage(options: ImageExportRequestOptions): Promise<ArtifactMetadata> {
+  const { runtime, now, createRequestId } = requestDependencies(options);
+  const request = createImageExportStartMessage({
+    requestId: options.exportRequestId ?? createRequestId(),
+    sourceArtifactId: options.sourceArtifactId,
+    format: options.format,
+    quality: options.quality,
+    sentAt: now().toISOString(),
+  });
+  const response = await sendWithTimeout(
+    runtime,
+    request,
+    options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
+  );
+
+  throwRemoteError(response);
+  if (!isImageExportSuccessMessage(response)) {
+    throw new TypeError("Service worker returned an invalid image export response.");
+  }
+  if (response.requestId !== request.requestId) {
+    throw new Error("Service worker response did not match the request.");
+  }
+
+  return response.payload;
+}
+
+export async function downloadArtifact(
+  artifactId: string,
+  options: WorkerRequestOptions = {},
+): Promise<number> {
+  const { runtime, now, createRequestId } = requestDependencies(options);
+  const request = createArtifactDownloadStartMessage({
+    requestId: createRequestId(),
+    artifactId,
+    sentAt: now().toISOString(),
+  });
+  const response = await sendWithTimeout(
+    runtime,
+    request,
+    options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS,
+  );
+
+  throwRemoteError(response);
+  if (!isArtifactDownloadStartedMessage(response)) {
+    throw new TypeError("Service worker returned an invalid download response.");
+  }
+  if (response.requestId !== request.requestId) {
+    throw new Error("Service worker response did not match the request.");
+  }
+
+  return response.payload.downloadId;
 }
