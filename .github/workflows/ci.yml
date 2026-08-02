@@ -128,6 +128,11 @@ jobs:
       - name: Visible capture E2E
         run: pnpm test:e2e
 
+      - name: Print Playwright error context
+        if: failure()
+        run: |
+          find test-results -name error-context.md -print -exec cat {} \;
+
       - name: Commit validated implementation
         run: |
           rm -rf s05-payload scripts/apply-s05.py
