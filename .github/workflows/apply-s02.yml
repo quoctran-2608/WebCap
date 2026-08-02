@@ -33,7 +33,7 @@ jobs:
           cat .s02-payload/part-* | base64 --decode > /tmp/webcap-s02.tar.gz
           echo "ed3ce6165b908dbee190561215f4cc86e34f173187cc2279dece94c58a519918  /tmp/webcap-s02.tar.gz" | sha256sum --check
           tar --extract --gzip --file /tmp/webcap-s02.tar.gz --directory .
-          rm -rf .s02-payload S02_VALIDATE .github/workflows/apply-s02.yml
+          rm -rf .s02-payload S02_VALIDATE
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -150,10 +150,11 @@ jobs:
           pnpm format
           pnpm format:check
 
-      - name: Commit validated S02 implementation
+      - name: Commit validated S02 source
         run: |
+          rm -f .github/workflows/ci.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Define contracts settings and CI"
+          git commit -m "Define contracts settings and errors"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
