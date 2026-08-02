@@ -82,3 +82,27 @@ export function createWebCapError(options: CreateWebCapErrorOptions): WebCapErro
     ...(options.causeCode === undefined ? {} : { causeCode: options.causeCode }),
   });
 }
+
+export class WebCapRuntimeError extends Error {
+  readonly data: WebCapErrorData;
+  readonly code: WebCapErrorCode;
+  readonly stage: ErrorStage;
+  readonly userMessageKey: string;
+  readonly retryable: boolean;
+  readonly fallbackAllowed: boolean;
+
+  constructor(data: WebCapErrorData) {
+    super(data.message);
+    this.name = data.code;
+    this.data = data;
+    this.code = data.code;
+    this.stage = data.stage;
+    this.userMessageKey = data.userMessageKey;
+    this.retryable = data.retryable;
+    this.fallbackAllowed = data.fallbackAllowed;
+  }
+}
+
+export function createWebCapRuntimeError(data: WebCapErrorData): WebCapRuntimeError {
+  return new WebCapRuntimeError(data);
+}
