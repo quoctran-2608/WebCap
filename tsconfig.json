@@ -23,9 +23,8 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "types": ["node", "vitest/globals"],
-    "baseUrl": ".",
     "paths": {
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["./src/shared/*"]
     }
   },
   "include": [
