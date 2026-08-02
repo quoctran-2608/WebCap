@@ -15,19 +15,21 @@ import {
 
 const now = new Date("2026-08-02T09:00:00.020Z");
 const tabs: TabsCaptureAdapter = {
-  queryActiveTab: async () => ({ id: 7, windowId: 9, active: true, url: "https://example.com" }),
-  captureVisibleTab: async () => "unused",
+  queryActiveTab: () =>
+    Promise.resolve({ id: 7, windowId: 9, active: true, url: "https://example.com" }),
+  captureVisibleTab: () => Promise.resolve("unused"),
 };
 const visibleCapture: VisibleCaptureCoordinatorPort = {
-  start: async () => ({
-    captureId: "capture-1",
-    tabId: 7,
-    windowId: 9,
-    mimeType: "image/png",
-    byteLength: 68,
-    width: 1,
-    height: 1,
-  }),
+  start: () =>
+    Promise.resolve({
+      captureId: "capture-1",
+      tabId: 7,
+      windowId: 9,
+      mimeType: "image/png",
+      byteLength: 68,
+      width: 1,
+      height: 1,
+    }),
   cancel: () => true,
 };
 const dependencies = {
