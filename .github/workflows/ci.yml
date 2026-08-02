@@ -70,69 +70,11 @@ jobs:
           changelog.write_text(text.replace(marker, marker + addition, 1), encoding="utf-8")
           PY
 
-      - name: Restore permanent CI workflow
-        run: |
-          cat > .github/workflows/ci.yml <<'YAML'
-          name: CI
-
-          on:
-            pull_request:
-              branches: [main]
-            push:
-              branches: [main]
-
-          permissions:
-            contents: read
-
-          concurrency:
-            group: ci-${{ github.workflow }}-${{ github.ref }}
-            cancel-in-progress: true
-
-          jobs:
-            quality:
-              runs-on: ubuntu-latest
-              timeout-minutes: 15
-
-              steps:
-                - name: Check out repository
-                  uses: actions/checkout@v4
-
-                - name: Set up pnpm
-                  uses: pnpm/action-setup@v4
-                  with:
-                    version: 11.15.1
-                    run_install: false
-
-                - name: Set up Node.js
-                  uses: actions/setup-node@v4
-                  with:
-                    node-version: 22.22.0
-                    cache: pnpm
-
-                - name: Install dependencies
-                  run: pnpm install --frozen-lockfile
-
-                - name: Check formatting
-                  run: pnpm format:check
-
-                - name: Lint
-                  run: pnpm lint
-
-                - name: Typecheck
-                  run: pnpm typecheck
-
-                - name: Unit tests
-                  run: pnpm test:unit
-
-                - name: Build extension
-                  run: pnpm build
-          YAML
-
       - name: Commit finalized S03 documentation
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add PLAN.md README.md CHANGELOG.md .github/workflows/ci.yml
+          git add PLAN.md README.md CHANGELOG.md
           git diff --cached --check
           git commit -m "Finalize S03 roadmap"
           git push origin HEAD:${{ github.event.pull_request.head.ref }}
