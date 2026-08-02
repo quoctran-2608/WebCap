@@ -1,0 +1,150 @@
+name: Validate S01
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - package.json
+      - pnpm-workspace.yaml
+      - tsconfig.json
+      - vite.config.ts
+      - vitest.config.ts
+      - eslint.config.js
+      - public/**
+      - assets/**
+      - src/**
+      - tests/**
+      - scripts/**
+      - S01_VALIDATE
+      - .github/workflows/validate-s01.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: validate-s01-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate-extension:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out pull-request branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.15.1 --activate
+          pnpm --version
+
+      - name: Update lockfile and install
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm install --frozen-lockfile
+
+      - name: Normalize and validate formatting
+        run: |
+          pnpm format
+          pnpm format:check
+
+      - name: Validate lint
+        run: pnpm lint
+
+      - name: Validate types
+        run: pnpm typecheck
+
+      - name: Run unit tests
+        run: pnpm test:unit
+
+      - name: Build and verify unpacked extension
+        run: pnpm build
+
+      - name: Install Chrome for Testing
+        run: |
+          CFT_URL=$(python <<'PY'
+          import json
+          import urllib.request
+
+          metadata_url = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
+          with urllib.request.urlopen(metadata_url) as response:
+              metadata = json.load(response)
+
+          downloads = metadata["channels"]["Stable"]["downloads"]["chrome"]
+          print(next(item["url"] for item in downloads if item["platform"] == "linux64"))
+          PY
+          )
+          curl --fail --location --silent --show-error "$CFT_URL" --output /tmp/chrome-for-testing.zip
+          rm -rf /tmp/chrome-for-testing
+          mkdir -p /tmp/chrome-for-testing
+          unzip -q /tmp/chrome-for-testing.zip -d /tmp/chrome-for-testing
+          CHROME_BIN=$(find /tmp/chrome-for-testing -path '*/chrome-linux64/chrome' -type f -print -quit)
+          test -n "$CHROME_BIN"
+          echo "CHROME_BIN=$CHROME_BIN" >> "$GITHUB_ENV"
+
+      - name: Smoke-test popup and service worker
+        run: xvfb-run --auto-servernum pnpm test:smoke
+
+      - name: Advance implementation plan
+        env:
+          VALIDATED_COMMIT: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python <<'PY'
+          import os
+          from pathlib import Path
+
+          commit = os.environ["VALIDATED_COMMIT"][:12]
+          plan_path = Path("PLAN.md")
+          plan = plan_path.read_text(encoding="utf-8")
+          replacements = {
+              "current_session: S01": "current_session: S02",
+              "| S01 | M0 | Manifest V3 multi-entry và popup ↔ worker handshake | S00 | 14k–22k | NEXT |":
+                  "| S01 | M0 | Manifest V3 multi-entry và popup ↔ worker handshake | S00 | 14k–22k | DONE |",
+              "| S02 | M0 | Shared contracts, settings, errors và CI | S01 | 16k–24k | READY |":
+                  "| S02 | M0 | Shared contracts, settings, errors và CI | S01 | 16k–24k | NEXT |",
+              "| S01 | NEXT | — | — | — | Sẵn sàng triển khai Manifest V3 và popup ↔ worker handshake. |":
+                  f"| S01 | DONE | 2026-08-02 | {commit} | format, lint, typecheck, unit, build, Chrome smoke | Manifest V3 load được; popup kết nối service worker bằng PING/PONG typed. |",
+              "| S02 | READY | — | — | — | — |":
+                  "| S02 | NEXT | — | — | — | Sẵn sàng triển khai contracts, settings, errors và CI. |",
+              "Session kế tiếp là **S01 — Manifest V3 multi-entry và popup ↔ worker handshake**.":
+                  "Session kế tiếp là **S02 — Shared contracts, settings, errors và CI**.",
+              "1. Đọc `PLAN.md` phần S01.\n2. Đọc SPEC §5–6, §8 và UI M0 ở §26.\n3. Kiểm tra repo/branch và kết quả validation S00.\n4. Chỉ triển khai S01.\n5. Kết thúc với extension unpacked build được và popup ping service worker thành công.":
+                  "1. Đọc `PLAN.md` phần S02.\n2. Đọc SPEC §7–12, §24–25 và §28–32.\n3. Kiểm tra repo/branch và kết quả validation S01.\n4. Chỉ triển khai S02.\n5. Kết thúc với contracts/settings/error model dùng chung và CI chính thức chạy xanh.",
+          }
+
+          for old, new in replacements.items():
+              if old not in plan:
+                  raise SystemExit(f"PLAN replacement target not found: {old[:100]}")
+              plan = plan.replace(old, new, 1)
+
+          plan_path.write_text(plan, encoding="utf-8")
+
+          readme_path = Path("README.md")
+          readme = readme_path.read_text(encoding="utf-8")
+          old_status = "**S00 — Foundation is complete.** The next session is S01, which introduces the Manifest V3 multi-entry build, popup shell, service worker, and typed popup-to-worker handshake."
+          new_status = "**S01 — Manifest V3 and worker handshake is complete.** The next session is S02, which introduces shared runtime contracts, settings, normalized errors, and the permanent CI workflow."
+          if old_status not in readme:
+              raise SystemExit("README status target not found.")
+          readme_path.write_text(readme.replace(old_status, new_status, 1), encoding="utf-8")
+
+          Path("S01_VALIDATE").unlink(missing_ok=True)
+          PY
+
+      - name: Commit validated lockfile and session status
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Complete S01 extension validation"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}

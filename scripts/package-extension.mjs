@@ -1,3 +1,10 @@
+import { access } from "node:fs/promises";
+import { resolve } from "node:path";
 import { stdout } from "node:process";
 
-stdout.write("Extension packaging starts in S01 after the Manifest V3 multi-entry build exists.\n");
+const distDirectory = resolve(import.meta.dirname, "..", "dist");
+await access(resolve(distDirectory, "manifest.json"));
+
+stdout.write(
+  `S01 produces a validated unpacked extension at ${distDirectory}. ZIP packaging is deferred until the release workflow is introduced.\n`,
+);

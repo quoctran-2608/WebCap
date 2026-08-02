@@ -11,14 +11,15 @@
   "packageManager": "pnpm@11.15.1",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/verify-extension-build.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest",
     "test:unit": "vitest run",
-    "package": "node scripts/package-extension.mjs"
+    "test:smoke": "node tests/smoke/extension-smoke.mjs",
+    "package": "pnpm build && node scripts/package-extension.mjs"
   },
   "dependencies": {
     "react": "19.2.8",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@types/chrome": "0.2.2",
     "@types/node": "22.20.1",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
