@@ -38,9 +38,9 @@ describe("CaptureRateLimiter", () => {
       sleep: () => Promise.resolve(),
     });
 
-    await expect(
-      limiter.run(() => Promise.reject(new Error("capture failed"))),
-    ).rejects.toThrow("capture failed");
+    await expect(limiter.run(() => Promise.reject(new Error("capture failed")))).rejects.toThrow(
+      "capture failed",
+    );
     await expect(limiter.run(() => Promise.resolve("recovered"))).resolves.toBe("recovered");
   });
 });
