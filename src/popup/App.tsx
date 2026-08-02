@@ -4,10 +4,7 @@ import iconData from "../../assets/icons.json";
 
 import { FOUNDATION_CAPABILITIES, type CaptureCapabilities } from "@shared/capabilities";
 import type { CaptureMode, OutputFormat } from "@shared/contracts/domain";
-import type {
-  TabCapabilityPayload,
-  VisibleCaptureMetadata,
-} from "@shared/contracts/messages";
+import type { TabCapabilityPayload, VisibleCaptureMetadata } from "@shared/contracts/messages";
 
 import {
   cancelVisibleCapture,
@@ -216,7 +213,12 @@ export function App(): React.JSX.Element {
             Hủy chụp
           </button>
         ) : (
-          <button className="primary-action" type="button" disabled={!canCapture} onClick={handleCapture}>
+          <button
+            className="primary-action"
+            type="button"
+            disabled={!canCapture}
+            onClick={handleCapture}
+          >
             Chụp vùng đang xem
           </button>
         )}
