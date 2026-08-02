@@ -1,30 +1,26 @@
-name: Apply and validate S04
+name: CI
 
 on:
-  push:
-    branches: [agent/s04-offscreen-artifacts-download]
   pull_request:
+    branches: [main]
+  push:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: apply-s04-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  apply-and-validate:
-    if: github.actor != 'github-actions[bot]'
+  quality:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - name: Check out S04 branch
+      - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: agent/s04-offscreen-artifacts-download
-          fetch-depth: 0
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -41,101 +37,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Reassemble S04 payload
-        run: |
-          cat s04-payload/* > /tmp/s04-payload.b64
-          base64 --decode /tmp/s04-payload.b64 > /tmp/s04-payload.tar.gz
-          echo "15c127b82af87608e1f6b1016ebedf227eeb8b1c004ff32406399e2659546f26  /tmp/s04-payload.tar.gz" | sha256sum --check
-          gzip --test /tmp/s04-payload.tar.gz
-          tar -tzf /tmp/s04-payload.tar.gz > /tmp/s04-files.txt
-          test "$(wc -l < /tmp/s04-files.txt)" -eq 36
-          tar -xzf /tmp/s04-payload.tar.gz
-          rm -rf s04-payload
-
-      - name: Apply typed corrections
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          path = Path("src/offscreen/image-processor.ts")
-          text = path.read_text(encoding="utf-8")
-          text = text.replace(
-              "drawImage(image: CanvasImageSource, dx: number, dy: number): void;",
-              "drawImage(image: DecodedImage, dx: number, dy: number): void;",
-          )
-          text = text.replace(
-              "context.drawImage(bitmap as unknown as CanvasImageSource, 0, 0);",
-              "context.drawImage(bitmap, 0, 0);",
-          )
-          path.write_text(text, encoding="utf-8")
-
-          path = Path("src/storage/artifact-repository.ts")
-          text = path.read_text(encoding="utf-8")
-          text = text.replace(
-              "function requestResult<T>(request: IDBRequest<T>): Promise<T> {\n  return new Promise((resolve, reject) => {",
-              "function requestResult(request: IDBRequest): Promise<unknown> {\n  return new Promise((resolve, reject) => {",
-          )
-          text = text.replace(
-              "      const result = await requestResult<ArtifactRecord | undefined>(\n        transaction.objectStore(WEBCAP_STORES.artifacts).get(artifactId),\n      );",
-              "      const result = (await requestResult(\n        transaction.objectStore(WEBCAP_STORES.artifacts).get(artifactId),\n      )) as ArtifactRecord | undefined;",
-          )
-          text = text.replace(
-              "      const records = await requestResult<ArtifactRecord[]>(store.getAll());",
-              "      const records = (await requestResult(store.getAll())) as ArtifactRecord[];",
-          )
-          path.write_text(text, encoding="utf-8")
-
-          path = Path("tests/unit/visible-capture-coordinator.test.ts")
-          text = path.read_text(encoding="utf-8")
-          text = text.replace(
-              'import { VisibleCaptureCoordinator } from "@background/visible-capture-coordinator";\n',
-              'import { VisibleCaptureCoordinator } from "@background/visible-capture-coordinator";\nimport type { ArtifactRecord } from "@shared/contracts/artifact";\n',
-          )
-          text = text.replace(
-              'let storedArtifact: import("@shared/contracts/artifact").ArtifactRecord | undefined;',
-              "let storedArtifact: ArtifactRecord | undefined;",
-          )
-          path.write_text(text, encoding="utf-8")
-
-          path = Path("vite.config.ts")
-          text = path.read_text(encoding="utf-8")
-          text = text.replace(
-              "function extensionIconPlugin(): Plugin {",
-              '''function offscreenHtmlPlugin(): Plugin {
-            return {
-              name: "webcap-offscreen-html",
-              apply: "build",
-              generateBundle() {
-                this.emitFile({
-                  type: "asset",
-                  fileName: "offscreen.html",
-                  source:
-                    '<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>WebCap Offscreen Processor</title></head><body><script type="module" src="./offscreen.js"></script></body></html>',
-                });
-              },
-            };
-          }
-
-          function extensionIconPlugin(): Plugin {''',
-          )
-          text = text.replace(
-              "plugins: [react(), extensionIconPlugin()],",
-              "plugins: [react(), extensionIconPlugin(), offscreenHtmlPlugin()],",
-          )
-          text = text.replace(
-              'offscreen: resolve(offscreenRoot, "offscreen.html"),',
-              'offscreen: resolve(offscreenRoot, "entry.ts"),',
-          )
-          text = text.replace(
-              '          chunkInfo.name === "service-worker"\n            ? "service-worker.js"\n            : "assets/[name]-[hash].js",',
-              '          chunkInfo.name === "service-worker"\n            ? "service-worker.js"\n            : chunkInfo.name === "offscreen"\n              ? "offscreen.js"\n              : "assets/[name]-[hash].js",',
-          )
-          path.write_text(text, encoding="utf-8")
-          Path("src/offscreen/offscreen.html").unlink()
-          PY
-
-      - name: Format implementation
-        run: pnpm format
+      - name: Check formatting
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint
@@ -148,12 +51,3 @@ jobs:
 
       - name: Build extension
         run: pnpm build
-
-      - name: Commit validated implementation
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          git commit -m "Add offscreen image export and download"
-          git push origin HEAD:agent/s04-offscreen-artifacts-download
