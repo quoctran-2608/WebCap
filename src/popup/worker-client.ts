@@ -20,7 +20,7 @@ export interface PingWorkerOptions {
 
 const chromeRuntimeMessenger: RuntimeMessenger = {
   getVersion: () => chrome.runtime.getManifest().version,
-  sendMessage: (message) => chrome.runtime.sendMessage(message) as Promise<unknown>,
+  sendMessage: (message) => chrome.runtime.sendMessage(message),
 };
 
 function rejectAfter(timeoutMs: number): Promise<never> {
