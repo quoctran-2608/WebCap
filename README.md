@@ -6,7 +6,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 ## Current status
 
-**S01 — Manifest V3 and worker handshake is complete.** The next session is S02, which introduces shared runtime contracts, settings, normalized errors, and the permanent CI workflow.
+**S02 — Foundation M0 is complete.** WebCap now has shared runtime contracts, local settings, normalized errors, safe diagnostics, and permanent CI. The next session is S03 visible capture.
 
 ## Requirements
 
@@ -75,3 +75,4 @@ scripts/                Build verification and repository automation.
 - [Engineering specification](./SPEC.md)
 - [Implementation plan](./PLAN.md)
 - [Changelog](./CHANGELOG.md)
+- [Privacy baseline](./docs/privacy.md)

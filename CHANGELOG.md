@@ -8,6 +8,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Shared Zod domain and runtime message contracts with capability negotiation.
+- Versioned local settings, migration, normalized errors, safe diagnostics, and permanent CI.
 - TypeScript, Vite, React, Vitest, ESLint, and Prettier foundation.
 - Strict compiler settings and source aliases for background, popup, and shared modules.
 - Initial shared numeric range utility with unit tests.

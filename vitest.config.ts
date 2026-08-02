@@ -2,14 +2,13 @@ import { resolve } from "node:path";
 
 import { defineConfig } from "vitest/config";
 
-const projectRoot = import.meta.dirname;
-
 export default defineConfig({
   resolve: {
     alias: {
-      "@background": resolve(projectRoot, "src/background"),
-      "@popup": resolve(projectRoot, "src/popup"),
-      "@shared": resolve(projectRoot, "src/shared"),
+      "@background": resolve(import.meta.dirname, "src/background"),
+      "@popup": resolve(import.meta.dirname, "src/popup"),
+      "@shared": resolve(import.meta.dirname, "src/shared"),
+      "@storage": resolve(import.meta.dirname, "src/storage"),
     },
   },
   test: {

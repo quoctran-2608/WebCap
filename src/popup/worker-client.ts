@@ -1,4 +1,12 @@
-import { createPingMessage, isPongMessage, type PongMessage } from "@shared/contracts/handshake";
+import type { CaptureCapabilities } from "@shared/capabilities";
+import {
+  createCapabilitiesGetMessage,
+  createPingMessage,
+  isCapabilitiesResponseMessage,
+  isErrorResponseMessage,
+  isPongMessage,
+  type PongMessage,
+} from "@shared/contracts/messages";
 
 const HANDSHAKE_TIMEOUT_MS = 3_000;
 
@@ -7,7 +15,7 @@ export interface RuntimeMessenger {
   sendMessage(message: unknown): Promise<unknown>;
 }
 
-export interface PingWorkerOptions {
+export interface WorkerRequestOptions {
   runtime?: RuntimeMessenger;
   now?: () => Date;
   requestId?: () => string;
@@ -22,12 +30,28 @@ const chromeRuntimeMessenger: RuntimeMessenger = {
 function rejectAfter(timeoutMs: number): Promise<never> {
   return new Promise((_, reject) => {
     globalThis.setTimeout(() => {
-      reject(new Error("Service worker handshake timed out."));
+      reject(new Error("Service worker request timed out."));
     }, timeoutMs);
   });
 }
 
-export async function pingWorker(options: PingWorkerOptions = {}): Promise<PongMessage> {
+async function sendWithTimeout(
+  runtime: RuntimeMessenger,
+  request: unknown,
+  timeoutMs: number,
+): Promise<unknown> {
+  return Promise.race([runtime.sendMessage(request), rejectAfter(timeoutMs)]);
+}
+
+function throwRemoteError(response: unknown): void {
+  if (isErrorResponseMessage(response)) {
+    const error = new Error(response.payload.message);
+    error.name = response.payload.code;
+    throw error;
+  }
+}
+
+export async function pingWorker(options: WorkerRequestOptions = {}): Promise<PongMessage> {
   const runtime = options.runtime ?? chromeRuntimeMessenger;
   const now = options.now ?? (() => new Date());
   const createRequestId = options.requestId ?? (() => crypto.randomUUID());
@@ -36,19 +60,46 @@ export async function pingWorker(options: PingWorkerOptions = {}): Promise<PongM
     clientVersion: runtime.getVersion(),
     sentAt: now().toISOString(),
   });
+  const response = await sendWithTimeout(
+    runtime,
+    request,
+    options.timeoutMs ?? HANDSHAKE_TIMEOUT_MS,
+  );
 
-  const response = await Promise.race([
-    runtime.sendMessage(request),
-    rejectAfter(options.timeoutMs ?? HANDSHAKE_TIMEOUT_MS),
-  ]);
-
+  throwRemoteError(response);
   if (!isPongMessage(response)) {
     throw new TypeError("Service worker returned an invalid handshake response.");
   }
-
   if (response.requestId !== request.requestId) {
     throw new Error("Service worker response did not match the request.");
   }
 
   return response;
+}
+
+export async function getCapabilities(
+  options: WorkerRequestOptions = {},
+): Promise<CaptureCapabilities> {
+  const runtime = options.runtime ?? chromeRuntimeMessenger;
+  const now = options.now ?? (() => new Date());
+  const createRequestId = options.requestId ?? (() => crypto.randomUUID());
+  const request = createCapabilitiesGetMessage({
+    requestId: createRequestId(),
+    sentAt: now().toISOString(),
+  });
+  const response = await sendWithTimeout(
+    runtime,
+    request,
+    options.timeoutMs ?? HANDSHAKE_TIMEOUT_MS,
+  );
+
+  throwRemoteError(response);
+  if (!isCapabilitiesResponseMessage(response)) {
+    throw new TypeError("Service worker returned invalid capabilities.");
+  }
+  if (response.requestId !== request.requestId) {
+    throw new Error("Service worker response did not match the request.");
+  }
+
+  return response.payload;
 }
