@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { PersistentJobCoordinator, type JobCleanupPort } from "@background/job-coordinator";
 import type { CaptureJob } from "@shared/contracts/domain";
-import type { JobSummary, StoredTileRecord, TabJobLock } from "@shared/contracts/job";
+import type { JobSummary, TabJobLock } from "@shared/contracts/job";
 import { summarizeJob } from "@shared/contracts/job";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 import type { JobArtifactCleanupPort } from "@storage/job-artifact-cleanup-repository";
@@ -122,15 +122,15 @@ class MemorySessions implements JobSessionRepositoryPort {
 class MemoryTiles implements TileRepositoryPort {
   deletedJobs: string[] = [];
 
-  put(_record: StoredTileRecord): Promise<void> {
+  put(): Promise<void> {
     return Promise.resolve();
   }
 
-  get(_jobId: string, _index: number): Promise<StoredTileRecord | undefined> {
+  get(): Promise<undefined> {
     return Promise.resolve(undefined);
   }
 
-  listByJob(_jobId: string): Promise<StoredTileRecord[]> {
+  listByJob(): Promise<[]> {
     return Promise.resolve([]);
   }
 

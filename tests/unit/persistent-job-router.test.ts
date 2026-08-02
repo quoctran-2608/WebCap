@@ -4,10 +4,7 @@ import {
   routePersistentJobMessage,
   type PersistentJobRouterDependencies,
 } from "@background/persistent-job-router";
-import type {
-  JobCleanupReport,
-  PersistentJobCoordinatorPort,
-} from "@background/job-coordinator";
+import type { JobCleanupReport, PersistentJobCoordinatorPort } from "@background/job-coordinator";
 import type { CaptureJob } from "@shared/contracts/domain";
 import type { StoredDedupeRecord } from "@shared/contracts/job";
 import { createJobCreateMessage, createJobGetMessage } from "@shared/contracts/job-messages";
