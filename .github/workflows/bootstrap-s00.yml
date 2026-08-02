@@ -1,7 +1,7 @@
-name: Bootstrap S00
+name: Validate S00
 
 on:
-  push:
+  pull_request:
     branches: [main]
     paths:
       - package.json
@@ -14,14 +14,14 @@ on:
       - src/**
       - tests/**
       - scripts/**
-      - .github/workflows/bootstrap-s00.yml
+      - .s00-validation-trigger
 
 permissions:
   contents: write
 
 concurrency:
-  group: bootstrap-s00
-  cancel-in-progress: false
+  group: validate-s00-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   validate-and-lock:
@@ -30,9 +30,10 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - name: Check out repository
+      - name: Check out pull-request branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ github.head_ref }}
           fetch-depth: 0
 
       - name: Set up Node.js
@@ -46,17 +47,15 @@ jobs:
           corepack prepare pnpm@11.15.1 --activate
           pnpm --version
 
-      - name: Generate deterministic lockfile
-        run: pnpm install --lockfile-only --no-frozen-lockfile
+      - name: Generate lockfile and install
+        run: |
+          pnpm install --lockfile-only --no-frozen-lockfile
+          pnpm install --frozen-lockfile
 
-      - name: Install from lockfile
-        run: pnpm install --frozen-lockfile
-
-      - name: Normalize formatting
-        run: pnpm format
-
-      - name: Validate formatting
-        run: pnpm format:check
+      - name: Normalize and validate formatting
+        run: |
+          pnpm format
+          pnpm format:check
 
       - name: Validate lint
         run: pnpm lint
@@ -70,13 +69,15 @@ jobs:
       - name: Build foundation entry
         run: pnpm build
 
-      - name: Mark S00 complete
+      - name: Advance implementation plan
+        env:
+          IMPLEMENTATION_COMMIT: ${{ github.event.pull_request.base.sha }}
         run: |
           python <<'PY'
           import os
           from pathlib import Path
 
-          base_commit = os.environ["GITHUB_SHA"][:12]
+          implementation_commit = os.environ["IMPLEMENTATION_COMMIT"][:12]
           path = Path("PLAN.md")
           text = path.read_text(encoding="utf-8")
           replacements = {
@@ -86,7 +87,7 @@ jobs:
               "| S01 | M0 | Manifest V3 multi-entry và popup ↔ worker handshake | S00 | 14k–22k | READY |":
                   "| S01 | M0 | Manifest V3 multi-entry và popup ↔ worker handshake | S00 | 14k–22k | NEXT |",
               "| S00 | NEXT | — | — | — | Bắt đầu từ workspace trống ngoài ba file tài liệu. |":
-                  f"| S00 | DONE | 2026-08-02 | {base_commit} | format, lint, typecheck, unit, build | Workspace và lockfile đã được xác thực trên GitHub Actions. |",
+                  f"| S00 | DONE | 2026-08-02 | {implementation_commit} | format, lint, typecheck, unit, build | Workspace và lockfile đã được xác thực trên GitHub Actions. |",
               "| S01 | READY | — | — | — | — |":
                   "| S01 | NEXT | — | — | — | Sẵn sàng triển khai Manifest V3 và popup ↔ worker handshake. |",
               "Session kế tiếp là **S00 — Bootstrap workspace và quality toolchain**.":
@@ -101,12 +102,13 @@ jobs:
               text = text.replace(old, new, 1)
 
           path.write_text(text, encoding="utf-8")
+          Path(".s00-validation-trigger").unlink(missing_ok=True)
           PY
 
-      - name: Commit generated lockfile and session status
+      - name: Commit validated lockfile and plan
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Complete S00 foundation validation"
-          git push origin HEAD:main
+          git push origin HEAD:${{ github.head_ref }}
