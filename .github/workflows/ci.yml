@@ -85,8 +85,8 @@ jobs:
           fixture = Path("tests/e2e/extension.fixture.ts")
           text = fixture.read_text(encoding="utf-8")
           text = text.replace(
-              'permissions.add("http://127.0.0.1/*");',
-              'permissions.add("<all_urls>");',
+              'manifest.host_permissions = ["http://127.0.0.1/*"];',
+              'manifest.host_permissions = ["<all_urls>"];',
           )
           text = text.replace(
               "      const popupPromise = context.waitForEvent(\"page\");\n      await serviceWorker.evaluate(\n        async ({ windowId }) => chrome.action.openPopup({ windowId }),\n        target,\n      );\n      const popup = await popupPromise;\n      await popup.waitForURL(`chrome-extension://${extensionId}/popup.html`);",
