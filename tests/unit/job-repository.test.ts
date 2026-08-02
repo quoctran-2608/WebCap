@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { CaptureJob } from "@shared/contracts/domain";
+import { WebCapRuntimeError } from "@shared/errors/error";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 import { IndexedDbJobRepository } from "@storage/job-repository";
 
@@ -77,14 +78,28 @@ function databaseWithStoredJob(stored: CaptureJob): IDBDatabase {
   } as unknown as IDBDatabase;
 }
 
+async function runtimeRejection(operation: Promise<unknown>): Promise<WebCapRuntimeError> {
+  try {
+    await operation;
+  } catch (error) {
+    expect(error).toBeInstanceOf(WebCapRuntimeError);
+    if (error instanceof WebCapRuntimeError) {
+      return error;
+    }
+    throw error;
+  }
+  throw new Error("Expected the repository operation to reject.");
+}
+
 describe("IndexedDbJobRepository", () => {
   it("rejects stale compare-and-set writes", async () => {
     const repository = new IndexedDbJobRepository({
       openDatabase: () => Promise.resolve(databaseWithStoredJob(job(2))),
     });
 
-    await expect(repository.save(job(2), 1)).rejects.toMatchObject({
-      code: "E_STORAGE_WRITE",
+    const error = await runtimeRejection(repository.save(job(2), 1));
+    expect(error.code).toBe("E_STORAGE_WRITE");
+    expect(error.data).toMatchObject({
       causeCode: "StateRevisionConflict",
       safeContext: {
         expectedRevision: 1,
@@ -98,8 +113,9 @@ describe("IndexedDbJobRepository", () => {
       openDatabase: () => Promise.resolve(databaseWithStoredJob(job(1))),
     });
 
-    await expect(repository.save(job(1), 1)).rejects.toMatchObject({
-      code: "E_STORAGE_WRITE",
+    const error = await runtimeRejection(repository.save(job(1), 1));
+    expect(error.code).toBe("E_STORAGE_WRITE");
+    expect(error.data).toMatchObject({
       causeCode: "StateRevisionConflict",
       safeContext: {
         expectedRevision: 1,
@@ -118,10 +134,11 @@ describe("IndexedDbJobRepository", () => {
       openDatabase: () => Promise.resolve(database),
     });
 
-    await expect(repository.get("job-1")).rejects.toMatchObject({
+    const error = await runtimeRejection(repository.get("job-1"));
+    expect(error).toMatchObject({
       code: "E_STORAGE_READ",
       stage: "storage",
-      causeCode: "InvalidStateError",
     });
+    expect(error.data.causeCode).toBe("InvalidStateError");
   });
 });
