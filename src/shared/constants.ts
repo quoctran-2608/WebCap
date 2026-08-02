@@ -2,12 +2,23 @@ export const PROTOCOL_VERSION = 1 as const;
 export const SETTINGS_SCHEMA_VERSION = 1 as const;
 export const SETTINGS_STORAGE_KEY = "webcap.settings" as const;
 export const VISIBLE_SESSION_STORAGE_KEY = "webcap.visible-session" as const;
+export const JOB_SESSION_STORAGE_KEY = "webcap.jobs.session" as const;
+
+export const JOB_SCHEMA_VERSION = 1 as const;
+export const JOB_SESSION_SCHEMA_VERSION = 1 as const;
+export const TILE_RECORD_SCHEMA_VERSION = 1 as const;
+export const DEDUPE_RECORD_SCHEMA_VERSION = 1 as const;
 
 export const TILE_TARGET_WIDTH_CSS = 8_192;
 export const TILE_TARGET_HEIGHT_CSS = 8_192;
 export const FALLBACK_OVERLAP_CSS = 64;
 export const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 export const VISIBLE_CAPTURE_MIN_INTERVAL_MS = 550;
+export const JOB_PROGRESS_THROTTLE_MS = 250;
+
+export const JOB_ABANDONED_TTL_MS = 30 * 60 * 1_000;
+export const JOB_LOCK_LEASE_MS = 2 * 60 * 1_000;
+export const DEDUPE_TTL_MS = 10 * 60 * 1_000;
 
 export const DEFAULT_LAZY_LOAD_STEP_RATIO = 0.8;
 export const DEFAULT_LAZY_LOAD_SETTLE_MS = 250;
