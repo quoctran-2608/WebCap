@@ -207,12 +207,7 @@ export class VisibleCaptureCoordinator implements VisibleCaptureCoordinatorPort 
         ...parsed.value,
       };
       this.captures.set(metadata.captureId, { metadata, dataUrl });
-      rememberBounded(
-        this.completedRequests,
-        requestId,
-        metadata,
-        this.completedRequestLimit,
-      );
+      rememberBounded(this.completedRequests, requestId, metadata, this.completedRequestLimit);
       return metadata;
     } catch (error) {
       throw createWebCapRuntimeError(normalizeCaptureFailure(error, tabResult.value.tabId));
