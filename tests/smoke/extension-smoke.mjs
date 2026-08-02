@@ -8,6 +8,7 @@ import { env, stdout } from "node:process";
 const REMOTE_DEBUGGING_PORT = 9333;
 const STARTUP_TIMEOUT_MS = 20_000;
 const CONNECT_TIMEOUT_MS = 10_000;
+const PROCESS_STOP_TIMEOUT_MS = 2_000;
 
 function findChromeBinary() {
   if (env.CHROME_BIN) {
@@ -136,12 +137,41 @@ async function waitForConnectedStatus(client) {
   throw new Error("Popup did not reach the connected service-worker state.");
 }
 
+async function stopBrowserProcess(browser) {
+  if (!browser || browser.exitCode !== null) {
+    return;
+  }
+
+  const gracefulExit = new Promise((resolveExit) => {
+    browser.once("exit", () => resolveExit(true));
+  });
+  browser.kill("SIGTERM");
+
+  const exitedGracefully = await Promise.race([
+    gracefulExit,
+    new Promise((resolveTimeout) =>
+      globalThis.setTimeout(() => resolveTimeout(false), PROCESS_STOP_TIMEOUT_MS),
+    ),
+  ]);
+
+  if (exitedGracefully || browser.exitCode !== null) {
+    return;
+  }
+
+  const forcedExit = new Promise((resolveExit) => {
+    browser.once("exit", resolveExit);
+  });
+  browser.kill("SIGKILL");
+  await forcedExit;
+}
+
 const projectRoot = resolve(import.meta.dirname, "../..");
 const tempRoot = await mkdtemp(join(tmpdir(), "webcap-s01-"));
 const extensionDirectory = join(tempRoot, "extension");
 const profileDirectory = join(tempRoot, "profile");
 let browser;
 let browserOutput = "";
+let failure;
 
 try {
   await cp(resolve(projectRoot, "dist"), extensionDirectory, { recursive: true });
@@ -212,11 +242,32 @@ try {
 
   stdout.write(`Verified popup ↔ service worker handshake for extension ${extensionId}.\n`);
 } catch (error) {
-  throw new Error(
+  failure = new Error(
     `${error instanceof Error ? error.message : String(error)}\nBrowser output:\n${browserOutput}`,
     { cause: error },
   );
 } finally {
-  browser?.kill("SIGTERM");
-  await rm(tempRoot, { recursive: true, force: true });
+  try {
+    await stopBrowserProcess(browser);
+    await rm(tempRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
+  } catch (cleanupError) {
+    failure =
+      failure === undefined
+        ? new Error("Failed to clean up the Chrome smoke-test environment.", {
+            cause: cleanupError,
+          })
+        : new AggregateError(
+            [failure, cleanupError],
+            "The extension smoke test and its cleanup both failed.",
+          );
+  }
+}
+
+if (failure !== undefined) {
+  throw failure;
 }
