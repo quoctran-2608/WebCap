@@ -22,8 +22,10 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["node", "vitest/globals"],
+    "types": ["chrome", "node", "vitest/globals"],
     "paths": {
+      "@background/*": ["./src/background/*"],
+      "@popup/*": ["./src/popup/*"],
       "@shared/*": ["./src/shared/*"]
     }
   },
