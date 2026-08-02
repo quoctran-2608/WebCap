@@ -214,6 +214,7 @@ try {
 } catch (error) {
   throw new Error(
     `${error instanceof Error ? error.message : String(error)}\nBrowser output:\n${browserOutput}`,
+    { cause: error },
   );
 } finally {
   browser?.kill("SIGTERM");
