@@ -22,7 +22,7 @@
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
-    "types": ["chrome", "node", "vitest/globals"],
+    "types": ["chrome", "node", "vite/client", "vitest/globals"],
     "paths": {
       "@background/*": ["./src/background/*"],
       "@popup/*": ["./src/popup/*"],
