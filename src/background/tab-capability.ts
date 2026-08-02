@@ -11,18 +11,32 @@ export interface CapturableTabContext {
   tabId: number;
   windowId: number;
   scheme: string;
+  title?: string;
+  domain?: string;
 }
 
-function schemeOf(url: string | undefined): string | undefined {
+function parsedUrl(url: string | undefined): URL | undefined {
   if (url === undefined) {
     return undefined;
   }
 
   try {
-    return new URL(url).protocol.replace(/:$/, "").toLowerCase();
+    return new URL(url);
   } catch {
     return undefined;
   }
+}
+
+function schemeOf(url: string | undefined): string | undefined {
+  return parsedUrl(url)?.protocol.replace(/:$/, "").toLowerCase();
+}
+
+function domainOf(url: string | undefined): string | undefined {
+  const parsed = parsedUrl(url);
+  if (parsed === undefined) {
+    return undefined;
+  }
+  return parsed.protocol === "file:" ? "local-file" : parsed.hostname || undefined;
 }
 
 function unavailableCapability(errorCode: WebCapErrorData["code"]): TabCapabilityPayload {
@@ -88,15 +102,19 @@ export async function requireCapturableTab(
 
   const capability = evaluateTab(tab);
   if (
+    tab !== undefined &&
     capability.status === "supported" &&
     capability.tabId !== undefined &&
     capability.windowId !== undefined &&
     capability.scheme !== undefined
   ) {
+    const domain = domainOf(tab.url);
     return ok({
       tabId: capability.tabId,
       windowId: capability.windowId,
       scheme: capability.scheme,
+      ...(tab.title === undefined ? {} : { title: tab.title }),
+      ...(domain === undefined ? {} : { domain }),
     });
   }
 

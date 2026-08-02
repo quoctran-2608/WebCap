@@ -7,6 +7,7 @@ export default defineConfig({
     alias: {
       "@background": resolve(import.meta.dirname, "src/background"),
       "@popup": resolve(import.meta.dirname, "src/popup"),
+      "@offscreen": resolve(import.meta.dirname, "src/offscreen"),
       "@shared": resolve(import.meta.dirname, "src/shared"),
       "@storage": resolve(import.meta.dirname, "src/storage"),
     },

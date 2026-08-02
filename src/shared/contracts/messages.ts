@@ -2,6 +2,8 @@ import { z } from "zod";
 
 import { CaptureCapabilitiesSchema, type CaptureCapabilities } from "@shared/capabilities";
 import { PROTOCOL_VERSION } from "@shared/constants";
+import { ArtifactMetadataSchema, type ArtifactMetadata } from "@shared/contracts/artifact";
+import { ImageFormatSchema, type ImageFormat } from "@shared/contracts/domain";
 import {
   WebCapErrorCodeSchema,
   WebCapErrorDataSchema,
@@ -139,6 +141,45 @@ export const VisibleCaptureCancelledMessageSchema = EnvelopeBaseSchema.extend({
     .strict(),
 }).strict();
 
+export const ImageExportStartMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("popup"),
+  target: z.literal("background"),
+  type: z.literal("IMAGE_EXPORT_START"),
+  payload: z
+    .object({
+      sourceArtifactId: z.string().min(1).max(160),
+      format: ImageFormatSchema,
+      quality: z.number().finite().min(0).max(1),
+    })
+    .strict(),
+}).strict();
+
+export const ImageExportSuccessMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("background"),
+  target: z.literal("popup"),
+  type: z.literal("IMAGE_EXPORT_SUCCESS"),
+  payload: ArtifactMetadataSchema,
+}).strict();
+
+export const ArtifactDownloadStartMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("popup"),
+  target: z.literal("background"),
+  type: z.literal("ARTIFACT_DOWNLOAD_START"),
+  payload: z.object({ artifactId: z.string().min(1).max(160) }).strict(),
+}).strict();
+
+export const ArtifactDownloadStartedMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("background"),
+  target: z.literal("popup"),
+  type: z.literal("ARTIFACT_DOWNLOAD_STARTED"),
+  payload: z
+    .object({
+      artifactId: z.string().min(1).max(160),
+      downloadId: NonNegativeIntegerSchema,
+    })
+    .strict(),
+}).strict();
+
 export const ErrorResponseMessageSchema = EnvelopeBaseSchema.extend({
   source: z.literal("background"),
   target: z.literal("popup"),
@@ -152,6 +193,8 @@ export const BackgroundRequestSchema = z.discriminatedUnion("type", [
   TabCapabilityGetMessageSchema,
   VisibleCaptureStartMessageSchema,
   VisibleCaptureCancelMessageSchema,
+  ImageExportStartMessageSchema,
+  ArtifactDownloadStartMessageSchema,
 ]);
 
 export const BackgroundResponseSchema = z.discriminatedUnion("type", [
@@ -160,6 +203,8 @@ export const BackgroundResponseSchema = z.discriminatedUnion("type", [
   TabCapabilityResponseMessageSchema,
   VisibleCaptureSuccessMessageSchema,
   VisibleCaptureCancelledMessageSchema,
+  ImageExportSuccessMessageSchema,
+  ArtifactDownloadStartedMessageSchema,
   ErrorResponseMessageSchema,
 ]);
 
@@ -177,6 +222,10 @@ export type VisibleCaptureStartMessage = z.infer<typeof VisibleCaptureStartMessa
 export type VisibleCaptureSuccessMessage = z.infer<typeof VisibleCaptureSuccessMessageSchema>;
 export type VisibleCaptureCancelMessage = z.infer<typeof VisibleCaptureCancelMessageSchema>;
 export type VisibleCaptureCancelledMessage = z.infer<typeof VisibleCaptureCancelledMessageSchema>;
+export type ImageExportStartMessage = z.infer<typeof ImageExportStartMessageSchema>;
+export type ImageExportSuccessMessage = z.infer<typeof ImageExportSuccessMessageSchema>;
+export type ArtifactDownloadStartMessage = z.infer<typeof ArtifactDownloadStartMessageSchema>;
+export type ArtifactDownloadStartedMessage = z.infer<typeof ArtifactDownloadStartedMessageSchema>;
 export type ErrorResponseMessage = z.infer<typeof ErrorResponseMessageSchema>;
 export type BackgroundRequest = z.infer<typeof BackgroundRequestSchema>;
 export type BackgroundResponse = z.infer<typeof BackgroundResponseSchema>;
@@ -333,6 +382,70 @@ export function createVisibleCaptureCancelledMessage(
   });
 }
 
+export function createImageExportStartMessage(
+  options: MessageCreationOptions & {
+    sourceArtifactId: string;
+    format: ImageFormat;
+    quality: number;
+  },
+): ImageExportStartMessage {
+  return ImageExportStartMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "popup",
+    target: "background",
+    type: "IMAGE_EXPORT_START",
+    payload: {
+      sourceArtifactId: options.sourceArtifactId,
+      format: options.format,
+      quality: options.quality,
+    },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createImageExportSuccessMessage(
+  options: MessageCreationOptions & { artifact: ArtifactMetadata },
+): ImageExportSuccessMessage {
+  return ImageExportSuccessMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "popup",
+    type: "IMAGE_EXPORT_SUCCESS",
+    payload: options.artifact,
+    sentAt: options.sentAt,
+  });
+}
+
+export function createArtifactDownloadStartMessage(
+  options: MessageCreationOptions & { artifactId: string },
+): ArtifactDownloadStartMessage {
+  return ArtifactDownloadStartMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "popup",
+    target: "background",
+    type: "ARTIFACT_DOWNLOAD_START",
+    payload: { artifactId: options.artifactId },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createArtifactDownloadStartedMessage(
+  options: MessageCreationOptions & { artifactId: string; downloadId: number },
+): ArtifactDownloadStartedMessage {
+  return ArtifactDownloadStartedMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "popup",
+    type: "ARTIFACT_DOWNLOAD_STARTED",
+    payload: { artifactId: options.artifactId, downloadId: options.downloadId },
+    sentAt: options.sentAt,
+  });
+}
+
 export function createErrorResponseMessage(
   options: MessageCreationOptions & { error: WebCapErrorData },
 ): ErrorResponseMessage {
@@ -406,6 +519,16 @@ export function isVisibleCaptureCancelledMessage(
   value: unknown,
 ): value is VisibleCaptureCancelledMessage {
   return VisibleCaptureCancelledMessageSchema.safeParse(value).success;
+}
+
+export function isImageExportSuccessMessage(value: unknown): value is ImageExportSuccessMessage {
+  return ImageExportSuccessMessageSchema.safeParse(value).success;
+}
+
+export function isArtifactDownloadStartedMessage(
+  value: unknown,
+): value is ArtifactDownloadStartedMessage {
+  return ArtifactDownloadStartedMessageSchema.safeParse(value).success;
 }
 
 export function isErrorResponseMessage(value: unknown): value is ErrorResponseMessage {

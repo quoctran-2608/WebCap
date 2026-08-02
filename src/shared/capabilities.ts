@@ -22,8 +22,8 @@ export const FOUNDATION_CAPABILITIES: CaptureCapabilities = Object.freeze({
   }),
   outputFormats: Object.freeze({
     png: true,
-    jpeg: false,
-    webp: false,
+    jpeg: true,
+    webp: true,
     pdf: false,
   }),
   settings: true,

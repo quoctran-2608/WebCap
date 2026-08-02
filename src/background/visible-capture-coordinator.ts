@@ -1,4 +1,5 @@
 import { VISIBLE_CAPTURE_MIN_INTERVAL_MS } from "@shared/constants";
+import type { ArtifactRecord } from "@shared/contracts/artifact";
 import type { VisibleCaptureMetadata } from "@shared/contracts/messages";
 import {
   createWebCapError,
@@ -6,9 +7,11 @@ import {
   type WebCapErrorData,
 } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
+import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
 
 import { CaptureRateLimiter } from "./capture-rate-limiter";
 import type { TabsCaptureAdapter } from "./chrome-tabs-adapter";
+import { dataUrlToBlob } from "./data-url";
 import { parsePngDataUrl } from "./png-metadata";
 import { requireCapturableTab } from "./tab-capability";
 
@@ -24,8 +27,11 @@ export interface VisibleCaptureCoordinatorPort {
 
 export interface VisibleCaptureCoordinatorOptions {
   tabs: TabsCaptureAdapter;
+  artifacts?: ArtifactRepositoryPort;
   rateLimiter?: CaptureRateLimiter;
   createId?: () => string;
+  now?: () => Date;
+  sourceArtifactTtlMs?: number;
   completedRequestLimit?: number;
   preCancelledRequestLimit?: number;
 }
@@ -39,6 +45,8 @@ interface InFlightCapture {
   cancellation: CaptureCancellation;
   promise: Promise<VisibleCaptureMetadata>;
 }
+
+const DEFAULT_SOURCE_ARTIFACT_TTL_MS = 30 * 60 * 1000;
 
 function cancelledError(): WebCapErrorData {
   return createWebCapError({
@@ -103,8 +111,11 @@ function rememberSetBounded(set: Set<string>, key: string, limit: number): void 
 
 export class VisibleCaptureCoordinator implements VisibleCaptureCoordinatorPort {
   private readonly tabs: TabsCaptureAdapter;
+  private readonly artifacts: ArtifactRepositoryPort | undefined;
   private readonly rateLimiter: CaptureRateLimiter;
   private readonly createId: () => string;
+  private readonly now: () => Date;
+  private readonly sourceArtifactTtlMs: number;
   private readonly completedRequestLimit: number;
   private readonly preCancelledRequestLimit: number;
   private readonly completedRequests = new Map<string, VisibleCaptureMetadata>();
@@ -114,10 +125,13 @@ export class VisibleCaptureCoordinator implements VisibleCaptureCoordinatorPort 
 
   constructor(options: VisibleCaptureCoordinatorOptions) {
     this.tabs = options.tabs;
+    this.artifacts = options.artifacts;
     this.rateLimiter =
       options.rateLimiter ??
       new CaptureRateLimiter({ minimumIntervalMs: VISIBLE_CAPTURE_MIN_INTERVAL_MS });
     this.createId = options.createId ?? (() => crypto.randomUUID());
+    this.now = options.now ?? (() => new Date());
+    this.sourceArtifactTtlMs = options.sourceArtifactTtlMs ?? DEFAULT_SOURCE_ARTIFACT_TTL_MS;
     this.completedRequestLimit = options.completedRequestLimit ?? 16;
     this.preCancelledRequestLimit = options.preCancelledRequestLimit ?? 32;
   }
@@ -206,6 +220,30 @@ export class VisibleCaptureCoordinator implements VisibleCaptureCoordinatorPort 
         windowId: tabResult.value.windowId,
         ...parsed.value,
       };
+
+      if (this.artifacts !== undefined) {
+        const createdAt = this.now();
+        const blob = dataUrlToBlob(dataUrl);
+        const sourceRecord: ArtifactRecord = {
+          artifactId: metadata.captureId,
+          sourceArtifactId: metadata.captureId,
+          jobId: metadata.captureId,
+          role: "source",
+          format: "png",
+          mimeType: "image/png",
+          filename: "webcap-source.png",
+          byteLength: blob.size,
+          width: metadata.width,
+          height: metadata.height,
+          createdAt: createdAt.toISOString(),
+          expiresAt: new Date(createdAt.getTime() + this.sourceArtifactTtlMs).toISOString(),
+          blob,
+          ...(tabResult.value.title === undefined ? {} : { sourceTitle: tabResult.value.title }),
+          ...(tabResult.value.domain === undefined ? {} : { sourceDomain: tabResult.value.domain }),
+        };
+        await this.artifacts.put(sourceRecord);
+      }
+
       this.captures.set(metadata.captureId, { metadata, dataUrl });
       rememberBounded(this.completedRequests, requestId, metadata, this.completedRequestLimit);
       return metadata;

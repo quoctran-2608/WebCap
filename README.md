@@ -6,7 +6,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 ## Current status
 
-**S03 — Visible capture foundation is complete.** WebCap now captures the active viewport through a typed Chrome adapter and in-memory coordinator, validates tab support, deduplicates requests, rate-limits Chrome capture calls, normalizes cancellation and errors, and keeps image bytes out of runtime messages. The next session is S04 offscreen processing, artifact storage, and download.
+**S04 — Offscreen image export is complete.** WebCap now persists captured image Blobs in IndexedDB, processes PNG/JPEG/WebP output in a race-safe offscreen document, generates safe filenames, starts Chrome downloads with deterministic Blob URL cleanup, and retries export/download without recapturing the page. The next session is S05 preview UI and visible-capture E2E.
 
 ## Requirements
 

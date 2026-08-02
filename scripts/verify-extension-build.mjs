@@ -18,6 +18,7 @@ const expectedOptionalHosts = ["file:///*", "http://*/*", "https://*/*"];
 const requiredFiles = [
   "manifest.json",
   "popup.html",
+  "offscreen.html",
   "service-worker.js",
   "icons/icon-16.png",
   "icons/icon-32.png",
@@ -60,6 +61,15 @@ if (!popupHtml.includes('type="module"')) {
 
 if (/https?:\/\//u.test(popupHtml)) {
   throw new Error("popup.html contains a remote URL.");
+}
+
+const offscreenHtml = await readFile(resolve(distDirectory, "offscreen.html"), "utf8");
+if (!offscreenHtml.includes('type="module"')) {
+  throw new Error("offscreen.html does not contain a module entry script.");
+}
+
+if (/https?:\/\//u.test(offscreenHtml)) {
+  throw new Error("offscreen.html contains a remote URL.");
 }
 
 stdout.write("Verified Manifest V3 unpacked extension output in dist/.\n");

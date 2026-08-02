@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CaptureRateLimiter } from "@background/capture-rate-limiter";
 import type { TabsCaptureAdapter } from "@background/chrome-tabs-adapter";
 import { VisibleCaptureCoordinator } from "@background/visible-capture-coordinator";
+import type { ArtifactRecord } from "@shared/contracts/artifact";
 
 const ONE_PIXEL_PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=";
@@ -117,4 +118,44 @@ describe("VisibleCaptureCoordinator", () => {
     await expect(pending).rejects.toMatchObject({ code: "E_CANCELLED" });
     expect(during.getCapture("capture-cancelled")).toBeUndefined();
   });
+});
+
+it("persists a source Blob for offscreen retry without recapturing", async () => {
+  let storedArtifact: ArtifactRecord | undefined;
+  const coordinator = new VisibleCaptureCoordinator({
+    tabs: {
+      queryActiveTab: () =>
+        Promise.resolve({
+          id: 7,
+          windowId: 9,
+          active: true,
+          url: "https://example.com/report",
+          title: "Quarterly Report",
+        }),
+      captureVisibleTab: () => Promise.resolve(ONE_PIXEL_PNG),
+    },
+    artifacts: {
+      put: (record) => {
+        storedArtifact = record;
+        return Promise.resolve();
+      },
+      get: () => Promise.resolve(undefined),
+      delete: () => Promise.resolve(false),
+      deleteExpired: () => Promise.resolve(0),
+    },
+    rateLimiter: immediateLimiter(),
+    createId: () => "capture-durable",
+    now: () => new Date("2026-08-02T11:00:00.000Z"),
+  });
+
+  await coordinator.start("request-durable");
+
+  expect(storedArtifact).toMatchObject({
+    artifactId: "capture-durable",
+    role: "source",
+    mimeType: "image/png",
+    sourceTitle: "Quarterly Report",
+    sourceDomain: "example.com",
+  });
+  expect(storedArtifact?.blob).toBeInstanceOf(Blob);
 });
