@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { TabsCaptureAdapter } from "@background/chrome-tabs-adapter";
 import { routeRuntimeMessage, type ImageExportCoordinatorPort } from "@background/message-router";
@@ -13,7 +13,10 @@ import {
   createTabCapabilityGetMessage,
   createVisibleCaptureCancelMessage,
   createVisibleCaptureStartMessage,
+  createVisibleSessionGetMessage,
 } from "@shared/contracts/messages";
+import type { VisibleSessionSnapshot } from "@shared/contracts/visible-session";
+import type { VisibleSessionRepositoryPort } from "@storage/visible-session-repository";
 
 const now = new Date("2026-08-02T09:00:00.020Z");
 const tabs: TabsCaptureAdapter = {
@@ -21,47 +24,88 @@ const tabs: TabsCaptureAdapter = {
     Promise.resolve({ id: 7, windowId: 9, active: true, url: "https://example.com" }),
   captureVisibleTab: () => Promise.resolve("unused"),
 };
-const visibleCapture: VisibleCaptureCoordinatorPort = {
-  start: () =>
+
+function createSessionRepository(): {
+  repository: VisibleSessionRepositoryPort;
+  getSnapshot: () => VisibleSessionSnapshot | undefined;
+} {
+  let snapshot: VisibleSessionSnapshot | undefined;
+  return {
+    getSnapshot: () => snapshot,
+    repository: {
+      load: () => Promise.resolve(snapshot),
+      save: (next) => {
+        snapshot = next;
+        return Promise.resolve();
+      },
+      clear: () => {
+        snapshot = undefined;
+        return Promise.resolve();
+      },
+    },
+  };
+}
+
+function createDependencies() {
+  const start = vi.fn(() =>
     Promise.resolve({
       captureId: "capture-1",
       tabId: 7,
       windowId: 9,
-      mimeType: "image/png",
+      mimeType: "image/png" as const,
       byteLength: 68,
       width: 1,
       height: 1,
     }),
-  cancel: () => true,
-};
-const imageExport: ImageExportCoordinatorPort = {
-  exportCapture: (options) =>
-    Promise.resolve({
-      artifactId: "artifact-1",
-      sourceArtifactId: options.sourceArtifactId,
-      format: options.format,
-      mimeType: options.format === "jpeg" ? "image/jpeg" : "image/png",
-      filename: "capture.jpg",
-      byteLength: 64,
-      width: 1,
-      height: 1,
-      createdAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + 1_000).toISOString(),
-    }),
-  downloadArtifact: () => Promise.resolve(77),
-};
-const dependencies = {
-  workerVersion: "0.1.0",
-  capabilities: FOUNDATION_CAPABILITIES,
-  tabs,
-  visibleCapture,
-  imageExport,
-  now: () => now,
-};
+  );
+  const cancel = vi.fn(() => true);
+  const visibleCapture: VisibleCaptureCoordinatorPort = { start, cancel };
+  const exportCapture = vi.fn(
+    (options: Parameters<ImageExportCoordinatorPort["exportCapture"]>[0]) =>
+      Promise.resolve({
+        artifactId: `artifact-${options.format}`,
+        sourceArtifactId: options.sourceArtifactId,
+        format: options.format,
+        mimeType:
+          options.format === "jpeg"
+            ? ("image/jpeg" as const)
+            : options.format === "webp"
+              ? ("image/webp" as const)
+              : ("image/png" as const),
+        filename: `capture.${options.format}`,
+        byteLength: 64,
+        width: 1,
+        height: 1,
+        createdAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 1_000).toISOString(),
+      }),
+  );
+  const downloadArtifact = vi.fn(() => Promise.resolve(77));
+  const imageExport: ImageExportCoordinatorPort = { exportCapture, downloadArtifact };
+  const session = createSessionRepository();
+
+  return {
+    session,
+    start,
+    cancel,
+    exportCapture,
+    downloadArtifact,
+    dependencies: {
+      workerVersion: "0.1.0",
+      capabilities: FOUNDATION_CAPABILITIES,
+      tabs,
+      visibleCapture,
+      imageExport,
+      visibleSessions: session.repository,
+      now: () => now,
+    },
+  };
+}
 
 describe("routeRuntimeMessage", () => {
-  it("returns a pong for a valid ping", async () => {
-    const response = await routeRuntimeMessage(
+  it("returns a pong and current capabilities", async () => {
+    const { dependencies } = createDependencies();
+    const pong = await routeRuntimeMessage(
       createPingMessage({
         requestId: "request-123",
         clientVersion: "0.1.0",
@@ -69,31 +113,27 @@ describe("routeRuntimeMessage", () => {
       }),
       dependencies,
     );
-
-    expect(response).toMatchObject({
+    expect(pong).toMatchObject({
       requestId: "request-123",
       type: "PONG",
       payload: { workerVersion: "0.1.0" },
-      sentAt: now.toISOString(),
     });
-  });
 
-  it("returns current capabilities", async () => {
-    const response = await routeRuntimeMessage(
+    const capabilities = await routeRuntimeMessage(
       createCapabilitiesGetMessage({
         requestId: "request-124",
         sentAt: "2026-08-02T09:00:00.000Z",
       }),
       dependencies,
     );
-
-    expect(response).toMatchObject({
+    expect(capabilities).toMatchObject({
       type: "CAPABILITIES_RESPONSE",
       payload: FOUNDATION_CAPABILITIES,
     });
   });
 
   it("reports active-tab capability without a full URL", async () => {
+    const { dependencies } = createDependencies();
     const response = await routeRuntimeMessage(
       createTabCapabilityGetMessage({
         requestId: "request-tab",
@@ -109,64 +149,136 @@ describe("routeRuntimeMessage", () => {
     expect(JSON.stringify(response)).not.toContain("example.com");
   });
 
-  it("routes visible capture start and cancellation", async () => {
-    const capture = await routeRuntimeMessage(
+  it("persists capture, preview, reopen, and download status without binary data", async () => {
+    const { dependencies, session, start, exportCapture, downloadArtifact } = createDependencies();
+
+    await routeRuntimeMessage(
       createVisibleCaptureStartMessage({
         requestId: "request-capture",
-        sentAt: "2026-08-02T09:00:00.000Z",
+        outputFormat: "webp",
+        quality: 0.85,
+        sentAt: now.toISOString(),
       }),
       dependencies,
     );
-    expect(capture).toMatchObject({
-      type: "VISIBLE_CAPTURE_SUCCESS",
-      payload: { captureId: "capture-1", mimeType: "image/png" },
+    expect(session.getSnapshot()).toMatchObject({
+      status: "captured",
+      format: "webp",
+      quality: 0.85,
+      source: { captureId: "capture-1" },
     });
 
-    const cancelled = await routeRuntimeMessage(
-      createVisibleCaptureCancelMessage({
-        requestId: "request-cancel",
-        captureRequestId: "request-capture",
-        sentAt: "2026-08-02T09:00:00.000Z",
+    const restored = await routeRuntimeMessage(
+      createVisibleSessionGetMessage({
+        requestId: "request-session",
+        sentAt: now.toISOString(),
       }),
       dependencies,
     );
-    expect(cancelled).toMatchObject({
-      type: "VISIBLE_CAPTURE_CANCELLED",
-      payload: { captureRequestId: "request-capture", accepted: true },
+    expect(restored).toMatchObject({
+      type: "VISIBLE_SESSION_RESPONSE",
+      payload: { session: { status: "captured", source: { captureId: "capture-1" } } },
     });
-  });
 
-  it("routes image processing and artifact download without recapture", async () => {
-    const exported = await routeRuntimeMessage(
+    await routeRuntimeMessage(
       createImageExportStartMessage({
         requestId: "request-export",
         sourceArtifactId: "capture-1",
-        format: "jpeg",
-        quality: 0.9,
+        format: "webp",
+        quality: 0.85,
         sentAt: now.toISOString(),
       }),
       dependencies,
     );
-    expect(exported).toMatchObject({
-      type: "IMAGE_EXPORT_SUCCESS",
-      payload: { artifactId: "artifact-1", sourceArtifactId: "capture-1" },
+    expect(session.getSnapshot()).toMatchObject({
+      status: "ready",
+      artifact: { artifactId: "artifact-webp", format: "webp" },
     });
 
-    const downloaded = await routeRuntimeMessage(
+    await routeRuntimeMessage(
       createArtifactDownloadStartMessage({
         requestId: "request-download",
-        artifactId: "artifact-1",
+        artifactId: "artifact-webp",
         sentAt: now.toISOString(),
       }),
       dependencies,
     );
-    expect(downloaded).toMatchObject({
-      type: "ARTIFACT_DOWNLOAD_STARTED",
-      payload: { artifactId: "artifact-1", downloadId: 77 },
+    expect(session.getSnapshot()).toMatchObject({
+      status: "completed",
+      downloadId: 77,
     });
+    expect(JSON.stringify(session.getSnapshot())).not.toContain("blob");
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(exportCapture).toHaveBeenCalledTimes(1);
+    expect(downloadArtifact).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-exports from a stored source without recapturing", async () => {
+    const { dependencies, start, exportCapture } = createDependencies();
+
+    await routeRuntimeMessage(
+      createVisibleCaptureStartMessage({
+        requestId: "request-capture",
+        outputFormat: "png",
+        quality: 0.92,
+        sentAt: now.toISOString(),
+      }),
+      dependencies,
+    );
+    await routeRuntimeMessage(
+      createImageExportStartMessage({
+        requestId: "request-export-png",
+        sourceArtifactId: "capture-1",
+        format: "png",
+        quality: 0.92,
+        sentAt: now.toISOString(),
+      }),
+      dependencies,
+    );
+    await routeRuntimeMessage(
+      createImageExportStartMessage({
+        requestId: "request-export-jpeg",
+        sourceArtifactId: "capture-1",
+        format: "jpeg",
+        quality: 0.8,
+        sentAt: now.toISOString(),
+      }),
+      dependencies,
+    );
+
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(exportCapture).toHaveBeenCalledTimes(2);
+  });
+
+  it("routes cancellation and persists cancelled status", async () => {
+    const { dependencies, session, cancel } = createDependencies();
+
+    await routeRuntimeMessage(
+      createVisibleCaptureStartMessage({
+        requestId: "request-capture",
+        sentAt: now.toISOString(),
+      }),
+      dependencies,
+    );
+    const response = await routeRuntimeMessage(
+      createVisibleCaptureCancelMessage({
+        requestId: "request-cancel",
+        captureRequestId: "request-capture",
+        sentAt: now.toISOString(),
+      }),
+      dependencies,
+    );
+
+    expect(response).toMatchObject({
+      type: "VISIBLE_CAPTURE_CANCELLED",
+      payload: { accepted: true },
+    });
+    expect(cancel).toHaveBeenCalledWith("request-capture");
+    expect(session.getSnapshot()).toMatchObject({ status: "cancelled" });
   });
 
   it("returns a normalized protocol error for addressed invalid messages", async () => {
+    const { dependencies } = createDependencies();
     const response = await routeRuntimeMessage(
       {
         protocolVersion: PROTOCOL_VERSION + 1,
@@ -187,6 +299,7 @@ describe("routeRuntimeMessage", () => {
   });
 
   it("ignores messages not addressed to the background", async () => {
+    const { dependencies } = createDependencies();
     await expect(routeRuntimeMessage({ type: "UNKNOWN" }, dependencies)).resolves.toBeUndefined();
   });
 });

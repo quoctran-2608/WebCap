@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Popup preview cards with local Blob URLs, image metadata, explicit download/retry/cancel controls, and accessible live status.
+- Metadata-only visible session restoration through `chrome.storage.session` while binary artifacts remain in IndexedDB.
+- Playwright persistent-Chromium extension coverage for preview pixels, popup reopen recovery, PNG download integrity, DPR 2, and 125% zoom.
+- Permanent CI visible-capture E2E gate with retained Playwright reports.
 - IndexedDB artifact storage with Blob-backed source/output records and expiry cleanup.
 - Race-safe offscreen document processing for PNG, JPEG, and WebP image artifacts.
 - Sanitized title/domain/timestamp filenames and Chrome download lifecycle with Blob URL revocation.

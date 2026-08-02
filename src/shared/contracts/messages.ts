@@ -5,6 +5,10 @@ import { PROTOCOL_VERSION } from "@shared/constants";
 import { ArtifactMetadataSchema, type ArtifactMetadata } from "@shared/contracts/artifact";
 import { ImageFormatSchema, type ImageFormat } from "@shared/contracts/domain";
 import {
+  VisibleSessionSnapshotSchema,
+  type VisibleSessionSnapshot,
+} from "@shared/contracts/visible-session";
+import {
   WebCapErrorCodeSchema,
   WebCapErrorDataSchema,
   createWebCapError,
@@ -108,11 +112,31 @@ export const TabCapabilityResponseMessageSchema = EnvelopeBaseSchema.extend({
   payload: TabCapabilityPayloadSchema,
 }).strict();
 
+export const VisibleSessionGetMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("popup"),
+  target: z.literal("background"),
+  type: z.literal("VISIBLE_SESSION_GET"),
+  payload: z.object({}).strict(),
+}).strict();
+
+export const VisibleSessionResponseMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("background"),
+  target: z.literal("popup"),
+  type: z.literal("VISIBLE_SESSION_RESPONSE"),
+  payload: z.object({ session: VisibleSessionSnapshotSchema.nullable() }).strict(),
+}).strict();
+
 export const VisibleCaptureStartMessageSchema = EnvelopeBaseSchema.extend({
   source: z.literal("popup"),
   target: z.literal("background"),
   type: z.literal("VISIBLE_CAPTURE_START"),
-  payload: z.object({ format: z.literal("png") }).strict(),
+  payload: z
+    .object({
+      format: z.literal("png"),
+      outputFormat: ImageFormatSchema,
+      quality: z.number().finite().min(0).max(1),
+    })
+    .strict(),
 }).strict();
 
 export const VisibleCaptureSuccessMessageSchema = EnvelopeBaseSchema.extend({
@@ -191,6 +215,7 @@ export const BackgroundRequestSchema = z.discriminatedUnion("type", [
   PingMessageSchema,
   CapabilitiesGetMessageSchema,
   TabCapabilityGetMessageSchema,
+  VisibleSessionGetMessageSchema,
   VisibleCaptureStartMessageSchema,
   VisibleCaptureCancelMessageSchema,
   ImageExportStartMessageSchema,
@@ -201,6 +226,7 @@ export const BackgroundResponseSchema = z.discriminatedUnion("type", [
   PongMessageSchema,
   CapabilitiesResponseMessageSchema,
   TabCapabilityResponseMessageSchema,
+  VisibleSessionResponseMessageSchema,
   VisibleCaptureSuccessMessageSchema,
   VisibleCaptureCancelledMessageSchema,
   ImageExportSuccessMessageSchema,
@@ -217,6 +243,8 @@ export type TabCapabilityStatus = z.infer<typeof TabCapabilityStatusSchema>;
 export type TabCapabilityPayload = z.infer<typeof TabCapabilityPayloadSchema>;
 export type TabCapabilityGetMessage = z.infer<typeof TabCapabilityGetMessageSchema>;
 export type TabCapabilityResponseMessage = z.infer<typeof TabCapabilityResponseMessageSchema>;
+export type VisibleSessionGetMessage = z.infer<typeof VisibleSessionGetMessageSchema>;
+export type VisibleSessionResponseMessage = z.infer<typeof VisibleSessionResponseMessageSchema>;
 export type VisibleCaptureMetadata = z.infer<typeof VisibleCaptureMetadataSchema>;
 export type VisibleCaptureStartMessage = z.infer<typeof VisibleCaptureStartMessageSchema>;
 export type VisibleCaptureSuccessMessage = z.infer<typeof VisibleCaptureSuccessMessageSchema>;
@@ -323,8 +351,39 @@ export function createTabCapabilityResponseMessage(
   });
 }
 
-export function createVisibleCaptureStartMessage(
+export function createVisibleSessionGetMessage(
   options: MessageCreationOptions,
+): VisibleSessionGetMessage {
+  return VisibleSessionGetMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "popup",
+    target: "background",
+    type: "VISIBLE_SESSION_GET",
+    payload: {},
+    sentAt: options.sentAt,
+  });
+}
+
+export function createVisibleSessionResponseMessage(
+  options: MessageCreationOptions & { session: VisibleSessionSnapshot | null },
+): VisibleSessionResponseMessage {
+  return VisibleSessionResponseMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "popup",
+    type: "VISIBLE_SESSION_RESPONSE",
+    payload: { session: options.session },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createVisibleCaptureStartMessage(
+  options: MessageCreationOptions & {
+    outputFormat?: ImageFormat;
+    quality?: number;
+  },
 ): VisibleCaptureStartMessage {
   return VisibleCaptureStartMessageSchema.parse({
     protocolVersion: PROTOCOL_VERSION,
@@ -332,7 +391,11 @@ export function createVisibleCaptureStartMessage(
     source: "popup",
     target: "background",
     type: "VISIBLE_CAPTURE_START",
-    payload: { format: "png" },
+    payload: {
+      format: "png",
+      outputFormat: options.outputFormat ?? "png",
+      quality: options.quality ?? 0.92,
+    },
     sentAt: options.sentAt,
   });
 }
@@ -507,6 +570,12 @@ export function isTabCapabilityResponseMessage(
   value: unknown,
 ): value is TabCapabilityResponseMessage {
   return TabCapabilityResponseMessageSchema.safeParse(value).success;
+}
+
+export function isVisibleSessionResponseMessage(
+  value: unknown,
+): value is VisibleSessionResponseMessage {
+  return VisibleSessionResponseMessageSchema.safeParse(value).success;
 }
 
 export function isVisibleCaptureSuccessMessage(

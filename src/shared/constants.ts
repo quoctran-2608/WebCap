@@ -1,6 +1,7 @@
 export const PROTOCOL_VERSION = 1 as const;
 export const SETTINGS_SCHEMA_VERSION = 1 as const;
 export const SETTINGS_STORAGE_KEY = "webcap.settings" as const;
+export const VISIBLE_SESSION_STORAGE_KEY = "webcap.visible-session" as const;
 
 export const TILE_TARGET_WIDTH_CSS = 8_192;
 export const TILE_TARGET_HEIGHT_CSS = 8_192;

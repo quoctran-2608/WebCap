@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S05
+current_session: S06
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -103,8 +103,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | S02 | M0 | Shared contracts, settings, errors và CI | S01 | 16k–24k | DONE |
 | S03 | M1 | Visible capture coordinator và Chrome adapter | S02 | 16k–24k | DONE |
 | S04 | M1 | Offscreen processing, artifact storage và download | S03 | 18k–26k | DONE |
-| S05 | M1 | Preview UI và visible-capture E2E | S04 | 16k–24k | NEXT |
-| S06 | M2 | Persistent job state machine và repositories | S05 | 16k–24k | READY |
+| S05 | M1 | Preview UI và visible-capture E2E | S04 | 16k–24k | DONE |
+| S06 | M2 | Persistent job state machine và repositories | S05 | 16k–24k | NEXT |
 | S07 | M2 | Debugger client, page metrics và 2D tile planner | S06 | 20k–28k | READY |
 | S08 | M2 | Page preparation, lazy settle và restoration | S07 | 20k–28k | READY |
 | S09 | M2 | CDP tiled full-page capture, progress và cancel | S08 | 22k–30k | READY |
@@ -294,6 +294,10 @@ pnpm build
 **Exit criteria M1:** visible capture và image download hoàn chỉnh; E2E smoke pass; không P0/P1 trong flow này.
 
 **Commit gợi ý:** `Complete visible capture preview flow`.
+
+**Hoàn thành:** 2026-08-02 · PR #9 · validation head `579f5b6`.
+
+**Ghi chú kỹ thuật:** popup đã tách capture/process khỏi download, hiển thị preview Blob từ IndexedDB và khôi phục metadata-only session sau khi đóng/mở lại. Playwright persistent Chromium context xác thực preview pixel, dimensions, restore, PNG download/signature và ma trận DPR 2 + zoom 125%. Quyền `<all_urls>` chỉ được cấp cho bản sao extension E2E; manifest phát hành không đổi. CI sạch pass format, lint, typecheck, 76 unit tests, build và 2 E2E.
 
 ---
 
@@ -787,8 +791,8 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S02 | DONE | 2026-08-02 | 6e6a76659173 | format, lint, typecheck, unit, build, Chrome smoke | Shared Zod contracts, settings migration/repository, error model, safe logger và CI đã được xác thực. |
 | S03 | DONE | 2026-08-02 | PR #7 / 710ce8d | format, lint, typecheck, 52 unit, build | Visible capture coordinator, typed Chrome adapter, metadata-only protocol, dedupe, rate limit và cancel đã được xác thực. |
 | S04 | DONE | 2026-08-02 | PR #8 / a4eeaa5 | format, lint, typecheck, 69 unit, build | Blob artifact persistence, offscreen PNG/JPEG/WebP processing, filename sanitizer, download lifecycle và retry không recapture đã được xác thực. |
-| S05 | NEXT | — | — | — | Sẵn sàng hoàn tất preview UI và visible-capture E2E. |
-| S06 | READY | — | — | — | — |
+| S05 | DONE | 2026-08-02 | PR #9 / 579f5b6 | format, lint, typecheck, 76 unit, build, 2 Playwright E2E | Visible flow hoàn chỉnh từ capture đến preview, restore popup và download; DPR 2/zoom 125% đã được xác thực. |
+| S06 | NEXT | — | — | — | Sẵn sàng triển khai persistent job state machine và repositories. |
 | S07 | READY | — | — | — | — |
 | S08 | READY | — | — | — | — |
 | S09 | READY | — | — | — | — |
@@ -806,12 +810,12 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S05 — Preview UI và visible-capture E2E**.
+Session kế tiếp là **S06 — Persistent job state machine và repositories**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S05.
-2. Đọc PRD acceptance criteria cho visible/image export, SPEC UI M1 và §27.
-3. Kiểm tra repo/branch và kết quả CI S04.
-4. Chỉ triển khai S05.
-5. Kết thúc với preview UI, popup state synchronization và visible-capture E2E smoke đầy đủ.
+1. Đọc `PLAN.md` phần S06.
+2. Đọc SPEC domain/state/message/storage sections §7–12 và tests §27.
+3. Kiểm tra repo/branch và kết quả CI S05.
+4. Chỉ triển khai S06.
+5. Kết thúc với persistent state transitions, recovery summary, idempotent commands và repository tests đầy đủ.
