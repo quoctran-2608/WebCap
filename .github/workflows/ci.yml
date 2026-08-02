@@ -49,7 +49,7 @@ jobs:
           python scripts/apply-s05.py
           pnpm add --save-dev --save-exact @playwright/test@latest
 
-      - name: Apply S05 typed corrections
+      - name: Apply S05 typed and E2E corrections
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -77,6 +77,14 @@ jobs:
               "    const samplePoints: Array<readonly [number, number]> = [\n      [0.25, 0.25],\n      [0.75, 0.25],\n      [0.25, 0.75],\n      [0.75, 0.75],\n    ];\n\n    return samplePoints.map(([x, y]) => {",
           )
           e2e.write_text(text, encoding="utf-8")
+
+          fixture = Path("tests/e2e/extension.fixture.ts")
+          text = fixture.read_text(encoding="utf-8")
+          text = text.replace(
+              "      const popupPromise = context.waitForEvent(\"page\");\n      await serviceWorker.evaluate(\n        async ({ windowId }) => chrome.action.openPopup({ windowId }),\n        target,\n      );\n      const popup = await popupPromise;\n      await popup.waitForURL(`chrome-extension://${extensionId}/popup.html`);",
+              "      const popup = await context.newPage();\n      await popup.goto(`chrome-extension://${extensionId}/popup.html`);\n      await targetPage.bringToFront();\n      await serviceWorker.evaluate(\n        async ({ windowId, url }) => {\n          const tabs = await chrome.tabs.query({ windowId });\n          const tab = tabs.find((candidate) => candidate.url === url);\n          if (tab?.id === undefined) {\n            throw new Error(\"The fixture tab could not be reactivated.\");\n          }\n          await chrome.tabs.update(tab.id, { active: true });\n          await chrome.windows.update(windowId, { focused: true });\n        },\n        { windowId: target.windowId, url: targetPage.url() },\n      );",
+          )
+          fixture.write_text(text, encoding="utf-8")
 
           server = Path("tests/e2e/fixture-server.mjs")
           text = server.read_text(encoding="utf-8")
