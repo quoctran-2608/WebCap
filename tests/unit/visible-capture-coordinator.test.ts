@@ -49,26 +49,20 @@ describe("VisibleCaptureCoordinator", () => {
   });
 
   it("deduplicates the same in-flight request", async () => {
-    let resolveCapture: ((value: string) => void) | undefined;
     let calls = 0;
     const coordinator = new VisibleCaptureCoordinator({
-      tabs: supportedAdapter(
-        () =>
-          new Promise((resolve) => {
-            calls += 1;
-            resolveCapture = resolve;
-          }),
-      ),
+      tabs: supportedAdapter(() => {
+        calls += 1;
+        return Promise.resolve(ONE_PIXEL_PNG);
+      }),
       rateLimiter: immediateLimiter(),
       createId: () => "capture-2",
     });
 
     const first = coordinator.start("request-2");
     const duplicate = coordinator.start("request-2");
-    await Promise.resolve();
-    await Promise.resolve();
-    resolveCapture?.(ONE_PIXEL_PNG);
 
+    expect(duplicate).toBe(first);
     await expect(Promise.all([first, duplicate])).resolves.toHaveLength(2);
     expect(calls).toBe(1);
   });
