@@ -1,5 +1,6 @@
 import {
   WebCapErrorDataSchema,
+  WebCapRuntimeError,
   createWebCapError,
   type ErrorStage,
   type WebCapErrorCode,
@@ -40,6 +41,10 @@ function safeMessageOf(value: unknown): string {
 }
 
 export function normalizeError(value: unknown, options: NormalizeErrorOptions): WebCapErrorData {
+  if (value instanceof WebCapRuntimeError) {
+    return value.data;
+  }
+
   const existing = WebCapErrorDataSchema.safeParse(value);
   if (existing.success) {
     return existing.data;
