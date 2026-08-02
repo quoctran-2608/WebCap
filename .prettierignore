@@ -1,0 +1,8 @@
+artifacts/
+coverage/
+dist/
+node_modules/
+pnpm-lock.yaml
+PLAN.md
+PRD_WebCap_v1.0.md
+SPEC.md
