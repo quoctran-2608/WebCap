@@ -41,7 +41,7 @@ export class IndexedDbTileRepository implements TileRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.tiles, "readonly");
-      const value = await requestResult(
+      const value = await requestResult<unknown>(
         transaction.objectStore(WEBCAP_STORES.tiles).get([jobId, index]),
       );
       await transactionDone(transaction);
@@ -56,7 +56,7 @@ export class IndexedDbTileRepository implements TileRepositoryPort {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.tiles, "readonly");
       const store = transaction.objectStore(WEBCAP_STORES.tiles);
-      const values = await requestResult(store.index("byJobId").getAll(jobId));
+      const values = await requestResult<unknown[]>(store.index("byJobId").getAll(jobId));
       await transactionDone(transaction);
       return values.map(parseRecord).sort((left, right) => left.index - right.index);
     } catch (error) {
@@ -69,7 +69,7 @@ export class IndexedDbTileRepository implements TileRepositoryPort {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.tiles, "readwrite");
       const store = transaction.objectStore(WEBCAP_STORES.tiles);
-      const values = await requestResult(store.index("byJobId").getAll(jobId));
+      const values = await requestResult<unknown[]>(store.index("byJobId").getAll(jobId));
       const records = values.map(parseRecord);
       for (const record of records) {
         store.delete([record.jobId, record.index]);
