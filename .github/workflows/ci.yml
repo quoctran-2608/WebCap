@@ -37,6 +37,26 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Format S03 files
+        run: >-
+          pnpm exec prettier --write
+          src/background/tab-capability.ts
+          src/background/visible-capture-coordinator.ts
+          src/popup/App.tsx
+          tests/unit/capture-rate-limiter.test.ts
+          tests/unit/messages.test.ts
+
+      - name: Upload formatted S03 files
+        uses: actions/upload-artifact@v4
+        with:
+          name: s03-prettier-output
+          path: |
+            src/background/tab-capability.ts
+            src/background/visible-capture-coordinator.ts
+            src/popup/App.tsx
+            tests/unit/capture-rate-limiter.test.ts
+            tests/unit/messages.test.ts
+
       - name: Check formatting
         run: pnpm format:check
 
