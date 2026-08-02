@@ -5,9 +5,7 @@ import { createPongMessage, isPingMessage } from "@shared/contracts/handshake";
 
 const now = new Date("2026-08-02T09:00:00.000Z");
 
-function createRuntime(
-  respond: (message: unknown) => Promise<unknown>,
-): RuntimeMessenger {
+function createRuntime(respond: (message: unknown) => Promise<unknown>): RuntimeMessenger {
   return {
     getVersion: () => "0.1.0",
     sendMessage: respond,

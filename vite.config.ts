@@ -55,9 +55,7 @@ export default defineConfig({
       },
       output: {
         entryFileNames: (chunkInfo) =>
-          chunkInfo.name === "service-worker"
-            ? "service-worker.js"
-            : "assets/[name]-[hash].js",
+          chunkInfo.name === "service-worker" ? "service-worker.js" : "assets/[name]-[hash].js",
         chunkFileNames: "assets/[name]-[hash].js",
         assetFileNames: "assets/[name]-[hash][extname]",
       },

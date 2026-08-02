@@ -1,8 +1,4 @@
-import {
-  createPongMessage,
-  isPingMessage,
-  type PongMessage,
-} from "@shared/contracts/handshake";
+import { createPongMessage, isPingMessage, type PongMessage } from "@shared/contracts/handshake";
 
 export interface MessageRouterDependencies {
   workerVersion: string;

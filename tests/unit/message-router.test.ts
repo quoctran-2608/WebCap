@@ -34,10 +34,7 @@ describe("routeRuntimeMessage", () => {
 
   it("ignores unrelated messages", () => {
     expect(
-      routeRuntimeMessage(
-        { type: "UNKNOWN" },
-        { workerVersion: "0.1.0", now: () => now },
-      ),
+      routeRuntimeMessage({ type: "UNKNOWN" }, { workerVersion: "0.1.0", now: () => now }),
     ).toBeUndefined();
   });
 });

@@ -212,10 +212,7 @@ try {
     browserOutput += chunk.toString();
   });
 
-  await waitForJson(
-    `http://127.0.0.1:${REMOTE_DEBUGGING_PORT}/json/version`,
-    STARTUP_TIMEOUT_MS,
-  );
+  await waitForJson(`http://127.0.0.1:${REMOTE_DEBUGGING_PORT}/json/version`, STARTUP_TIMEOUT_MS);
 
   const deadline = Date.now() + STARTUP_TIMEOUT_MS;
   let popupTarget;

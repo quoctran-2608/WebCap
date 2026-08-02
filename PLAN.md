@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S01
+current_session: S02
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -99,8 +99,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | Session | SPEC milestone | Capability hoàn thành | Phụ thuộc | Token mục tiêu | Trạng thái |
 | --- | --- | --- | --- | ---: | --- |
 | S00 | M0 | Bootstrap workspace và quality toolchain | Docs hiện có | 14k–22k | DONE |
-| S01 | M0 | Manifest V3 multi-entry và popup ↔ worker handshake | S00 | 14k–22k | NEXT |
-| S02 | M0 | Shared contracts, settings, errors và CI | S01 | 16k–24k | READY |
+| S01 | M0 | Manifest V3 multi-entry và popup ↔ worker handshake | S00 | 14k–22k | DONE |
+| S02 | M0 | Shared contracts, settings, errors và CI | S01 | 16k–24k | NEXT |
 | S03 | M1 | Visible capture coordinator và Chrome adapter | S02 | 16k–24k | READY |
 | S04 | M1 | Offscreen processing, artifact storage và download | S03 | 18k–26k | READY |
 | S05 | M1 | Preview UI và visible-capture E2E | S04 | 16k–24k | READY |
@@ -775,8 +775,8 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | Session | Status | Date | Commit/PR | Tests | Notes |
 | --- | --- | --- | --- | --- | --- |
 | S00 | DONE | 2026-08-02 | 44757499ab7f | format, lint, typecheck, unit, build | Workspace và lockfile đã được xác thực trên GitHub Actions. |
-| S01 | NEXT | — | — | — | Sẵn sàng triển khai Manifest V3 và popup ↔ worker handshake. |
-| S02 | READY | — | — | — | — |
+| S01 | DONE | 2026-08-02 | 461a6b8560d3 | format, lint, typecheck, unit, build, Chrome smoke | Manifest V3 load được; popup kết nối service worker bằng PING/PONG typed. |
+| S02 | NEXT | — | — | — | Sẵn sàng triển khai contracts, settings, errors và CI. |
 | S03 | READY | — | — | — | — |
 | S04 | READY | — | — | — | — |
 | S05 | READY | — | — | — | — |
@@ -798,12 +798,12 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S01 — Manifest V3 multi-entry và popup ↔ worker handshake**.
+Session kế tiếp là **S02 — Shared contracts, settings, errors và CI**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S01.
-2. Đọc SPEC §5–6, §8 và UI M0 ở §26.
-3. Kiểm tra repo/branch và kết quả validation S00.
-4. Chỉ triển khai S01.
-5. Kết thúc với extension unpacked build được và popup ping service worker thành công.
+1. Đọc `PLAN.md` phần S02.
+2. Đọc SPEC §7–12, §24–25 và §28–32.
+3. Kiểm tra repo/branch và kết quả validation S01.
+4. Chỉ triển khai S02.
+5. Kết thúc với contracts/settings/error model dùng chung và CI chính thức chạy xanh.

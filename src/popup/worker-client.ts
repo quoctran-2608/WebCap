@@ -1,8 +1,4 @@
-import {
-  createPingMessage,
-  isPongMessage,
-  type PongMessage,
-} from "@shared/contracts/handshake";
+import { createPingMessage, isPongMessage, type PongMessage } from "@shared/contracts/handshake";
 
 const HANDSHAKE_TIMEOUT_MS = 3_000;
 
