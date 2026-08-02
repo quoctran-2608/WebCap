@@ -5,7 +5,11 @@ import {
   type JobCleanupPort,
 } from "@background/job-coordinator";
 import type { CaptureJob } from "@shared/contracts/domain";
-import type { JobSummary, TabJobLock } from "@shared/contracts/job";
+import type {
+  JobSummary,
+  StoredTileRecord,
+  TabJobLock,
+} from "@shared/contracts/job";
 import { summarizeJob } from "@shared/contracts/job";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 import type { JobArtifactCleanupPort } from "@storage/job-artifact-cleanup-repository";
@@ -82,7 +86,11 @@ class MemorySessions implements JobSessionRepositoryPort {
 
   acquireTabLock(lock: TabJobLock, nowIso: string): Promise<boolean> {
     const existing = this.locks.get(lock.tabId);
-    if (existing !== undefined && existing.jobId !== lock.jobId && existing.leaseExpiresAt > nowIso) {
+    if (
+      existing !== undefined &&
+      existing.jobId !== lock.jobId &&
+      existing.leaseExpiresAt > nowIso
+    ) {
       return Promise.resolve(false);
     }
     this.locks.set(lock.tabId, structuredClone(lock));
@@ -121,15 +129,15 @@ class MemorySessions implements JobSessionRepositoryPort {
 class MemoryTiles implements TileRepositoryPort {
   deletedJobs: string[] = [];
 
-  put(): Promise<void> {
+  put(_record: StoredTileRecord): Promise<void> {
     return Promise.resolve();
   }
 
-  get(): Promise<undefined> {
+  get(_jobId: string, _index: number): Promise<StoredTileRecord | undefined> {
     return Promise.resolve(undefined);
   }
 
-  listByJob(): Promise<[]> {
+  listByJob(_jobId: string): Promise<StoredTileRecord[]> {
     return Promise.resolve([]);
   }
 
@@ -203,9 +211,9 @@ function setup(options: {
     sessions,
     tiles,
     artifacts,
-    cleanup: options.cleanup,
     now: () => options.now ?? new Date("2026-08-02T16:02:00.000Z"),
     idFactory: () => options.id ?? "job-created",
+    ...(options.cleanup === undefined ? {} : { cleanup: options.cleanup }),
   });
   return { coordinator, jobs, sessions, tiles, artifacts };
 }
