@@ -13,6 +13,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 - Node.js 22.12 or newer.
 - Corepack enabled.
 - pnpm version declared by the `packageManager` field in `package.json`.
+- Chrome 116 or newer for loading the unpacked extension.
 
 ## Setup
 
@@ -25,26 +26,41 @@ pnpm install --frozen-lockfile
 ## Commands
 
 ```bash
-pnpm dev           # Run the current Vite development entry.
-pnpm build         # Build the current foundation library entry.
+pnpm dev           # Run the popup entry with the Vite development server.
+pnpm build         # Build and verify the Manifest V3 unpacked extension.
 pnpm typecheck     # Run TypeScript without emitting files.
 pnpm lint          # Run ESLint with zero warnings allowed.
 pnpm format:check  # Verify formatting without modifying files.
 pnpm format        # Format tracked source/configuration files.
 pnpm test:unit     # Run the unit-test suite once.
+pnpm test:smoke    # Smoke-test the built popup ↔ service-worker handshake in Chrome.
 pnpm test          # Run Vitest in watch mode.
-pnpm package       # Explain the packaging boundary until S01.
+pnpm package       # Build and verify the unpacked extension; ZIP packaging comes later.
 ```
 
-## Foundation structure
+## Load the extension in Chrome
+
+1. Run `pnpm build`.
+2. Open `chrome://extensions`.
+3. Enable **Developer mode**.
+4. Choose **Load unpacked**.
+5. Select the generated `dist/` directory.
+6. Open the WebCap action popup and confirm that **Service worker** shows **Đã kết nối**.
+
+The `dist/` output contains `manifest.json`, `popup.html`, `service-worker.js`, hashed popup assets, and the four extension icons. Generated output, dependency directories, test reports, and local browser profiles must not be committed.
+
+## Source structure
 
 ```text
-src/shared/       Pure reusable modules and future shared contracts.
-tests/unit/       Fast deterministic unit tests.
-scripts/          Repository automation that does not belong in runtime code.
+public/                 Manifest and static extension assets copied as-is.
+assets/                 Internal build-time icon sources.
+src/background/         Manifest V3 service worker and message routing.
+src/popup/              React popup entry, shell, styles, and runtime client.
+src/shared/contracts/   Typed cross-context message envelopes.
+tests/unit/             Fast deterministic contract and router tests.
+tests/smoke/            Real-Chrome unpacked-extension smoke tests.
+scripts/                Build verification and repository automation.
 ```
-
-The generated `dist/`, dependency directories, test reports, and local browser artifacts must not be committed.
 
 ## Development rules
 
