@@ -47,7 +47,7 @@ jobs:
           path = Path("tests/unit/job-coordinator.test.ts")
           text = path.read_text(encoding="utf-8")
           replacements = {
-              'import type {\n  JobSummary,\n  StoredTileRecord,\n  TabJobLock,\n} from "@shared/contracts/job";': 'import type { JobSummary, TabJobLock } from "@shared/contracts/job";',
+              'import type { JobSummary, StoredTileRecord, TabJobLock } from "@shared/contracts/job";': 'import type { JobSummary, TabJobLock } from "@shared/contracts/job";',
               '  put(_record: StoredTileRecord): Promise<void> {': '  put(): Promise<void> {',
               '  get(_jobId: string, _index: number): Promise<StoredTileRecord | undefined> {': '  get(): Promise<undefined> {',
               '  listByJob(_jobId: string): Promise<StoredTileRecord[]> {': '  listByJob(): Promise<[]> {',
