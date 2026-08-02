@@ -4,8 +4,15 @@ import iconData from "../../assets/icons.json";
 
 import { FOUNDATION_CAPABILITIES, type CaptureCapabilities } from "@shared/capabilities";
 import type { CaptureMode, OutputFormat } from "@shared/contracts/domain";
+import type { TabCapabilityPayload, VisibleCaptureMetadata } from "@shared/contracts/messages";
 
-import { getCapabilities, pingWorker } from "./worker-client";
+import {
+  cancelVisibleCapture,
+  getCapabilities,
+  getTabCapability,
+  pingWorker,
+  startVisibleCapture,
+} from "./worker-client";
 
 const CAPTURE_MODES: ReadonlyArray<{ id: CaptureMode; label: string }> = [
   { id: "visible", label: "Vùng đang xem" },
@@ -23,6 +30,7 @@ const OUTPUT_FORMATS: ReadonlyArray<{ id: OutputFormat; label: string }> = [
 ];
 
 type WorkerStatus = "checking" | "connected" | "unavailable";
+type CaptureStatus = "idle" | "capturing" | "success" | "error" | "cancelled";
 
 const STATUS_COPY: Record<WorkerStatus, string> = {
   checking: "Đang kết nối…",
@@ -30,22 +38,44 @@ const STATUS_COPY: Record<WorkerStatus, string> = {
   unavailable: "Không thể kết nối",
 };
 
+const TAB_STATUS_COPY: Record<TabCapabilityPayload["status"], string> = {
+  supported: "Có thể chụp",
+  unsupported: "URL không hỗ trợ",
+  unavailable: "Không có tab hoạt động",
+};
+
+function formatBytes(byteLength: number): string {
+  if (byteLength < 1024) {
+    return `${byteLength} B`;
+  }
+  return `${(byteLength / 1024).toFixed(1)} KB`;
+}
+
 export function App(): React.JSX.Element {
   const [workerStatus, setWorkerStatus] = useState<WorkerStatus>("checking");
   const [workerVersion, setWorkerVersion] = useState<string>();
   const [capabilities, setCapabilities] = useState<CaptureCapabilities>(FOUNDATION_CAPABILITIES);
+  const [tabCapability, setTabCapability] = useState<TabCapabilityPayload>({
+    status: "unavailable",
+    errorCode: "E_TAB_NOT_ACTIVE",
+  });
+  const [captureStatus, setCaptureStatus] = useState<CaptureStatus>("idle");
+  const [captureRequestId, setCaptureRequestId] = useState<string>();
+  const [captureResult, setCaptureResult] = useState<VisibleCaptureMetadata>();
+  const [captureError, setCaptureError] = useState<string>();
 
   useEffect(() => {
     let active = true;
 
-    void Promise.all([pingWorker(), getCapabilities()])
-      .then(([response, workerCapabilities]) => {
+    void Promise.all([pingWorker(), getCapabilities(), getTabCapability()])
+      .then(([response, workerCapabilities, currentTabCapability]) => {
         if (!active) {
           return;
         }
 
         setWorkerVersion(response.payload.workerVersion);
         setCapabilities(workerCapabilities);
+        setTabCapability(currentTabCapability);
         setWorkerStatus("connected");
       })
       .catch(() => {
@@ -60,6 +90,51 @@ export function App(): React.JSX.Element {
   }, []);
 
   const availableFormats = OUTPUT_FORMATS.filter((format) => capabilities.outputFormats[format.id]);
+  const canCapture =
+    workerStatus === "connected" &&
+    tabCapability.status === "supported" &&
+    capabilities.modes.visible &&
+    captureStatus !== "capturing";
+
+  const handleCapture = (): void => {
+    const requestId = crypto.randomUUID();
+    setCaptureRequestId(requestId);
+    setCaptureResult(undefined);
+    setCaptureError(undefined);
+    setCaptureStatus("capturing");
+
+    void startVisibleCapture({ captureRequestId: requestId })
+      .then((metadata) => {
+        setCaptureResult(metadata);
+        setCaptureStatus("success");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.name === "E_CANCELLED") {
+          setCaptureStatus("cancelled");
+          return;
+        }
+
+        setCaptureError(error instanceof Error ? error.message : "Không thể chụp tab hiện tại.");
+        setCaptureStatus("error");
+      });
+  };
+
+  const handleCancel = (): void => {
+    if (captureRequestId === undefined) {
+      return;
+    }
+
+    void cancelVisibleCapture(captureRequestId)
+      .then((accepted) => {
+        if (accepted) {
+          setCaptureStatus("cancelled");
+        }
+      })
+      .catch((error: unknown) => {
+        setCaptureError(error instanceof Error ? error.message : "Không thể hủy thao tác chụp.");
+        setCaptureStatus("error");
+      });
+  };
 
   return (
     <main className="popup-shell">
@@ -94,14 +169,14 @@ export function App(): React.JSX.Element {
           <strong>{workerVersion ?? chrome.runtime.getManifest().version}</strong>
         </div>
         <div className="status-row">
-          <span>Cấu hình cục bộ</span>
-          <strong className="status status--connected">
-            {capabilities.settings ? "Sẵn sàng" : "Chưa khả dụng"}
-          </strong>
-        </div>
-        <div className="status-row">
           <span>Tab hiện tại</span>
-          <strong className="status status--pending">Kiểm tra ở S03</strong>
+          <strong
+            className={`status status--${tabCapability.status === "supported" ? "connected" : "pending"}`}
+            data-testid="tab-status"
+            data-status={tabCapability.status}
+          >
+            {TAB_STATUS_COPY[tabCapability.status]}
+          </strong>
         </div>
       </section>
 
@@ -109,9 +184,9 @@ export function App(): React.JSX.Element {
         <div className="section-heading">
           <div>
             <p className="section-heading__eyebrow">CHẾ ĐỘ CHỤP</p>
-            <h2 id="capture-title">Nền tảng đã sẵn sàng</h2>
+            <h2 id="capture-title">Chụp vùng đang xem</h2>
           </div>
-          <span className="planned-badge">Sắp mở</span>
+          <span className="planned-badge">S03</span>
         </div>
 
         <div className="mode-grid" aria-label="Các chế độ chụp">
@@ -129,29 +204,40 @@ export function App(): React.JSX.Element {
         <label className="field-label" htmlFor="output-format">
           Định dạng đầu ra
         </label>
-        <select
-          id="output-format"
-          disabled={availableFormats.length === 0}
-          defaultValue={availableFormats[0]?.id}
-        >
-          {availableFormats.length === 0 ? (
-            <option value="">Chưa khả dụng</option>
-          ) : (
-            availableFormats.map((format) => (
-              <option value={format.id} key={format.id}>
-                {format.label}
-              </option>
-            ))
-          )}
+        <select id="output-format" disabled defaultValue={availableFormats[0]?.id ?? "png"}>
+          <option value="png">PNG</option>
         </select>
 
-        <button className="primary-action" type="button" disabled>
-          Bắt đầu chụp
-        </button>
+        {captureStatus === "capturing" ? (
+          <button className="primary-action" type="button" onClick={handleCancel}>
+            Hủy chụp
+          </button>
+        ) : (
+          <button
+            className="primary-action"
+            type="button"
+            disabled={!canCapture}
+            onClick={handleCapture}
+          >
+            Chụp vùng đang xem
+          </button>
+        )}
+
+        <div className="capture-feedback" aria-live="polite">
+          {captureStatus === "capturing" && <p>Đang chụp tab hiện tại…</p>}
+          {captureStatus === "cancelled" && <p>Đã hủy thao tác chụp.</p>}
+          {captureStatus === "error" && <p role="alert">{captureError}</p>}
+          {captureStatus === "success" && captureResult !== undefined && (
+            <p data-testid="capture-success">
+              Đã chụp {captureResult.width} × {captureResult.height} px ·{" "}
+              {formatBytes(captureResult.byteLength)}. Ảnh đang được giữ cục bộ để S04 xử lý.
+            </p>
+          )}
+        </div>
       </section>
 
       <footer>
-        <span>Thiết lập được lưu cục bộ trên thiết bị.</span>
+        <span>Không truyền pixel ảnh qua runtime message.</span>
       </footer>
     </main>
   );

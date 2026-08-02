@@ -3,6 +3,7 @@ import { z } from "zod";
 import { CaptureCapabilitiesSchema, type CaptureCapabilities } from "@shared/capabilities";
 import { PROTOCOL_VERSION } from "@shared/constants";
 import {
+  WebCapErrorCodeSchema,
   WebCapErrorDataSchema,
   createWebCapError,
   type WebCapErrorData,
@@ -21,11 +22,36 @@ export const MessageEndpointSchema = z.enum([
 
 const IsoDateTimeSchema = z.string().datetime({ offset: true });
 const RequestIdSchema = z.string().min(1).max(160);
+const NonNegativeIntegerSchema = z.number().int().nonnegative();
+const PositiveIntegerSchema = z.number().int().positive();
 const EnvelopeBaseSchema = z.object({
   protocolVersion: z.literal(PROTOCOL_VERSION),
   requestId: RequestIdSchema,
   sentAt: IsoDateTimeSchema,
 });
+
+export const TabCapabilityStatusSchema = z.enum(["supported", "unsupported", "unavailable"]);
+export const TabCapabilityPayloadSchema = z
+  .object({
+    status: TabCapabilityStatusSchema,
+    tabId: NonNegativeIntegerSchema.optional(),
+    windowId: NonNegativeIntegerSchema.optional(),
+    scheme: z.string().min(1).max(32).optional(),
+    errorCode: WebCapErrorCodeSchema.optional(),
+  })
+  .strict();
+
+export const VisibleCaptureMetadataSchema = z
+  .object({
+    captureId: z.string().min(1).max(160),
+    tabId: NonNegativeIntegerSchema,
+    windowId: NonNegativeIntegerSchema,
+    mimeType: z.literal("image/png"),
+    byteLength: PositiveIntegerSchema,
+    width: PositiveIntegerSchema,
+    height: PositiveIntegerSchema,
+  })
+  .strict();
 
 export const PingMessageSchema = EnvelopeBaseSchema.extend({
   source: z.literal("popup"),
@@ -66,6 +92,53 @@ export const CapabilitiesResponseMessageSchema = EnvelopeBaseSchema.extend({
   payload: CaptureCapabilitiesSchema,
 }).strict();
 
+export const TabCapabilityGetMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("popup"),
+  target: z.literal("background"),
+  type: z.literal("TAB_CAPABILITY_GET"),
+  payload: z.object({}).strict(),
+}).strict();
+
+export const TabCapabilityResponseMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("background"),
+  target: z.literal("popup"),
+  type: z.literal("TAB_CAPABILITY_RESPONSE"),
+  payload: TabCapabilityPayloadSchema,
+}).strict();
+
+export const VisibleCaptureStartMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("popup"),
+  target: z.literal("background"),
+  type: z.literal("VISIBLE_CAPTURE_START"),
+  payload: z.object({ format: z.literal("png") }).strict(),
+}).strict();
+
+export const VisibleCaptureSuccessMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("background"),
+  target: z.literal("popup"),
+  type: z.literal("VISIBLE_CAPTURE_SUCCESS"),
+  payload: VisibleCaptureMetadataSchema,
+}).strict();
+
+export const VisibleCaptureCancelMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("popup"),
+  target: z.literal("background"),
+  type: z.literal("VISIBLE_CAPTURE_CANCEL"),
+  payload: z.object({ captureRequestId: RequestIdSchema }).strict(),
+}).strict();
+
+export const VisibleCaptureCancelledMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("background"),
+  target: z.literal("popup"),
+  type: z.literal("VISIBLE_CAPTURE_CANCELLED"),
+  payload: z
+    .object({
+      captureRequestId: RequestIdSchema,
+      accepted: z.boolean(),
+    })
+    .strict(),
+}).strict();
+
 export const ErrorResponseMessageSchema = EnvelopeBaseSchema.extend({
   source: z.literal("background"),
   target: z.literal("popup"),
@@ -76,11 +149,17 @@ export const ErrorResponseMessageSchema = EnvelopeBaseSchema.extend({
 export const BackgroundRequestSchema = z.discriminatedUnion("type", [
   PingMessageSchema,
   CapabilitiesGetMessageSchema,
+  TabCapabilityGetMessageSchema,
+  VisibleCaptureStartMessageSchema,
+  VisibleCaptureCancelMessageSchema,
 ]);
 
 export const BackgroundResponseSchema = z.discriminatedUnion("type", [
   PongMessageSchema,
   CapabilitiesResponseMessageSchema,
+  TabCapabilityResponseMessageSchema,
+  VisibleCaptureSuccessMessageSchema,
+  VisibleCaptureCancelledMessageSchema,
   ErrorResponseMessageSchema,
 ]);
 
@@ -89,6 +168,15 @@ export type PingMessage = z.infer<typeof PingMessageSchema>;
 export type PongMessage = z.infer<typeof PongMessageSchema>;
 export type CapabilitiesGetMessage = z.infer<typeof CapabilitiesGetMessageSchema>;
 export type CapabilitiesResponseMessage = z.infer<typeof CapabilitiesResponseMessageSchema>;
+export type TabCapabilityStatus = z.infer<typeof TabCapabilityStatusSchema>;
+export type TabCapabilityPayload = z.infer<typeof TabCapabilityPayloadSchema>;
+export type TabCapabilityGetMessage = z.infer<typeof TabCapabilityGetMessageSchema>;
+export type TabCapabilityResponseMessage = z.infer<typeof TabCapabilityResponseMessageSchema>;
+export type VisibleCaptureMetadata = z.infer<typeof VisibleCaptureMetadataSchema>;
+export type VisibleCaptureStartMessage = z.infer<typeof VisibleCaptureStartMessageSchema>;
+export type VisibleCaptureSuccessMessage = z.infer<typeof VisibleCaptureSuccessMessageSchema>;
+export type VisibleCaptureCancelMessage = z.infer<typeof VisibleCaptureCancelMessageSchema>;
+export type VisibleCaptureCancelledMessage = z.infer<typeof VisibleCaptureCancelledMessageSchema>;
 export type ErrorResponseMessage = z.infer<typeof ErrorResponseMessageSchema>;
 export type BackgroundRequest = z.infer<typeof BackgroundRequestSchema>;
 export type BackgroundResponse = z.infer<typeof BackgroundResponseSchema>;
@@ -158,6 +246,93 @@ export function createCapabilitiesResponseMessage(
   });
 }
 
+export function createTabCapabilityGetMessage(
+  options: MessageCreationOptions,
+): TabCapabilityGetMessage {
+  return TabCapabilityGetMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "popup",
+    target: "background",
+    type: "TAB_CAPABILITY_GET",
+    payload: {},
+    sentAt: options.sentAt,
+  });
+}
+
+export function createTabCapabilityResponseMessage(
+  options: MessageCreationOptions & { capability: TabCapabilityPayload },
+): TabCapabilityResponseMessage {
+  return TabCapabilityResponseMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "popup",
+    type: "TAB_CAPABILITY_RESPONSE",
+    payload: options.capability,
+    sentAt: options.sentAt,
+  });
+}
+
+export function createVisibleCaptureStartMessage(
+  options: MessageCreationOptions,
+): VisibleCaptureStartMessage {
+  return VisibleCaptureStartMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "popup",
+    target: "background",
+    type: "VISIBLE_CAPTURE_START",
+    payload: { format: "png" },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createVisibleCaptureSuccessMessage(
+  options: MessageCreationOptions & { metadata: VisibleCaptureMetadata },
+): VisibleCaptureSuccessMessage {
+  return VisibleCaptureSuccessMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "popup",
+    type: "VISIBLE_CAPTURE_SUCCESS",
+    payload: options.metadata,
+    sentAt: options.sentAt,
+  });
+}
+
+export function createVisibleCaptureCancelMessage(
+  options: MessageCreationOptions & { captureRequestId: string },
+): VisibleCaptureCancelMessage {
+  return VisibleCaptureCancelMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "popup",
+    target: "background",
+    type: "VISIBLE_CAPTURE_CANCEL",
+    payload: { captureRequestId: options.captureRequestId },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createVisibleCaptureCancelledMessage(
+  options: MessageCreationOptions & { captureRequestId: string; accepted: boolean },
+): VisibleCaptureCancelledMessage {
+  return VisibleCaptureCancelledMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "popup",
+    type: "VISIBLE_CAPTURE_CANCELLED",
+    payload: {
+      captureRequestId: options.captureRequestId,
+      accepted: options.accepted,
+    },
+    sentAt: options.sentAt,
+  });
+}
+
 export function createErrorResponseMessage(
   options: MessageCreationOptions & { error: WebCapErrorData },
 ): ErrorResponseMessage {
@@ -213,6 +388,24 @@ export function isCapabilitiesResponseMessage(
   value: unknown,
 ): value is CapabilitiesResponseMessage {
   return CapabilitiesResponseMessageSchema.safeParse(value).success;
+}
+
+export function isTabCapabilityResponseMessage(
+  value: unknown,
+): value is TabCapabilityResponseMessage {
+  return TabCapabilityResponseMessageSchema.safeParse(value).success;
+}
+
+export function isVisibleCaptureSuccessMessage(
+  value: unknown,
+): value is VisibleCaptureSuccessMessage {
+  return VisibleCaptureSuccessMessageSchema.safeParse(value).success;
+}
+
+export function isVisibleCaptureCancelledMessage(
+  value: unknown,
+): value is VisibleCaptureCancelledMessage {
+  return VisibleCaptureCancelledMessageSchema.safeParse(value).success;
 }
 
 export function isErrorResponseMessage(value: unknown): value is ErrorResponseMessage {

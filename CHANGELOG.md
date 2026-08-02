@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Visible viewport capture through a typed Chrome tabs adapter and in-memory coordinator.
+- Active-tab capability checks for supported web/file URLs and normalized restricted-page errors.
+- Metadata-only capture protocol with request deduplication, single-job locking, rate limiting, and cancellation.
+- Stable visible-capture fixture, focused unit/integration coverage, and manual Chrome validation guidance.
 - Shared Zod domain and runtime message contracts with capability negotiation.
 - Versioned local settings, migration, normalized errors, safe diagnostics, and permanent CI.
 - TypeScript, Vite, React, Vitest, ESLint, and Prettier foundation.

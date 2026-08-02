@@ -6,7 +6,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 ## Current status
 
-**S02 — Foundation M0 is complete.** WebCap now has shared runtime contracts, local settings, normalized errors, safe diagnostics, and permanent CI. The next session is S03 visible capture.
+**S03 — Visible capture foundation is complete.** WebCap now captures the active viewport through a typed Chrome adapter and in-memory coordinator, validates tab support, deduplicates requests, rate-limits Chrome capture calls, normalizes cancellation and errors, and keeps image bytes out of runtime messages. The next session is S04 offscreen processing, artifact storage, and download.
 
 ## Requirements
 
