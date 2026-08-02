@@ -76,6 +76,10 @@ jobs:
               "    return [\n      [0.25, 0.25],\n      [0.75, 0.25],\n      [0.25, 0.75],\n      [0.75, 0.75],\n    ].map(([x, y]) => {",
               "    const samplePoints: Array<readonly [number, number]> = [\n      [0.25, 0.25],\n      [0.75, 0.25],\n      [0.25, 0.75],\n      [0.75, 0.75],\n    ];\n\n    return samplePoints.map(([x, y]) => {",
           )
+          text = text.replace(
+              '  await popup.getByRole("button", { name: "Tạo bản xem trước" }).click();',
+              '  await targetPage.bringToFront();\n  await popup\n    .getByRole("button", { name: "Tạo bản xem trước" })\n    .evaluate((button: HTMLButtonElement) => button.click());',
+          )
           e2e.write_text(text, encoding="utf-8")
 
           fixture = Path("tests/e2e/extension.fixture.ts")
