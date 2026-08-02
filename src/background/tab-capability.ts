@@ -111,9 +111,7 @@ export async function requireCapturableTab(
       userMessageKey: unsupported ? "errors.unsupportedUrl" : "errors.tabNotActive",
       retryable: !unsupported,
       fallbackAllowed: false,
-      ...(capability.scheme === undefined
-        ? {}
-        : { safeContext: { scheme: capability.scheme } }),
+      ...(capability.scheme === undefined ? {} : { safeContext: { scheme: capability.scheme } }),
     }),
   );
 }
