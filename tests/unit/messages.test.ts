@@ -16,9 +16,8 @@ const sentAt = "2026-08-02T09:00:00.000Z";
 describe("runtime message contracts", () => {
   it("validates S03 requests", () => {
     expect(
-      BackgroundRequestSchema.safeParse(
-        createTabCapabilityGetMessage({ requestId: "tab", sentAt }),
-      ).success,
+      BackgroundRequestSchema.safeParse(createTabCapabilityGetMessage({ requestId: "tab", sentAt }))
+        .success,
     ).toBe(true);
     expect(
       BackgroundRequestSchema.safeParse(
