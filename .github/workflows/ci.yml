@@ -49,6 +49,32 @@ jobs:
           python scripts/apply-s05.py
           pnpm add --save-dev --save-exact @playwright/test@latest
 
+      - name: Apply S05 lint corrections
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          app = Path("src/popup/App.tsx")
+          text = app.read_text(encoding="utf-8")
+          text = text.replace("revoke = preview.revoke;", "revoke = () => preview.revoke();")
+          text = text.replace("onClick={handleCancel}", "onClick={() => void handleCancel()}")
+          app.write_text(text, encoding="utf-8")
+
+          server = Path("tests/e2e/fixture-server.mjs")
+          text = server.read_text(encoding="utf-8")
+          text = text.replace(
+              'import { extname, join, normalize } from "node:path";\n',
+              'import { extname, join, normalize } from "node:path";\n'
+              'import process from "node:process";\n'
+              'import { URL } from "node:url";\n',
+          )
+          text = text.replace(
+              '  console.log(`WebCap fixture server listening on http://${host}:${port}`);',
+              '  process.stdout.write(`WebCap fixture server listening on http://${host}:${port}\\n`);',
+          )
+          server.write_text(text, encoding="utf-8")
+          PY
+
       - name: Format implementation
         run: pnpm format
 
