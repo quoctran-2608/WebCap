@@ -1,80 +1,68 @@
-name: Finalize S05 documentation
+name: CI
 
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: finalize-s05-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  finalize:
-    if: github.actor != 'github-actions[bot]'
+  quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
 
     steps:
-      - name: Check out S05 branch
+      - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 0
+          version: 11.15.1
+          run_install: false
 
-      - name: Update S05 documentation
-        run: |
-          python - <<'PY'
-          from pathlib import Path
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
 
-          plan = Path("PLAN.md")
-          text = plan.read_text(encoding="utf-8")
-          replacements = {
-              "current_session: S05": "current_session: S06",
-              "| S05 | M1 | Preview UI và visible-capture E2E | S04 | 16k–24k | NEXT |": "| S05 | M1 | Preview UI và visible-capture E2E | S04 | 16k–24k | DONE |",
-              "| S06 | M2 | Persistent job state machine và repositories | S05 | 16k–24k | READY |": "| S06 | M2 | Persistent job state machine và repositories | S05 | 16k–24k | NEXT |",
-              "**Commit gợi ý:** `Complete visible capture preview flow`.\n\n---": "**Commit gợi ý:** `Complete visible capture preview flow`.\n\n**Hoàn thành:** 2026-08-02 · PR #9 · validation head `579f5b6`.\n\n**Ghi chú kỹ thuật:** popup đã tách capture/process khỏi download, hiển thị preview Blob từ IndexedDB và khôi phục metadata-only session sau khi đóng/mở lại. Playwright persistent Chromium context xác thực preview pixel, dimensions, restore, PNG download/signature và ma trận DPR 2 + zoom 125%. Quyền `<all_urls>` chỉ được cấp cho bản sao extension E2E; manifest phát hành không đổi. CI sạch pass format, lint, typecheck, 76 unit tests, build và 2 E2E.\n\n---",
-              "| S05 | NEXT | — | — | — | Sẵn sàng hoàn tất preview UI và visible-capture E2E. |": "| S05 | DONE | 2026-08-02 | PR #9 / 579f5b6 | format, lint, typecheck, 76 unit, build, 2 Playwright E2E | Visible flow hoàn chỉnh từ capture đến preview, restore popup và download; DPR 2/zoom 125% đã được xác thực. |",
-              "| S06 | READY | — | — | — | — |": "| S06 | NEXT | — | — | — | Sẵn sàng triển khai persistent job state machine và repositories. |",
-              "Session kế tiếp là **S05 — Preview UI và visible-capture E2E**.": "Session kế tiếp là **S06 — Persistent job state machine và repositories**.",
-              "1. Đọc `PLAN.md` phần S05.\n2. Đọc PRD acceptance criteria cho visible/image export, SPEC UI M1 và §27.\n3. Kiểm tra repo/branch và kết quả CI S04.\n4. Chỉ triển khai S05.\n5. Kết thúc với preview UI, popup state synchronization và visible-capture E2E smoke đầy đủ.": "1. Đọc `PLAN.md` phần S06.\n2. Đọc SPEC domain/state/message/storage sections §7–12 và tests §27.\n3. Kiểm tra repo/branch và kết quả CI S05.\n4. Chỉ triển khai S06.\n5. Kết thúc với persistent state transitions, recovery summary, idempotent commands và repository tests đầy đủ.",
-          }
-          for old, new in replacements.items():
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"PLAN replacement expected once, found {count}: {old!r}")
-              text = text.replace(old, new)
-          plan.write_text(text, encoding="utf-8")
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-          readme = Path("README.md")
-          text = readme.read_text(encoding="utf-8")
-          old = "**S04 — Offscreen image export is complete.** WebCap now persists captured image Blobs in IndexedDB, processes PNG/JPEG/WebP output in a race-safe offscreen document, generates safe filenames, starts Chrome downloads with deterministic Blob URL cleanup, and retries export/download without recapturing the page. The next session is S05 preview UI and visible-capture E2E."
-          new = "**S05 — The visible capture slice is complete.** WebCap now captures the active viewport, creates a local PNG/JPEG/WebP preview, restores that preview after the popup closes, and downloads the stored artifact without recapturing. Playwright validates the real unpacked extension at normal display settings and at DPR 2 with 125% zoom. The next session is S06 persistent capture jobs and repositories."
-          if text.count(old) != 1:
-              raise SystemExit("README status paragraph did not match exactly once")
-          readme.write_text(text.replace(old, new), encoding="utf-8")
+      - name: Check formatting
+        run: pnpm format:check
 
-          changelog = Path("CHANGELOG.md")
-          text = changelog.read_text(encoding="utf-8")
-          marker = "### Added\n\n"
-          addition = (
-              "- Popup preview cards with local Blob URLs, image metadata, explicit download/retry/cancel controls, and accessible live status.\n"
-              "- Metadata-only visible session restoration through `chrome.storage.session` while binary artifacts remain in IndexedDB.\n"
-              "- Playwright persistent-Chromium extension coverage for preview pixels, popup reopen recovery, PNG download integrity, DPR 2, and 125% zoom.\n"
-              "- Permanent CI visible-capture E2E gate with retained Playwright reports.\n"
-          )
-          if text.count(marker) != 1:
-              raise SystemExit("CHANGELOG Added marker did not match exactly once")
-          changelog.write_text(text.replace(marker, marker + addition, 1), encoding="utf-8")
-          PY
+      - name: Lint
+        run: pnpm lint
 
-      - name: Commit finalized S05 documentation
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add PLAN.md README.md CHANGELOG.md
-          git diff --cached --check
-          git commit -m "Finalize S05 roadmap"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: Build extension
+        run: pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Visible capture E2E
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
