@@ -12,10 +12,7 @@ import type {
 import type { JobInvariantContext, JobTransitionPatch } from "@background/job-state-machine";
 import type { CaptureJob, JobState } from "@shared/contracts/domain";
 import type { StoredDedupeRecord } from "@shared/contracts/job";
-import {
-  createJobCreateMessage,
-  createJobGetMessage,
-} from "@shared/contracts/job-messages";
+import { createJobCreateMessage, createJobGetMessage } from "@shared/contracts/job-messages";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 import type { DedupeRepositoryPort } from "@storage/dedupe-repository";
 

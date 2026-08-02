@@ -1,7 +1,4 @@
-import {
-  StoredDedupeRecordSchema,
-  type StoredDedupeRecord,
-} from "@shared/contracts/job";
+import { StoredDedupeRecordSchema, type StoredDedupeRecord } from "@shared/contracts/job";
 
 import { requestResult, storageError, transactionDone } from "./indexeddb-helpers";
 import { openWebCapDatabase, WEBCAP_STORES } from "./webcap-database";
@@ -70,12 +67,11 @@ export class IndexedDbDedupeRepository implements DedupeRepositoryPort {
       for (const value of values) {
         const parsed = StoredDedupeRecordSchema.safeParse(value);
         if (!parsed.success || parsed.data.expiresAt <= nowIso) {
-          const requestId =
-            parsed.success
-              ? parsed.data.requestId
-              : typeof value === "object" && value !== null && "requestId" in value
-                ? (value as { requestId?: unknown }).requestId
-                : undefined;
+          const requestId = parsed.success
+            ? parsed.data.requestId
+            : typeof value === "object" && value !== null && "requestId" in value
+              ? (value as { requestId?: unknown }).requestId
+              : undefined;
           if (typeof requestId === "string") {
             store.delete(requestId);
             deleted += 1;

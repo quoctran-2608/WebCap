@@ -21,10 +21,7 @@ import { IndexedDbJobRepository } from "@storage/job-repository";
 import { JobSessionRepository } from "@storage/job-session-repository";
 import { IndexedDbTileRepository } from "@storage/tile-repository";
 
-import {
-  PersistentJobCoordinator,
-  type PersistentJobCoordinatorPort,
-} from "./job-coordinator";
+import { PersistentJobCoordinator, type PersistentJobCoordinatorPort } from "./job-coordinator";
 
 export type PersistentJobRouterResponse = JobResponseMessage | ErrorResponseMessage;
 
@@ -200,19 +197,12 @@ export async function routePersistentJobMessage(
       job,
       sentAt: dependencies.now().toISOString(),
     });
-    await cacheResponse(
-      parsed.value.type,
-      parsed.value.requestId,
-      job.id,
-      response,
-      dependencies,
-    );
+    await cacheResponse(parsed.value.type, parsed.value.requestId, job.id, response, dependencies);
     return response;
   } catch (error) {
     const normalized = normalizeError(error, {
       stage: parsed.value.type === "JOB_CANCEL" ? "cleanup" : "storage",
-      userMessageKey:
-        parsed.value.type === "JOB_CANCEL" ? "errors.jobCancel" : "errors.jobCommand",
+      userMessageKey: parsed.value.type === "JOB_CANCEL" ? "errors.jobCancel" : "errors.jobCommand",
       retryable: true,
       fallbackAllowed: false,
     });
@@ -221,15 +211,8 @@ export async function routePersistentJobMessage(
       error: normalized,
       sentAt: dependencies.now().toISOString(),
     });
-    const jobId =
-      parsed.value.type === "JOB_CREATE" ? undefined : parsed.value.payload.jobId;
-    await cacheResponse(
-      parsed.value.type,
-      parsed.value.requestId,
-      jobId,
-      response,
-      dependencies,
-    );
+    const jobId = parsed.value.type === "JOB_CREATE" ? undefined : parsed.value.payload.jobId;
+    await cacheResponse(parsed.value.type, parsed.value.requestId, jobId, response, dependencies);
     return response;
   }
 }

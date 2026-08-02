@@ -1,15 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  PersistentJobCoordinator,
-  type JobCleanupPort,
-} from "@background/job-coordinator";
+import { PersistentJobCoordinator, type JobCleanupPort } from "@background/job-coordinator";
 import type { CaptureJob } from "@shared/contracts/domain";
-import type {
-  JobSummary,
-  StoredTileRecord,
-  TabJobLock,
-} from "@shared/contracts/job";
+import type { JobSummary, StoredTileRecord, TabJobLock } from "@shared/contracts/job";
 import { summarizeJob } from "@shared/contracts/job";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 import type { JobArtifactCleanupPort } from "@storage/job-artifact-cleanup-repository";
@@ -156,10 +149,7 @@ class MemoryArtifacts implements JobArtifactCleanupPort {
   }
 }
 
-function storedJob(
-  state: CaptureJob["state"],
-  options: Partial<CaptureJob> = {},
-): CaptureJob {
+function storedJob(state: CaptureJob["state"], options: Partial<CaptureJob> = {}): CaptureJob {
   const cleanupSettled = state === "completed" || state === "failed" || state === "cancelled";
   return {
     schemaVersion: 1,
@@ -197,11 +187,13 @@ function storedJob(
   };
 }
 
-function setup(options: {
-  now?: Date;
-  cleanup?: JobCleanupPort;
-  id?: string;
-} = {}) {
+function setup(
+  options: {
+    now?: Date;
+    cleanup?: JobCleanupPort;
+    id?: string;
+  } = {},
+) {
   const jobs = new MemoryJobs();
   const sessions = new MemorySessions();
   const tiles = new MemoryTiles();

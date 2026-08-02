@@ -86,9 +86,7 @@ export class IndexedDbJobRepository implements JobRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.jobs, "readonly");
-      const value = await requestResult(
-        transaction.objectStore(WEBCAP_STORES.jobs).get(jobId),
-      );
+      const value = await requestResult(transaction.objectStore(WEBCAP_STORES.jobs).get(jobId));
       await transactionDone(transaction);
       return value === undefined ? undefined : parseJob(value);
     } catch (error) {
@@ -156,7 +154,9 @@ export class IndexedDbJobRepository implements JobRepositoryPort {
       const transaction = database.transaction(WEBCAP_STORES.jobs, "readonly");
       const values = await requestResult(transaction.objectStore(WEBCAP_STORES.jobs).getAll());
       await transactionDone(transaction);
-      return values.map(parseJob).sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));
+      return values
+        .map(parseJob)
+        .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));
     } catch (error) {
       throw storageError("read", error);
     }

@@ -1,7 +1,4 @@
-import {
-  JOB_ABANDONED_TTL_MS,
-  JOB_LOCK_LEASE_MS,
-} from "@shared/constants";
+import { JOB_ABANDONED_TTL_MS, JOB_LOCK_LEASE_MS } from "@shared/constants";
 import type {
   CaptureEngineKind,
   CaptureJob,
@@ -281,8 +278,7 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
       const existingLock = await this.sessions.getTabLock(tabId);
       const winner =
         group.find(
-          (job) =>
-            existingLock?.jobId === job.id && existingLock.leaseExpiresAt > nowIso,
+          (job) => existingLock?.jobId === job.id && existingLock.leaseExpiresAt > nowIso,
         ) ?? group[0];
       if (winner === undefined) {
         continue;

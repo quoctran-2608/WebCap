@@ -1,8 +1,4 @@
-import {
-  CaptureJobSchema,
-  type CaptureJob,
-  type JobState,
-} from "@shared/contracts/domain";
+import { CaptureJobSchema, type CaptureJob, type JobState } from "@shared/contracts/domain";
 import { createWebCapError, type WebCapErrorData } from "@shared/errors/error";
 import { err, ok, type Result } from "@shared/result";
 

@@ -46,8 +46,7 @@ function sessionStorageError(operation: "read" | "write", error: unknown): Error
       code: operation === "read" ? "E_STORAGE_READ" : "E_STORAGE_WRITE",
       stage: "storage",
       message: `WebCap could not ${operation} active job session metadata.`,
-      userMessageKey:
-        operation === "read" ? "errors.jobSessionRead" : "errors.jobSessionWrite",
+      userMessageKey: operation === "read" ? "errors.jobSessionRead" : "errors.jobSessionWrite",
       retryable: true,
       fallbackAllowed: false,
       causeCode: error instanceof Error ? error.name : "JobSessionStorageFailure",
@@ -120,9 +119,7 @@ export class JobSessionRepository implements JobSessionRepositoryPort {
       const state = await this.readState();
       await this.writeState({
         ...state,
-        locks: state.locks.filter(
-          (lock) => !(lock.tabId === tabId && lock.jobId === jobId),
-        ),
+        locks: state.locks.filter((lock) => !(lock.tabId === tabId && lock.jobId === jobId)),
       });
     });
   }

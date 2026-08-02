@@ -1,7 +1,4 @@
-import {
-  StoredTileRecordSchema,
-  type StoredTileRecord,
-} from "@shared/contracts/job";
+import { StoredTileRecordSchema, type StoredTileRecord } from "@shared/contracts/job";
 
 import { requestResult, storageError, transactionDone } from "./indexeddb-helpers";
 import { openWebCapDatabase, WEBCAP_STORES } from "./webcap-database";

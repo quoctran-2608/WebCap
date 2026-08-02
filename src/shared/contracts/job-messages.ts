@@ -187,9 +187,7 @@ export function parsePersistentJobRequest(
           ? "Persistent job message does not match a supported schema."
           : "Persistent job message uses an unsupported protocol version.",
       userMessageKey:
-        protocolVersion === PROTOCOL_VERSION
-          ? "errors.protocolMessage"
-          : "errors.protocolVersion",
+        protocolVersion === PROTOCOL_VERSION ? "errors.protocolMessage" : "errors.protocolVersion",
       retryable: false,
       fallbackAllowed: false,
     }),

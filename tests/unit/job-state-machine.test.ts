@@ -113,9 +113,15 @@ describe("job state machine", () => {
       totalTiles: 1,
     };
     const missing = transitionJob(current, "exporting", updatedAt);
-    const present = transitionJob(current, "exporting", updatedAt, {}, {
-      sourceArtifactExists: true,
-    });
+    const present = transitionJob(
+      current,
+      "exporting",
+      updatedAt,
+      {},
+      {
+        sourceArtifactExists: true,
+      },
+    );
     expect(missing).toMatchObject({
       ok: false,
       error: { causeCode: "SourceArtifactMissing" },
