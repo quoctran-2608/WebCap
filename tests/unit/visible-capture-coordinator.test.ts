@@ -11,11 +11,12 @@ const immediateLimiter = (): CaptureRateLimiter =>
   new CaptureRateLimiter({
     minimumIntervalMs: 0,
     now: () => 1,
-    sleep: async () => undefined,
+    sleep: () => Promise.resolve(),
   });
 
 const supportedAdapter = (capture: () => Promise<string>): TabsCaptureAdapter => ({
-  queryActiveTab: async () => ({ id: 7, windowId: 9, active: true, url: "https://example.com" }),
+  queryActiveTab: () =>
+    Promise.resolve({ id: 7, windowId: 9, active: true, url: "https://example.com" }),
   captureVisibleTab: capture,
 });
 
@@ -23,9 +24,9 @@ describe("VisibleCaptureCoordinator", () => {
   it("captures once, stores pixel data behind a capture ID, and returns metadata", async () => {
     let calls = 0;
     const coordinator = new VisibleCaptureCoordinator({
-      tabs: supportedAdapter(async () => {
+      tabs: supportedAdapter(() => {
         calls += 1;
-        return ONE_PIXEL_PNG;
+        return Promise.resolve(ONE_PIXEL_PNG);
       }),
       rateLimiter: immediateLimiter(),
       createId: () => "capture-1",
@@ -96,7 +97,7 @@ describe("VisibleCaptureCoordinator", () => {
 
   it("honors cancellation before and after the Chrome API starts", async () => {
     const before = new VisibleCaptureCoordinator({
-      tabs: supportedAdapter(async () => ONE_PIXEL_PNG),
+      tabs: supportedAdapter(() => Promise.resolve(ONE_PIXEL_PNG)),
       rateLimiter: immediateLimiter(),
     });
     expect(before.cancel("request-before")).toBe(true);
