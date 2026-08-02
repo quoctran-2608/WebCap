@@ -26,7 +26,8 @@
     "paths": {
       "@background/*": ["./src/background/*"],
       "@popup/*": ["./src/popup/*"],
-      "@shared/*": ["./src/shared/*"]
+      "@shared/*": ["./src/shared/*"],
+      "@storage/*": ["./src/storage/*"]
     }
   },
   "include": [

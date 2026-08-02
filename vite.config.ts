@@ -41,6 +41,7 @@ export default defineConfig({
       "@background": resolve(projectRoot, "src/background"),
       "@popup": resolve(projectRoot, "src/popup"),
       "@shared": resolve(projectRoot, "src/shared"),
+      "@storage": resolve(projectRoot, "src/storage"),
     },
   },
   build: {
