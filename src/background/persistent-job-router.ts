@@ -188,12 +188,12 @@ export async function routePersistentJobMessage(
     });
   }
 
-  const cached = await readCachedResponse(parsed.value.requestId, dependencies);
-  if (cached !== undefined) {
-    return cached;
-  }
-
   try {
+    const cached = await readCachedResponse(parsed.value.requestId, dependencies);
+    if (cached !== undefined) {
+      return cached;
+    }
+
     const job = await executeJobRequest(parsed.value, dependencies);
     const response = createJobResponseMessage({
       requestId: parsed.value.requestId,
