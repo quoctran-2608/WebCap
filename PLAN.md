@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S03
+current_session: S04
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -101,8 +101,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | S00 | M0 | Bootstrap workspace và quality toolchain | Docs hiện có | 14k–22k | DONE |
 | S01 | M0 | Manifest V3 multi-entry và popup ↔ worker handshake | S00 | 14k–22k | DONE |
 | S02 | M0 | Shared contracts, settings, errors và CI | S01 | 16k–24k | DONE |
-| S03 | M1 | Visible capture coordinator và Chrome adapter | S02 | 16k–24k | NEXT |
-| S04 | M1 | Offscreen processing, artifact storage và download | S03 | 18k–26k | READY |
+| S03 | M1 | Visible capture coordinator và Chrome adapter | S02 | 16k–24k | DONE |
+| S04 | M1 | Offscreen processing, artifact storage và download | S03 | 18k–26k | NEXT |
 | S05 | M1 | Preview UI và visible-capture E2E | S04 | 16k–24k | READY |
 | S06 | M2 | Persistent job state machine và repositories | S05 | 16k–24k | READY |
 | S07 | M2 | Debugger client, page metrics và 2D tile planner | S06 | 20k–28k | READY |
@@ -234,6 +234,10 @@ pnpm build
 **Exit criteria:** một click có thể tạo ảnh viewport thành công; lỗi unsupported/permission được normalize; duplicate request không tạo hai job.
 
 **Commit gợi ý:** `Implement visible capture coordinator`.
+
+**Hoàn thành:** 2026-08-02 · PR #7 · validation head `710ce8d`.
+
+**Ghi chú kỹ thuật:** visible/PNG đã hoạt động qua typed Chrome adapter và coordinator in-memory; runtime chỉ truyền metadata, request trùng được dedupe, capture cạnh tranh bị chặn và cancel được normalize. CI sạch pass format, lint, typecheck, 52 unit tests và build. Pixel persistence, offscreen processing và download được chuyển đúng sang S04.
 
 ---
 
@@ -777,8 +781,8 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S00 | DONE | 2026-08-02 | 44757499ab7f | format, lint, typecheck, unit, build | Workspace và lockfile đã được xác thực trên GitHub Actions. |
 | S01 | DONE | 2026-08-02 | 461a6b8560d3 | format, lint, typecheck, unit, build, Chrome smoke | Manifest V3 load được; popup kết nối service worker bằng PING/PONG typed. |
 | S02 | DONE | 2026-08-02 | 6e6a76659173 | format, lint, typecheck, unit, build, Chrome smoke | Shared Zod contracts, settings migration/repository, error model, safe logger và CI đã được xác thực. |
-| S03 | NEXT | — | — | — | Sẵn sàng triển khai visible capture coordinator và Chrome adapter. |
-| S04 | READY | — | — | — | — |
+| S03 | DONE | 2026-08-02 | PR #7 / 710ce8d | format, lint, typecheck, 52 unit, build | Visible capture coordinator, typed Chrome adapter, metadata-only protocol, dedupe, rate limit và cancel đã được xác thực. |
+| S04 | NEXT | — | — | — | Sẵn sàng triển khai offscreen processing, artifact storage và download. |
 | S05 | READY | — | — | — | — |
 | S06 | READY | — | — | — | — |
 | S07 | READY | — | — | — | — |
@@ -798,12 +802,12 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S03 — Visible capture coordinator và Chrome adapter**.
+Session kế tiếp là **S04 — Offscreen processing, artifact storage và download**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S03.
-2. Đọc PRD visible capture và SPEC §7–14, M1 ở §26/§30.
-3. Kiểm tra repo/branch và kết quả CI S02.
-4. Chỉ triển khai S03.
-5. Kết thúc với visible capture coordinator và Chrome adapter được unit/integration test đầy đủ.
+1. Đọc `PLAN.md` phần S04.
+2. Đọc SPEC §11–12, §21 và §23–25.
+3. Kiểm tra repo/branch và kết quả CI S03.
+4. Chỉ triển khai S04.
+5. Kết thúc với offscreen processing, artifact storage và download được unit/integration test đầy đủ.
