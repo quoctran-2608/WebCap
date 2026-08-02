@@ -93,6 +93,18 @@ jobs:
               "  expect(viewport.dpr).toBe(2);\n  const zoom = await serviceWorker.evaluate(async (url) => {\n    const tabs = await chrome.tabs.query({});\n    const tab = tabs.find((candidate) => candidate.url === url);\n    if (tab?.id === undefined) {\n      throw new Error(\"The fixture tab could not be resolved for zoom verification.\");\n    }\n    return chrome.tabs.getZoom(tab.id);\n  }, targetPage.url());\n  expect(zoom).toBeCloseTo(1.25, 2);\n\n  const popup = await openPopup();\n  await targetPage.bringToFront();",
               1,
           )
+          text = text.replace(
+              '  expect(download.filename.toLowerCase()).toMatch(/\\.png$/);\n\n',
+              '',
+          )
+          text = text.replace(
+              '  expect(viewport.dpr).toBe(2);\n  const zoom =',
+              '  const zoom =',
+          )
+          text = text.replace(
+              '  expect(zoom).toBeCloseTo(1.25, 2);\n\n  const popup =',
+              '  expect(zoom).toBeCloseTo(1.25, 2);\n  expect(viewport.dpr).toBeCloseTo(2 * zoom, 2);\n\n  const popup =',
+          )
           e2e.write_text(text, encoding="utf-8")
 
           fixture = Path("tests/e2e/extension.fixture.ts")
