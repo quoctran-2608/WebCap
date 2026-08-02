@@ -1,0 +1,112 @@
+name: Bootstrap S00
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - package.json
+      - tsconfig.json
+      - vite.config.ts
+      - vitest.config.ts
+      - eslint.config.js
+      - .prettierrc.json
+      - .prettierignore
+      - src/**
+      - tests/**
+      - scripts/**
+      - .github/workflows/bootstrap-s00.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bootstrap-s00
+  cancel-in-progress: false
+
+jobs:
+  validate-and-lock:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+
+      - name: Activate pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.15.1 --activate
+          pnpm --version
+
+      - name: Generate deterministic lockfile
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+
+      - name: Install from lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Normalize formatting
+        run: pnpm format
+
+      - name: Validate formatting
+        run: pnpm format:check
+
+      - name: Validate lint
+        run: pnpm lint
+
+      - name: Validate types
+        run: pnpm typecheck
+
+      - name: Run unit tests
+        run: pnpm test:unit
+
+      - name: Build foundation entry
+        run: pnpm build
+
+      - name: Mark S00 complete
+        run: |
+          python <<'PY'
+          import os
+          from pathlib import Path
+
+          base_commit = os.environ["GITHUB_SHA"][:12]
+          path = Path("PLAN.md")
+          text = path.read_text(encoding="utf-8")
+          replacements = {
+              "current_session: S00": "current_session: S01",
+              "| S00 | M0 | Bootstrap workspace và quality toolchain | Docs hiện có | 14k–22k | NEXT |":
+                  "| S00 | M0 | Bootstrap workspace và quality toolchain | Docs hiện có | 14k–22k | DONE |",
+              "| S01 | M0 | Manifest V3 multi-entry và popup ↔ worker handshake | S00 | 14k–22k | READY |":
+                  "| S01 | M0 | Manifest V3 multi-entry và popup ↔ worker handshake | S00 | 14k–22k | NEXT |",
+              "| S00 | NEXT | — | — | — | Bắt đầu từ workspace trống ngoài ba file tài liệu. |":
+                  f"| S00 | DONE | 2026-08-02 | {base_commit} | format, lint, typecheck, unit, build | Workspace và lockfile đã được xác thực trên GitHub Actions. |",
+              "| S01 | READY | — | — | — | — |":
+                  "| S01 | NEXT | — | — | — | Sẵn sàng triển khai Manifest V3 và popup ↔ worker handshake. |",
+              "Session kế tiếp là **S00 — Bootstrap workspace và quality toolchain**.":
+                  "Session kế tiếp là **S01 — Manifest V3 multi-entry và popup ↔ worker handshake**.",
+              "1. Đọc `PLAN.md` phần S00.\n2. Đọc SPEC §3–5, §27–29 và §31–33.\n3. Kiểm tra repo/branch/CI hiện tại.\n4. Chỉ triển khai S00.\n5. Kết thúc với build xanh, cập nhật nhật ký và chuyển `current_session` sang `S01`.":
+                  "1. Đọc `PLAN.md` phần S01.\n2. Đọc SPEC §5–6, §8 và UI M0 ở §26.\n3. Kiểm tra repo/branch và kết quả validation S00.\n4. Chỉ triển khai S01.\n5. Kết thúc với extension unpacked build được và popup ping service worker thành công.",
+          }
+
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f"PLAN replacement target not found: {old[:80]}")
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Commit generated lockfile and session status
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Complete S00 foundation validation"
+          git push origin HEAD:main
