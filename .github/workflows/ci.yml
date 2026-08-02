@@ -58,51 +58,23 @@ jobs:
           text = app.read_text(encoding="utf-8")
           text = text.replace("revoke = preview.revoke;", "revoke = () => preview.revoke();")
           text = text.replace("onClick={handleCancel}", "onClick={() => void handleCancel()}")
-          text = text.replace(
-              "const resumedSessionRef = useRef<string>();",
-              "const resumedSessionRef = useRef<string | undefined>(undefined);",
-          )
-          text = text.replace(
-              "const activeCaptureRequestIdRef = useRef<string>();",
-              "const activeCaptureRequestIdRef = useRef<string | undefined>(undefined);",
-          )
+          text = text.replace("const resumedSessionRef = useRef<string>();", "const resumedSessionRef = useRef<string | undefined>(undefined);")
+          text = text.replace("const activeCaptureRequestIdRef = useRef<string>();", "const activeCaptureRequestIdRef = useRef<string | undefined>(undefined);")
           app.write_text(text, encoding="utf-8")
 
           worker = Path("src/popup/worker-client.ts")
           text = worker.read_text(encoding="utf-8")
           text = text.replace(
-              '''  const request = createVisibleCaptureStartMessage({
-    requestId: options.captureRequestId ?? createRequestId(),
-    outputFormat: options.outputFormat,
-    quality: options.quality,
-    sentAt: now().toISOString(),
-  });''',
-              '''  const request = createVisibleCaptureStartMessage({
-    requestId: options.captureRequestId ?? createRequestId(),
-    ...(options.outputFormat === undefined ? {} : { outputFormat: options.outputFormat }),
-    ...(options.quality === undefined ? {} : { quality: options.quality }),
-    sentAt: now().toISOString(),
-  });''',
+              "    outputFormat: options.outputFormat,\n    quality: options.quality,\n",
+              "    ...(options.outputFormat === undefined ? {} : { outputFormat: options.outputFormat }),\n    ...(options.quality === undefined ? {} : { quality: options.quality }),\n",
           )
           worker.write_text(text, encoding="utf-8")
 
           e2e = Path("tests/e2e/visible-capture.spec.ts")
           text = e2e.read_text(encoding="utf-8")
           text = text.replace(
-              '''    return [
-      [0.25, 0.25],
-      [0.75, 0.25],
-      [0.25, 0.75],
-      [0.75, 0.75],
-    ].map(([x, y]) => {''',
-              '''    const samplePoints: Array<readonly [number, number]> = [
-      [0.25, 0.25],
-      [0.75, 0.25],
-      [0.25, 0.75],
-      [0.75, 0.75],
-    ];
-
-    return samplePoints.map(([x, y]) => {''',
+              "    return [\n      [0.25, 0.25],\n      [0.75, 0.25],\n      [0.25, 0.75],\n      [0.75, 0.75],\n    ].map(([x, y]) => {",
+              "    const samplePoints: Array<readonly [number, number]> = [\n      [0.25, 0.25],\n      [0.75, 0.25],\n      [0.25, 0.75],\n      [0.75, 0.75],\n    ];\n\n    return samplePoints.map(([x, y]) => {",
           )
           e2e.write_text(text, encoding="utf-8")
 
@@ -110,9 +82,7 @@ jobs:
           text = server.read_text(encoding="utf-8")
           text = text.replace(
               'import { extname, join, normalize } from "node:path";\n',
-              'import { extname, join, normalize } from "node:path";\n'
-              'import process from "node:process";\n'
-              'import { URL } from "node:url";\n',
+              'import { extname, join, normalize } from "node:path";\nimport process from "node:process";\nimport { URL } from "node:url";\n',
           )
           text = text.replace(
               '  console.log(`WebCap fixture server listening on http://${host}:${port}`);',
@@ -145,6 +115,7 @@ jobs:
       - name: Commit validated implementation
         run: |
           rm -rf s05-payload scripts/apply-s05.py
+          rm -f .s05-trigger
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
