@@ -29,7 +29,7 @@ jobs:
   validate-extension:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Check out pull-request branch
@@ -70,6 +70,28 @@ jobs:
 
       - name: Build and verify unpacked extension
         run: pnpm build
+
+      - name: Install Chrome for Testing
+        run: |
+          CFT_URL=$(python <<'PY'
+          import json
+          import urllib.request
+
+          metadata_url = "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json"
+          with urllib.request.urlopen(metadata_url) as response:
+              metadata = json.load(response)
+
+          downloads = metadata["channels"]["Stable"]["downloads"]["chrome"]
+          print(next(item["url"] for item in downloads if item["platform"] == "linux64"))
+          PY
+          )
+          curl --fail --location --silent --show-error "$CFT_URL" --output /tmp/chrome-for-testing.zip
+          rm -rf /tmp/chrome-for-testing
+          mkdir -p /tmp/chrome-for-testing
+          unzip -q /tmp/chrome-for-testing.zip -d /tmp/chrome-for-testing
+          CHROME_BIN=$(find /tmp/chrome-for-testing -path '*/chrome-linux64/chrome' -type f -print -quit)
+          test -n "$CHROME_BIN"
+          echo "CHROME_BIN=$CHROME_BIN" >> "$GITHUB_ENV"
 
       - name: Smoke-test popup and service worker
         run: xvfb-run --auto-servernum pnpm test:smoke
