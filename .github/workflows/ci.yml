@@ -1,8 +1,8 @@
 name: Apply and validate S05
 
 on:
-  push:
-    branches: [agent/s05-preview-visible-e2e]
+  pull_request:
+    branches: [main]
 
 permissions:
   contents: write
@@ -21,7 +21,7 @@ jobs:
       - name: Check out S05 branch
         uses: actions/checkout@v4
         with:
-          ref: agent/s05-preview-visible-e2e
+          ref: ${{ github.event.pull_request.head.ref }}
           fetch-depth: 0
 
       - name: Set up pnpm
@@ -78,4 +78,4 @@ jobs:
           git add -A
           git diff --cached --check
           git commit -m "Complete visible capture preview flow"
-          git push origin HEAD:agent/s05-preview-visible-e2e
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
