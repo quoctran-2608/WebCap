@@ -25,7 +25,7 @@ export class IndexedDbDedupeRepository implements DedupeRepositoryPort {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.dedupe, "readwrite");
       const store = transaction.objectStore(WEBCAP_STORES.dedupe);
-      const value = await requestResult(store.get(requestId));
+      const value = await requestResult<unknown>(store.get(requestId));
       if (value === undefined) {
         await transactionDone(transaction);
         return undefined;
@@ -62,7 +62,7 @@ export class IndexedDbDedupeRepository implements DedupeRepositoryPort {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.dedupe, "readwrite");
       const store = transaction.objectStore(WEBCAP_STORES.dedupe);
-      const values = await requestResult(store.getAll());
+      const values = await requestResult<unknown[]>(store.getAll());
       let deleted = 0;
       for (const value of values) {
         const parsed = StoredDedupeRecordSchema.safeParse(value);
