@@ -1,28 +1,26 @@
-name: Apply and validate S05
+name: CI
 
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: apply-s05-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  apply-and-validate:
-    if: github.actor != 'github-actions[bot]'
+  quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
-      - name: Check out S05 branch
+      - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          fetch-depth: 0
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -36,120 +34,11 @@ jobs:
           node-version: 22.22.0
           cache: pnpm
 
-      - name: Install existing dependencies
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Reassemble and apply S05
-        run: |
-          cat s05-payload/* > /tmp/apply-s05.py.gz.b64
-          base64 --decode /tmp/apply-s05.py.gz.b64 > /tmp/apply-s05.py.gz
-          echo "f447dd3dd9381d6b18f5084b9963803986c63f0875003f25cf6147c2af7cfd63  /tmp/apply-s05.py.gz" | sha256sum --check
-          gzip --test /tmp/apply-s05.py.gz
-          gzip --decompress --stdout /tmp/apply-s05.py.gz > scripts/apply-s05.py
-          python scripts/apply-s05.py
-          pnpm add --save-dev --save-exact @playwright/test@latest
-
-      - name: Apply S05 typed and E2E corrections
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          def replace_last(source: str, old: str, new: str) -> str:
-              position = source.rfind(old)
-              if position < 0:
-                  raise SystemExit(f"Missing final E2E assertion: {old}")
-              return source[:position] + new + source[position + len(old):]
-
-          app = Path("src/popup/App.tsx")
-          text = app.read_text(encoding="utf-8")
-          text = text.replace("revoke = preview.revoke;", "revoke = () => preview.revoke();")
-          text = text.replace("onClick={handleCancel}", "onClick={() => void handleCancel()}")
-          text = text.replace("const resumedSessionRef = useRef<string>();", "const resumedSessionRef = useRef<string | undefined>(undefined);")
-          text = text.replace("const activeCaptureRequestIdRef = useRef<string>();", "const activeCaptureRequestIdRef = useRef<string | undefined>(undefined);")
-          app.write_text(text, encoding="utf-8")
-
-          worker = Path("src/popup/worker-client.ts")
-          text = worker.read_text(encoding="utf-8")
-          text = text.replace(
-              "    outputFormat: options.outputFormat,\n    quality: options.quality,\n",
-              "    ...(options.outputFormat === undefined ? {} : { outputFormat: options.outputFormat }),\n    ...(options.quality === undefined ? {} : { quality: options.quality }),\n",
-          )
-          worker.write_text(text, encoding="utf-8")
-
-          e2e = Path("tests/e2e/visible-capture.spec.ts")
-          text = e2e.read_text(encoding="utf-8")
-          text = text.replace(
-              "    return [\n      [0.25, 0.25],\n      [0.75, 0.25],\n      [0.25, 0.75],\n      [0.75, 0.75],\n    ].map(([x, y]) => {",
-              "    const samplePoints: Array<readonly [number, number]> = [\n      [0.125, 0.125],\n      [0.875, 0.125],\n      [0.125, 0.875],\n      [0.875, 0.875],\n    ];\n\n    return samplePoints.map(([x, y]) => {",
-          )
-          text = text.replace(
-              '  await popup.getByRole("button", { name: "Tạo bản xem trước" }).click();',
-              '  await targetPage.bringToFront();\n  await popup\n    .getByRole("button", { name: "Tạo bản xem trước" })\n    .evaluate((button: HTMLButtonElement) => button.click());',
-          )
-          text = text.replace(
-              "String(Math.round(viewport.width * viewport.dpr))",
-              "String(Math.round(viewport.width))",
-          )
-          text = text.replace(
-              "String(Math.round(viewport.height * viewport.dpr))",
-              "String(Math.round(viewport.height))",
-          )
-          text = text.replace(
-              "  const popup = await openPopup();\n  await targetPage.bringToFront();",
-              "  expect(viewport.dpr).toBe(2);\n  const zoom = await serviceWorker.evaluate(async (url) => {\n    const tabs = await chrome.tabs.query({});\n    const tab = tabs.find((candidate) => candidate.url === url);\n    if (tab?.id === undefined) {\n      throw new Error(\"The fixture tab could not be resolved for zoom verification.\");\n    }\n    return chrome.tabs.getZoom(tab.id);\n  }, targetPage.url());\n  expect(zoom).toBeCloseTo(1.25, 2);\n\n  const popup = await openPopup();\n  await targetPage.bringToFront();",
-              1,
-          )
-          text = text.replace(
-              '  expect(download.filename.toLowerCase()).toMatch(/\\.png$/);\n\n',
-              '',
-          )
-          text = text.replace(
-              '  expect(viewport.dpr).toBe(2);\n  const zoom =',
-              '  const zoom =',
-          )
-          text = text.replace(
-              '  expect(zoom).toBeCloseTo(1.25, 2);\n\n  const popup =',
-              '  expect(zoom).toBeCloseTo(1.25, 2);\n  expect(viewport.dpr).toBeCloseTo(2 * zoom, 2);\n\n  const popup =',
-          )
-          text = replace_last(
-              text,
-              "String(Math.round(viewport.width))",
-              "String(Math.round(viewport.width * zoom))",
-          )
-          text = replace_last(
-              text,
-              "String(Math.round(viewport.height))",
-              "String(Math.round(viewport.height * zoom))",
-          )
-          e2e.write_text(text, encoding="utf-8")
-
-          fixture = Path("tests/e2e/extension.fixture.ts")
-          text = fixture.read_text(encoding="utf-8")
-          text = text.replace(
-              'manifest.host_permissions = ["http://127.0.0.1/*"];',
-              'manifest.host_permissions = ["<all_urls>"];',
-          )
-          text = text.replace(
-              "      const popupPromise = context.waitForEvent(\"page\");\n      await serviceWorker.evaluate(\n        async ({ windowId }) => chrome.action.openPopup({ windowId }),\n        target,\n      );\n      const popup = await popupPromise;\n      await popup.waitForURL(`chrome-extension://${extensionId}/popup.html`);",
-              "      const popup = await context.newPage();\n      await popup.goto(`chrome-extension://${extensionId}/popup.html`);\n      await targetPage.bringToFront();\n      await serviceWorker.evaluate(\n        async ({ windowId, url }) => {\n          const tabs = await chrome.tabs.query({ windowId });\n          const tab = tabs.find((candidate) => candidate.url === url);\n          if (tab?.id === undefined) {\n            throw new Error(\"The fixture tab could not be reactivated.\");\n          }\n          await chrome.tabs.update(tab.id, { active: true });\n          await chrome.windows.update(windowId, { focused: true });\n        },\n        { windowId: target.windowId, url: targetPage.url() },\n      );\n      await popup.reload();",
-          )
-          fixture.write_text(text, encoding="utf-8")
-
-          server = Path("tests/e2e/fixture-server.mjs")
-          text = server.read_text(encoding="utf-8")
-          text = text.replace(
-              'import { extname, join, normalize } from "node:path";\n',
-              'import { extname, join, normalize } from "node:path";\nimport process from "node:process";\nimport { URL } from "node:url";\n',
-          )
-          text = text.replace(
-              '  console.log(`WebCap fixture server listening on http://${host}:${port}`);',
-              '  process.stdout.write(`WebCap fixture server listening on http://${host}:${port}\\n`);',
-          )
-          server.write_text(text, encoding="utf-8")
-          PY
-
-      - name: Format implementation
-        run: pnpm format
+      - name: Check formatting
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint
@@ -169,20 +58,11 @@ jobs:
       - name: Visible capture E2E
         run: pnpm test:e2e
 
-      - name: Print Playwright error context
-        if: failure()
-        run: |
-          if [ -d test-results ]; then
-            find test-results -name error-context.md -print -exec cat {} \;
-          fi
-
-      - name: Commit validated implementation
-        run: |
-          rm -rf s05-payload scripts/apply-s05.py
-          rm -f .s05-trigger
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          git commit -m "Complete visible capture preview flow"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7

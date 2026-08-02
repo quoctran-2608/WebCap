@@ -5,30 +5,67 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WebCap Visible Capture Fixture</title>
     <style>
+      :root {
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
       body {
+        width: 100%;
+        height: 100%;
         margin: 0;
-        min-height: 100vh;
+        overflow: hidden;
+      }
+
+      body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: 1fr 1fr;
+        font-family: system-ui, sans-serif;
+      }
+
+      section {
         display: grid;
         place-items: center;
-        font-family: system-ui, sans-serif;
-        background: linear-gradient(135deg, #f5f1e8, #d7eadf);
-        color: #17352b;
+        min-width: 0;
+        min-height: 0;
       }
-      main {
-        width: min(720px, 80vw);
-        padding: 48px;
-        border: 2px solid #bd8f3c;
-        border-radius: 32px;
-        background: rgb(255 255 255 / 82%);
-        box-shadow: 0 24px 80px rgb(23 53 43 / 18%);
+
+      section:nth-child(1) {
+        background: #0b6e4f;
+      }
+
+      section:nth-child(2) {
+        background: #e9c46a;
+      }
+
+      section:nth-child(3) {
+        background: #f4a261;
+      }
+
+      section:nth-child(4) {
+        background: #264653;
+      }
+
+      span {
+        border-radius: 999px;
+        padding: 8px 12px;
+        color: #fff;
+        background: rgb(0 0 0 / 28%);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
       }
     </style>
   </head>
   <body>
-    <main>
-      <p>WEB CAPTURE FIXTURE</p>
-      <h1>Visible capture is active</h1>
-      <p>This page provides stable geometry and distinctive colors for manual Chrome validation.</p>
-    </main>
+    <section data-quadrant="top-left"><span>TOP LEFT</span></section>
+    <section data-quadrant="top-right"><span>TOP RIGHT</span></section>
+    <section data-quadrant="bottom-left"><span>BOTTOM LEFT</span></section>
+    <section data-quadrant="bottom-right"><span>BOTTOM RIGHT</span></section>
   </body>
 </html>

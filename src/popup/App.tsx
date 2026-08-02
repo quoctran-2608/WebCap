@@ -1,29 +1,35 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import iconData from "../../assets/icons.json";
 
 import { FOUNDATION_CAPABILITIES, type CaptureCapabilities } from "@shared/capabilities";
-import type { ArtifactMetadata } from "@shared/contracts/artifact";
-import type { CaptureMode, ImageFormat, OutputFormat } from "@shared/contracts/domain";
+import type { ImageFormat, OutputFormat } from "@shared/contracts/domain";
 import type { TabCapabilityPayload } from "@shared/contracts/messages";
+import type {
+  VisibleSessionSnapshot,
+  VisibleSessionStatus,
+} from "@shared/contracts/visible-session";
 
+import { createArtifactPreview } from "./artifact-preview";
+import { estimateOutputBytes, formatBytes } from "./formatting";
 import {
   cancelVisibleCapture,
   downloadArtifact,
   exportImage,
   getCapabilities,
   getTabCapability,
+  getVisibleSession,
   pingWorker,
   startVisibleCapture,
 } from "./worker-client";
 
-const CAPTURE_MODES: ReadonlyArray<{ id: CaptureMode; label: string }> = [
+const CAPTURE_MODES = [
   { id: "visible", label: "Vùng đang xem" },
   { id: "full-page", label: "Toàn bộ trang" },
   { id: "region", label: "Vùng tự chọn" },
   { id: "element", label: "Phần tử" },
   { id: "scroll-area", label: "Vùng cuộn" },
-];
+] as const;
 
 const OUTPUT_FORMATS: ReadonlyArray<{ id: OutputFormat; label: string }> = [
   { id: "png", label: "PNG" },
@@ -32,9 +38,11 @@ const OUTPUT_FORMATS: ReadonlyArray<{ id: OutputFormat; label: string }> = [
   { id: "pdf", label: "PDF" },
 ];
 
+const IMAGE_QUALITY = 0.92;
+const SESSION_POLL_MS = 350;
+
 type WorkerStatus = "checking" | "connected" | "unavailable";
-type CaptureStatus =
-  "idle" | "capturing" | "processing" | "downloading" | "completed" | "error" | "cancelled";
+type UiStatus = VisibleSessionStatus | "idle";
 
 const STATUS_COPY: Record<WorkerStatus, string> = {
   checking: "Đang kết nối…",
@@ -48,11 +56,21 @@ const TAB_STATUS_COPY: Record<TabCapabilityPayload["status"], string> = {
   unavailable: "Không có tab hoạt động",
 };
 
-function formatBytes(byteLength: number): string {
-  if (byteLength < 1024) {
-    return `${byteLength} B`;
-  }
-  return `${(byteLength / 1024).toFixed(1)} KB`;
+const CAPTURE_STATUS_COPY: Record<Exclude<UiStatus, "idle">, string> = {
+  capturing: "Đang chụp tab hiện tại…",
+  captured: "Đã chụp xong, chuẩn bị mã hóa…",
+  processing: "Đang tạo ảnh xem trước…",
+  ready: "Bản xem trước đã sẵn sàng.",
+  downloading: "Đang bắt đầu tải xuống…",
+  completed: "Tệp đã được gửi tới Chrome Downloads.",
+  cancelled: "Đã hủy thao tác chụp.",
+  error: "Không thể hoàn tất thao tác.",
+};
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error && error.message.length > 0
+    ? error.message
+    : "WebCap không thể hoàn tất thao tác.";
 }
 
 export function App(): React.JSX.Element {
@@ -64,16 +82,33 @@ export function App(): React.JSX.Element {
     errorCode: "E_TAB_NOT_ACTIVE",
   });
   const [selectedFormat, setSelectedFormat] = useState<ImageFormat>("png");
-  const [captureStatus, setCaptureStatus] = useState<CaptureStatus>("idle");
-  const [captureRequestId, setCaptureRequestId] = useState<string>();
-  const [artifact, setArtifact] = useState<ArtifactMetadata>();
-  const [captureError, setCaptureError] = useState<string>();
+  const [session, setSession] = useState<VisibleSessionSnapshot>();
+  const [localStatus, setLocalStatus] = useState<UiStatus>("idle");
+  const [previewUrl, setPreviewUrl] = useState<string>();
+  const [uiError, setUiError] = useState<string>();
+  const resumedSessionRef = useRef<string | undefined>(undefined);
+  const activeCaptureRequestIdRef = useRef<string | undefined>(undefined);
+  const feedbackHeadingRef = useRef<HTMLHeadingElement>(null);
+
+  const syncSession = useCallback(async (): Promise<VisibleSessionSnapshot | undefined> => {
+    const current = await getVisibleSession();
+    setSession(current);
+    if (current !== undefined) {
+      setSelectedFormat(current.format);
+    }
+    return current;
+  }, []);
 
   useEffect(() => {
     let active = true;
 
-    void Promise.all([pingWorker(), getCapabilities(), getTabCapability()])
-      .then(([response, workerCapabilities, currentTabCapability]) => {
+    void (async () => {
+      try {
+        const [response, workerCapabilities, currentTabCapability] = await Promise.all([
+          pingWorker(),
+          getCapabilities(),
+          getTabCapability(),
+        ]);
         if (!active) {
           return;
         }
@@ -82,76 +117,206 @@ export function App(): React.JSX.Element {
         setCapabilities(workerCapabilities);
         setTabCapability(currentTabCapability);
         setWorkerStatus("connected");
-      })
-      .catch(() => {
+
+        try {
+          const currentSession = await getVisibleSession();
+          if (active) {
+            setSession(currentSession);
+            if (currentSession !== undefined) {
+              setSelectedFormat(currentSession.format);
+            }
+          }
+        } catch (error) {
+          if (active) {
+            setUiError(errorMessage(error));
+          }
+        }
+      } catch {
         if (active) {
           setWorkerStatus("unavailable");
         }
-      });
+      }
+    })();
 
     return () => {
       active = false;
     };
   }, []);
 
+  const status: UiStatus = localStatus === "idle" ? (session?.status ?? "idle") : localStatus;
+  const busy = status === "capturing" || status === "processing" || status === "downloading";
+  const terminal = status === "ready" || status === "completed" || status === "error";
   const availableFormats = OUTPUT_FORMATS.filter(
     (format): format is { id: ImageFormat; label: string } =>
       format.id !== "pdf" && capabilities.outputFormats[format.id],
   );
-  const busy = ["capturing", "processing", "downloading"].includes(captureStatus);
   const canCapture =
     workerStatus === "connected" &&
     tabCapability.status === "supported" &&
     capabilities.modes.visible &&
     !busy;
 
-  const handleCapture = (): void => {
-    const requestId = crypto.randomUUID();
-    setCaptureRequestId(requestId);
-    setArtifact(undefined);
-    setCaptureError(undefined);
-    setCaptureStatus("capturing");
-
-    void startVisibleCapture({ captureRequestId: requestId })
-      .then(async (metadata) => {
-        setCaptureStatus("processing");
-        const exported = await exportImage({
-          sourceArtifactId: metadata.captureId,
-          format: selectedFormat,
-          quality: 0.92,
-        });
-        setArtifact(exported);
-        setCaptureStatus("downloading");
-        await downloadArtifact(exported.artifactId);
-        setCaptureStatus("completed");
-      })
-      .catch((error: unknown) => {
-        if (error instanceof Error && error.name === "E_CANCELLED") {
-          setCaptureStatus("cancelled");
-          return;
-        }
-
-        setCaptureError(error instanceof Error ? error.message : "Không thể tạo ảnh tải xuống.");
-        setCaptureStatus("error");
-      });
-  };
-
-  const handleCancel = (): void => {
-    if (captureRequestId === undefined || captureStatus !== "capturing") {
+  useEffect(() => {
+    if (!busy) {
       return;
     }
 
-    void cancelVisibleCapture(captureRequestId)
-      .then((accepted) => {
-        if (accepted) {
-          setCaptureStatus("cancelled");
+    const timer = globalThis.setInterval(() => {
+      void syncSession().catch(() => undefined);
+    }, SESSION_POLL_MS);
+
+    return () => {
+      globalThis.clearInterval(timer);
+    };
+  }, [busy, syncSession]);
+
+  useEffect(() => {
+    if (terminal) {
+      feedbackHeadingRef.current?.focus();
+    }
+  }, [terminal]);
+
+  useEffect(() => {
+    let disposed = false;
+    let revoke: (() => void) | undefined;
+    setPreviewUrl(undefined);
+
+    if (session?.artifact === undefined) {
+      return () => undefined;
+    }
+
+    void createArtifactPreview(session.artifact.artifactId)
+      .then((preview) => {
+        if (disposed) {
+          preview.revoke();
+          return;
         }
+        revoke = () => preview.revoke();
+        setPreviewUrl(preview.url);
       })
       .catch((error: unknown) => {
-        setCaptureError(error instanceof Error ? error.message : "Không thể hủy thao tác chụp.");
-        setCaptureStatus("error");
+        if (!disposed) {
+          setUiError(errorMessage(error));
+        }
       });
-  };
+
+    return () => {
+      disposed = true;
+      revoke?.();
+    };
+  }, [session?.artifact?.artifactId]);
+
+  const handleOperationError = useCallback(
+    async (error: unknown): Promise<void> => {
+      const restored = await syncSession().catch(() => undefined);
+      setLocalStatus("idle");
+      setUiError(restored?.error?.message ?? errorMessage(error));
+    },
+    [syncSession],
+  );
+
+  const runExport = useCallback(
+    async (sourceArtifactId: string, format: ImageFormat, quality: number): Promise<void> => {
+      setLocalStatus("processing");
+      setUiError(undefined);
+      try {
+        await exportImage({
+          sourceArtifactId,
+          format,
+          quality,
+          exportRequestId: crypto.randomUUID(),
+        });
+        await syncSession();
+        setLocalStatus("idle");
+      } catch (error) {
+        await handleOperationError(error);
+      }
+    },
+    [handleOperationError, syncSession],
+  );
+
+  useEffect(() => {
+    if (session?.status !== "captured" || session.source === undefined) {
+      return;
+    }
+
+    const resumeKey = `${session.sessionId}:${session.updatedAt}`;
+    if (resumedSessionRef.current === resumeKey) {
+      return;
+    }
+    resumedSessionRef.current = resumeKey;
+    void runExport(session.source.captureId, session.format, session.quality);
+  }, [runExport, session]);
+
+  const handleCapture = useCallback(async (): Promise<void> => {
+    if (!canCapture) {
+      return;
+    }
+
+    const captureRequestId = crypto.randomUUID();
+    activeCaptureRequestIdRef.current = captureRequestId;
+    setSession(undefined);
+    setLocalStatus("capturing");
+    setUiError(undefined);
+
+    try {
+      const metadata = await startVisibleCapture({
+        captureRequestId,
+        outputFormat: selectedFormat,
+        quality: IMAGE_QUALITY,
+      });
+      activeCaptureRequestIdRef.current = undefined;
+      await runExport(metadata.captureId, selectedFormat, IMAGE_QUALITY);
+    } catch (error) {
+      activeCaptureRequestIdRef.current = undefined;
+      await handleOperationError(error);
+    }
+  }, [canCapture, handleOperationError, runExport, selectedFormat, syncSession]);
+
+  const handleCancel = useCallback(async (): Promise<void> => {
+    const captureRequestId = activeCaptureRequestIdRef.current ?? session?.captureRequestId;
+    if (captureRequestId === undefined || status !== "capturing") {
+      return;
+    }
+
+    try {
+      await cancelVisibleCapture(captureRequestId);
+      activeCaptureRequestIdRef.current = undefined;
+      await syncSession();
+      setLocalStatus("idle");
+    } catch (error) {
+      await handleOperationError(error);
+    }
+  }, [handleOperationError, session?.captureRequestId, status, syncSession]);
+
+  const handleRetry = useCallback(async (): Promise<void> => {
+    if (session?.source !== undefined) {
+      await runExport(session.source.captureId, selectedFormat, IMAGE_QUALITY);
+      return;
+    }
+    await handleCapture();
+  }, [handleCapture, runExport, selectedFormat, session?.source]);
+
+  const handleDownload = useCallback(async (): Promise<void> => {
+    if (session?.artifact === undefined) {
+      return;
+    }
+
+    setLocalStatus("downloading");
+    setUiError(undefined);
+    try {
+      await downloadArtifact(session.artifact.artifactId);
+      await syncSession();
+      setLocalStatus("idle");
+    } catch (error) {
+      await handleOperationError(error);
+    }
+  }, [handleOperationError, session?.artifact, syncSession]);
+
+  const sourceEstimate =
+    session?.source === undefined
+      ? undefined
+      : estimateOutputBytes(session.source.byteLength, selectedFormat);
 
   return (
     <main className="popup-shell">
@@ -197,20 +362,26 @@ export function App(): React.JSX.Element {
         </div>
       </section>
 
-      <section className="capture-panel" aria-labelledby="capture-title">
+      <section className="capture-panel" aria-labelledby="capture-title" aria-busy={busy}>
         <div className="section-heading">
           <div>
             <p className="section-heading__eyebrow">CHẾ ĐỘ CHỤP</p>
-            <h2 id="capture-title">Chụp và tải xuống</h2>
+            <h2 id="capture-title">Chụp vùng đang xem</h2>
           </div>
-          <span className="planned-badge">S04</span>
+          <span className="planned-badge">S05</span>
         </div>
 
         <div className="mode-grid" aria-label="Các chế độ chụp">
           {CAPTURE_MODES.map((mode) => {
             const enabled = capabilities.modes[mode.id];
             return (
-              <button className="mode-button" type="button" disabled={!enabled} key={mode.id}>
+              <button
+                className={`mode-button ${mode.id === "visible" ? "mode-button--selected" : ""}`}
+                type="button"
+                disabled={!enabled}
+                aria-pressed={mode.id === "visible"}
+                key={mode.id}
+              >
                 <span>{mode.label}</span>
                 <small>{enabled ? "Khả dụng" : "Chưa khả dụng"}</small>
               </button>
@@ -223,6 +394,7 @@ export function App(): React.JSX.Element {
         </label>
         <select
           id="output-format"
+          aria-label="Định dạng đầu ra"
           value={selectedFormat}
           disabled={busy}
           onChange={(event) => setSelectedFormat(event.target.value as ImageFormat)}
@@ -234,32 +406,158 @@ export function App(): React.JSX.Element {
           ))}
         </select>
 
-        {captureStatus === "capturing" ? (
-          <button className="primary-action" type="button" onClick={handleCancel}>
+        {status === "capturing" ? (
+          <button
+            className="primary-action primary-action--danger"
+            type="button"
+            onClick={() => void handleCancel()}
+          >
             Hủy chụp
           </button>
-        ) : (
+        ) : session?.artifact === undefined ? (
           <button
             className="primary-action"
             type="button"
             disabled={!canCapture}
-            onClick={handleCapture}
+            onClick={() => void handleCapture()}
           >
-            {busy ? "Đang xử lý…" : "Chụp và tải xuống"}
+            {busy ? "Đang xử lý…" : "Tạo bản xem trước"}
           </button>
+        ) : null}
+
+        {busy && (
+          <section className="progress-card" aria-live="polite">
+            <span className="progress-card__spinner" aria-hidden="true" />
+            <div>
+              <strong>{CAPTURE_STATUS_COPY[status as Exclude<UiStatus, "idle">]}</strong>
+              {sourceEstimate !== undefined && (
+                <small>
+                  Ước tính {selectedFormat.toUpperCase()} · {formatBytes(sourceEstimate)}
+                </small>
+              )}
+            </div>
+          </section>
+        )}
+
+        {session?.artifact !== undefined && (
+          <figure
+            className="preview-card"
+            data-testid="preview-card"
+            data-artifact-id={session.artifact.artifactId}
+          >
+            <div className="preview-card__media">
+              {previewUrl === undefined ? (
+                <div className="preview-card__placeholder">Đang tải bản xem trước…</div>
+              ) : (
+                <img
+                  src={previewUrl}
+                  alt="Bản xem trước ảnh chụp vùng đang xem"
+                  data-testid="preview-image"
+                />
+              )}
+            </div>
+            <figcaption>
+              <h3 ref={feedbackHeadingRef} tabIndex={-1} data-testid="preview-heading">
+                Bản xem trước
+              </h3>
+              <dl
+                className="preview-metadata"
+                data-testid="preview-metadata"
+                data-width={session.artifact.width}
+                data-height={session.artifact.height}
+                data-format={session.artifact.format}
+                data-bytes={session.artifact.byteLength}
+              >
+                <div>
+                  <dt>Kích thước</dt>
+                  <dd>
+                    {session.artifact.width} × {session.artifact.height} px
+                  </dd>
+                </div>
+                <div>
+                  <dt>Định dạng</dt>
+                  <dd>{session.artifact.format.toUpperCase()}</dd>
+                </div>
+                <div>
+                  <dt>Dung lượng</dt>
+                  <dd>{formatBytes(session.artifact.byteLength)}</dd>
+                </div>
+              </dl>
+              <div className="preview-actions">
+                <button
+                  className="primary-action"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void handleDownload()}
+                >
+                  {status === "downloading" ? "Đang tải…" : "Tải xuống"}
+                </button>
+                {session.source !== undefined && selectedFormat !== session.artifact.format && (
+                  <button
+                    className="secondary-action"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void handleRetry()}
+                  >
+                    Tạo lại định dạng
+                  </button>
+                )}
+                <button
+                  className="secondary-action"
+                  type="button"
+                  disabled={!canCapture}
+                  onClick={() => void handleCapture()}
+                >
+                  Chụp lại
+                </button>
+              </div>
+            </figcaption>
+          </figure>
         )}
 
         <div className="capture-feedback" aria-live="polite">
-          {captureStatus === "capturing" && <p>Đang chụp tab hiện tại…</p>}
-          {captureStatus === "processing" && <p>Đang mã hóa ảnh trong offscreen document…</p>}
-          {captureStatus === "downloading" && <p>Đang bắt đầu tải xuống…</p>}
-          {captureStatus === "cancelled" && <p>Đã hủy thao tác chụp.</p>}
-          {captureStatus === "error" && <p role="alert">{captureError}</p>}
-          {captureStatus === "completed" && artifact !== undefined && (
-            <p data-testid="capture-success">
-              Đã tải {artifact.filename} · {artifact.width} × {artifact.height} px ·{" "}
-              {formatBytes(artifact.byteLength)}.
+          {status === "completed" && session?.downloadId !== undefined && (
+            <p
+              className="feedback feedback--success"
+              data-testid="download-success"
+              data-download-id={session.downloadId}
+            >
+              {CAPTURE_STATUS_COPY.completed}
             </p>
+          )}
+          {status === "cancelled" && (
+            <div className="feedback feedback--neutral">
+              <p>{CAPTURE_STATUS_COPY.cancelled}</p>
+              <button
+                className="text-action"
+                type="button"
+                disabled={!canCapture}
+                onClick={() => void handleCapture()}
+              >
+                Thử lại
+              </button>
+            </div>
+          )}
+          {(status === "error" || uiError !== undefined) && (
+            <div className="feedback feedback--error" role="alert">
+              <h3
+                ref={session?.artifact === undefined ? feedbackHeadingRef : undefined}
+                tabIndex={-1}
+              >
+                Không thể hoàn tất
+              </h3>
+              <p>{session?.error?.message ?? uiError ?? CAPTURE_STATUS_COPY.error}</p>
+              {(session?.error?.retryable ?? true) && (
+                <button
+                  className="text-action"
+                  type="button"
+                  disabled={busy || workerStatus !== "connected"}
+                  onClick={() => void handleRetry()}
+                >
+                  Thử lại
+                </button>
+              )}
+            </div>
           )}
         </div>
       </section>

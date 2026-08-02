@@ -9,11 +9,22 @@ import {
   createTabCapabilityResponseMessage,
   createVisibleCaptureCancelledMessage,
   createVisibleCaptureSuccessMessage,
+  createVisibleSessionResponseMessage,
   parseBackgroundRequest,
   type BackgroundResponse,
 } from "@shared/contracts/messages";
+import type {
+  VisibleSessionSnapshot,
+  VisibleSessionStatus,
+  VisibleSourceMetadata,
+} from "@shared/contracts/visible-session";
+import type { WebCapErrorData } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
 import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
+import {
+  VisibleSessionRepository,
+  type VisibleSessionRepositoryPort,
+} from "@storage/visible-session-repository";
 
 import { createChromeTabsAdapter, type TabsCaptureAdapter } from "./chrome-tabs-adapter";
 import { DownloadService } from "./download-service";
@@ -41,7 +52,19 @@ export interface MessageRouterDependencies {
   tabs: TabsCaptureAdapter;
   visibleCapture: VisibleCaptureCoordinatorPort;
   imageExport: ImageExportCoordinatorPort;
+  visibleSessions?: VisibleSessionRepositoryPort;
   now: () => Date;
+}
+
+interface SessionTransitionOptions {
+  status: VisibleSessionStatus;
+  updatedAt: string;
+  format?: VisibleSessionSnapshot["format"];
+  quality?: number;
+  source?: VisibleSourceMetadata | null;
+  artifact?: ArtifactMetadata | null;
+  downloadId?: number;
+  error?: WebCapErrorData;
 }
 
 let sharedDependencies: MessageRouterDependencies | undefined;
@@ -62,6 +85,7 @@ function defaultDependencies(): MessageRouterDependencies {
     tabs,
     visibleCapture: new VisibleCaptureCoordinator({ tabs, artifacts }),
     imageExport,
+    visibleSessions: new VisibleSessionRepository(),
     now: () => new Date(),
   };
   void artifacts.deleteExpired(new Date().toISOString()).catch(() => undefined);
@@ -84,6 +108,56 @@ function targetsBackground(value: unknown): boolean {
     "target" in value &&
     (value as { target?: unknown }).target === "background"
   );
+}
+
+function transitionSession(
+  session: VisibleSessionSnapshot,
+  options: SessionTransitionOptions,
+): VisibleSessionSnapshot {
+  const source = options.source === undefined ? session.source : (options.source ?? undefined);
+  const artifact =
+    options.artifact === undefined ? session.artifact : (options.artifact ?? undefined);
+
+  return {
+    schemaVersion: 1,
+    sessionId: session.sessionId,
+    captureRequestId: session.captureRequestId,
+    status: options.status,
+    format: options.format ?? session.format,
+    quality: options.quality ?? session.quality,
+    createdAt: session.createdAt,
+    updatedAt: options.updatedAt,
+    ...(source === undefined ? {} : { source }),
+    ...(artifact === undefined ? {} : { artifact }),
+    ...(options.downloadId === undefined ? {} : { downloadId: options.downloadId }),
+    ...(options.error === undefined ? {} : { error: options.error }),
+  };
+}
+
+async function persistSessionFailure(
+  dependencies: MessageRouterDependencies,
+  error: WebCapErrorData,
+): Promise<void> {
+  const repository = dependencies.visibleSessions;
+  if (repository === undefined) {
+    return;
+  }
+
+  try {
+    const session = await repository.load();
+    if (session === undefined) {
+      return;
+    }
+    await repository.save(
+      transitionSession(session, {
+        status: error.code === "E_CANCELLED" ? "cancelled" : "error",
+        updatedAt: dependencies.now().toISOString(),
+        error,
+      }),
+    );
+  } catch {
+    // Session restoration is best effort after the primary operation has already failed.
+  }
 }
 
 export async function routeRuntimeMessage(
@@ -125,59 +199,161 @@ export async function routeRuntimeMessage(
           capability: await inspectActiveTab(dependencies.tabs),
           sentAt: dependencies.now().toISOString(),
         });
-      case "VISIBLE_CAPTURE_START":
-        return createVisibleCaptureSuccessMessage({
+      case "VISIBLE_SESSION_GET":
+        return createVisibleSessionResponseMessage({
           requestId: parsed.value.requestId,
-          metadata: await dependencies.visibleCapture.start(parsed.value.requestId),
+          session: (await dependencies.visibleSessions?.load()) ?? null,
           sentAt: dependencies.now().toISOString(),
         });
-      case "VISIBLE_CAPTURE_CANCEL":
+      case "VISIBLE_CAPTURE_START": {
+        const createdAt = dependencies.now().toISOString();
+        const session: VisibleSessionSnapshot = {
+          schemaVersion: 1,
+          sessionId: parsed.value.requestId,
+          captureRequestId: parsed.value.requestId,
+          status: "capturing",
+          format: parsed.value.payload.outputFormat,
+          quality: parsed.value.payload.quality,
+          createdAt,
+          updatedAt: createdAt,
+        };
+        await dependencies.visibleSessions?.save(session);
+
+        const metadata = await dependencies.visibleCapture.start(parsed.value.requestId);
+        await dependencies.visibleSessions?.save(
+          transitionSession(session, {
+            status: "captured",
+            updatedAt: dependencies.now().toISOString(),
+            source: metadata,
+          }),
+        );
+
+        return createVisibleCaptureSuccessMessage({
+          requestId: parsed.value.requestId,
+          metadata,
+          sentAt: dependencies.now().toISOString(),
+        });
+      }
+      case "VISIBLE_CAPTURE_CANCEL": {
+        const accepted = dependencies.visibleCapture.cancel(parsed.value.payload.captureRequestId);
+        if (accepted && dependencies.visibleSessions !== undefined) {
+          const session = await dependencies.visibleSessions.load();
+          if (
+            session !== undefined &&
+            session.captureRequestId === parsed.value.payload.captureRequestId
+          ) {
+            await dependencies.visibleSessions.save(
+              transitionSession(session, {
+                status: "cancelled",
+                updatedAt: dependencies.now().toISOString(),
+              }),
+            );
+          }
+        }
+
         return createVisibleCaptureCancelledMessage({
           requestId: parsed.value.requestId,
           captureRequestId: parsed.value.payload.captureRequestId,
-          accepted: dependencies.visibleCapture.cancel(parsed.value.payload.captureRequestId),
+          accepted,
           sentAt: dependencies.now().toISOString(),
         });
-      case "IMAGE_EXPORT_START":
+      }
+      case "IMAGE_EXPORT_START": {
+        const session = await dependencies.visibleSessions?.load();
+        if (session !== undefined) {
+          await dependencies.visibleSessions?.save(
+            transitionSession(session, {
+              status: "processing",
+              updatedAt: dependencies.now().toISOString(),
+              format: parsed.value.payload.format,
+              quality: parsed.value.payload.quality,
+              artifact: null,
+            }),
+          );
+        }
+
+        const artifact = await dependencies.imageExport.exportCapture({
+          requestId: parsed.value.requestId,
+          sourceArtifactId: parsed.value.payload.sourceArtifactId,
+          format: parsed.value.payload.format,
+          quality: parsed.value.payload.quality,
+        });
+
+        if (session !== undefined) {
+          await dependencies.visibleSessions?.save(
+            transitionSession(session, {
+              status: "ready",
+              updatedAt: dependencies.now().toISOString(),
+              format: parsed.value.payload.format,
+              quality: parsed.value.payload.quality,
+              artifact,
+            }),
+          );
+        }
+
         return createImageExportSuccessMessage({
           requestId: parsed.value.requestId,
-          artifact: await dependencies.imageExport.exportCapture({
-            requestId: parsed.value.requestId,
-            sourceArtifactId: parsed.value.payload.sourceArtifactId,
-            format: parsed.value.payload.format,
-            quality: parsed.value.payload.quality,
-          }),
+          artifact,
           sentAt: dependencies.now().toISOString(),
         });
-      case "ARTIFACT_DOWNLOAD_START":
+      }
+      case "ARTIFACT_DOWNLOAD_START": {
+        const session = await dependencies.visibleSessions?.load();
+        if (session !== undefined) {
+          await dependencies.visibleSessions?.save(
+            transitionSession(session, {
+              status: "downloading",
+              updatedAt: dependencies.now().toISOString(),
+            }),
+          );
+        }
+
+        const downloadId = await dependencies.imageExport.downloadArtifact(
+          parsed.value.payload.artifactId,
+        );
+        if (session !== undefined) {
+          await dependencies.visibleSessions?.save(
+            transitionSession(session, {
+              status: "completed",
+              updatedAt: dependencies.now().toISOString(),
+              downloadId,
+            }),
+          );
+        }
+
         return createArtifactDownloadStartedMessage({
           requestId: parsed.value.requestId,
           artifactId: parsed.value.payload.artifactId,
-          downloadId: await dependencies.imageExport.downloadArtifact(
-            parsed.value.payload.artifactId,
-          ),
+          downloadId,
           sentAt: dependencies.now().toISOString(),
         });
+      }
     }
   } catch (error) {
+    const normalized = normalizeError(error, {
+      stage:
+        parsed.value.type === "ARTIFACT_DOWNLOAD_START"
+          ? "export"
+          : parsed.value.type === "IMAGE_EXPORT_START"
+            ? "process"
+            : parsed.value.type === "VISIBLE_SESSION_GET"
+              ? "storage"
+              : "capture",
+      userMessageKey:
+        parsed.value.type === "ARTIFACT_DOWNLOAD_START"
+          ? "errors.downloadFailed"
+          : parsed.value.type === "IMAGE_EXPORT_START"
+            ? "errors.exportFailed"
+            : parsed.value.type === "VISIBLE_SESSION_GET"
+              ? "errors.sessionRead"
+              : "errors.captureFailed",
+      retryable: true,
+      fallbackAllowed: false,
+    });
+    await persistSessionFailure(dependencies, normalized);
     return createErrorResponseMessage({
       requestId: parsed.value.requestId,
-      error: normalizeError(error, {
-        stage:
-          parsed.value.type === "ARTIFACT_DOWNLOAD_START"
-            ? "export"
-            : parsed.value.type === "IMAGE_EXPORT_START"
-              ? "process"
-              : "capture",
-        userMessageKey:
-          parsed.value.type === "ARTIFACT_DOWNLOAD_START"
-            ? "errors.downloadFailed"
-            : parsed.value.type === "IMAGE_EXPORT_START"
-              ? "errors.exportFailed"
-              : "errors.captureFailed",
-        retryable: true,
-        fallbackAllowed: false,
-      }),
+      error: normalized,
       sentAt: dependencies.now().toISOString(),
     });
   }

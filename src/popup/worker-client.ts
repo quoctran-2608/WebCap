@@ -10,6 +10,7 @@ import {
   createTabCapabilityGetMessage,
   createVisibleCaptureCancelMessage,
   createVisibleCaptureStartMessage,
+  createVisibleSessionGetMessage,
   isArtifactDownloadStartedMessage,
   isCapabilitiesResponseMessage,
   isErrorResponseMessage,
@@ -18,10 +19,12 @@ import {
   isTabCapabilityResponseMessage,
   isVisibleCaptureCancelledMessage,
   isVisibleCaptureSuccessMessage,
+  isVisibleSessionResponseMessage,
   type PongMessage,
   type TabCapabilityPayload,
   type VisibleCaptureMetadata,
 } from "@shared/contracts/messages";
+import type { VisibleSessionSnapshot } from "@shared/contracts/visible-session";
 
 const HANDSHAKE_TIMEOUT_MS = 3_000;
 
@@ -39,6 +42,8 @@ export interface WorkerRequestOptions {
 
 export interface VisibleCaptureRequestOptions extends WorkerRequestOptions {
   captureRequestId?: string;
+  outputFormat?: ImageFormat;
+  quality?: number;
 }
 
 export interface ImageExportRequestOptions extends WorkerRequestOptions {
@@ -163,12 +168,39 @@ export async function getTabCapability(
   return response.payload;
 }
 
+export async function getVisibleSession(
+  options: WorkerRequestOptions = {},
+): Promise<VisibleSessionSnapshot | undefined> {
+  const { runtime, now, createRequestId } = requestDependencies(options);
+  const request = createVisibleSessionGetMessage({
+    requestId: createRequestId(),
+    sentAt: now().toISOString(),
+  });
+  const response = await sendWithTimeout(
+    runtime,
+    request,
+    options.timeoutMs ?? HANDSHAKE_TIMEOUT_MS,
+  );
+
+  throwRemoteError(response);
+  if (!isVisibleSessionResponseMessage(response)) {
+    throw new TypeError("Service worker returned an invalid visible session response.");
+  }
+  if (response.requestId !== request.requestId) {
+    throw new Error("Service worker response did not match the request.");
+  }
+
+  return response.payload.session ?? undefined;
+}
+
 export async function startVisibleCapture(
   options: VisibleCaptureRequestOptions = {},
 ): Promise<VisibleCaptureMetadata> {
   const { runtime, now, createRequestId } = requestDependencies(options);
   const request = createVisibleCaptureStartMessage({
     requestId: options.captureRequestId ?? createRequestId(),
+    ...(options.outputFormat === undefined ? {} : { outputFormat: options.outputFormat }),
+    ...(options.quality === undefined ? {} : { quality: options.quality }),
     sentAt: now().toISOString(),
   });
   const response = await sendWithTimeout(
