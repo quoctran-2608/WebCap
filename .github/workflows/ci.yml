@@ -105,6 +105,26 @@ jobs:
               '  expect(zoom).toBeCloseTo(1.25, 2);\n\n  const popup =',
               '  expect(zoom).toBeCloseTo(1.25, 2);\n  expect(viewport.dpr).toBeCloseTo(2 * zoom, 2);\n\n  const popup =',
           )
+          final_dimensions = (
+              '  await expect(metadata).toHaveAttribute("data-width", String(Math.round(viewport.width)));\n'
+              '  await expect(metadata).toHaveAttribute("data-height", String(Math.round(viewport.height)));\n'
+              '});\n'
+          )
+          position = text.rfind(final_dimensions)
+          if position < 0:
+              raise SystemExit("DPR metadata assertions were not found")
+          zoom_dimensions = (
+              '  await expect(metadata).toHaveAttribute(\n'
+              '    "data-width",\n'
+              '    String(Math.round(viewport.width * zoom)),\n'
+              '  );\n'
+              '  await expect(metadata).toHaveAttribute(\n'
+              '    "data-height",\n'
+              '    String(Math.round(viewport.height * zoom)),\n'
+              '  );\n'
+              '});\n'
+          )
+          text = text[:position] + zoom_dimensions + text[position + len(final_dimensions):]
           e2e.write_text(text, encoding="utf-8")
 
           fixture = Path("tests/e2e/extension.fixture.ts")
