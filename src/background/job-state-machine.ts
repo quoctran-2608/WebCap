@@ -140,7 +140,7 @@ export function validateJobInvariants(
   if (job.state === "exporting" && context.sourceArtifactExists !== true) {
     return err(
       stateError("Exporting requires an existing source artifact.", "SourceArtifactMissing", {
-        sourceArtifactExists: context.sourceArtifactExists === true,
+        sourceArtifactExists: false,
       }),
     );
   }
