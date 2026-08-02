@@ -1,10 +1,13 @@
 import { DEDUPE_RECORD_SCHEMA_VERSION, DEDUPE_TTL_MS } from "@shared/constants";
+import type { CaptureJob } from "@shared/contracts/domain";
+import type { StoredDedupeRecord } from "@shared/contracts/job";
 import {
+  JobResponseMessageSchema,
   createJobResponseMessage,
   parsePersistentJobRequest,
   type JobResponseMessage,
+  type PersistentJobRequest,
 } from "@shared/contracts/job-messages";
-import type { StoredDedupeRecord } from "@shared/contracts/job";
 import {
   ErrorResponseMessageSchema,
   createErrorResponseMessage,
@@ -103,24 +106,14 @@ async function readCachedResponse(
   if (record === undefined) {
     return undefined;
   }
-  const jobResponse = createJobResponseMessageSafe(record.response);
-  if (jobResponse !== undefined) {
-    return jobResponse;
+
+  const jobResponse = JobResponseMessageSchema.safeParse(record.response);
+  if (jobResponse.success) {
+    return jobResponse.data;
   }
   const errorResponse = ErrorResponseMessageSchema.safeParse(record.response);
   return errorResponse.success ? errorResponse.data : undefined;
 }
-
-function createJobResponseMessageSafe(value: unknown): JobResponseMessage | undefined {
-  const parsed = createJobResponseMessageSchema().safeParse(value);
-  return parsed.success ? parsed.data : undefined;
-}
-
-function createJobResponseMessageSchema(): typeof import("@shared/contracts/job-messages").JobResponseMessageSchema {
-  return requireJobResponseSchema;
-}
-
-import { JobResponseMessageSchema as requireJobResponseSchema } from "@shared/contracts/job-messages";
 
 async function cacheResponse(
   requestType: string,
@@ -143,6 +136,34 @@ async function cacheResponse(
     await dependencies.dedupe.put(record);
   } catch {
     // The job result remains authoritative even when the short-lived dedupe cache is unavailable.
+  }
+}
+
+async function executeJobRequest(
+  request: PersistentJobRequest,
+  dependencies: PersistentJobRouterDependencies,
+): Promise<CaptureJob> {
+  switch (request.type) {
+    case "JOB_CREATE":
+      return dependencies.jobs.create({
+        tabId: request.payload.tabId,
+        windowId: request.payload.windowId,
+        mode: request.payload.mode,
+        settings: request.payload.settings,
+        ...(request.payload.preferredEngine === undefined
+          ? {}
+          : { preferredEngine: request.payload.preferredEngine }),
+        ...(request.payload.source === undefined ? {} : { source: request.payload.source }),
+      });
+    case "JOB_GET": {
+      const job = await dependencies.jobs.get(request.payload.jobId);
+      if (job === undefined) {
+        throw jobNotFound(request.payload.jobId);
+      }
+      return job;
+    }
+    case "JOB_CANCEL":
+      return dependencies.jobs.cancel(request.payload.jobId, request.payload.reason);
   }
 }
 
@@ -173,36 +194,7 @@ export async function routePersistentJobMessage(
   }
 
   try {
-    let job;
-    switch (parsed.value.type) {
-      case "JOB_CREATE":
-        job = await dependencies.jobs.create({
-          tabId: parsed.value.payload.tabId,
-          windowId: parsed.value.payload.windowId,
-          mode: parsed.value.payload.mode,
-          settings: parsed.value.payload.settings,
-          ...(parsed.value.payload.preferredEngine === undefined
-            ? {}
-            : { preferredEngine: parsed.value.payload.preferredEngine }),
-          ...(parsed.value.payload.source === undefined
-            ? {}
-            : { source: parsed.value.payload.source }),
-        });
-        break;
-      case "JOB_GET":
-        job = await dependencies.jobs.get(parsed.value.payload.jobId);
-        if (job === undefined) {
-          throw jobNotFound(parsed.value.payload.jobId);
-        }
-        break;
-      case "JOB_CANCEL":
-        job = await dependencies.jobs.cancel(
-          parsed.value.payload.jobId,
-          parsed.value.payload.reason,
-        );
-        break;
-    }
-
+    const job = await executeJobRequest(parsed.value, dependencies);
     const response = createJobResponseMessage({
       requestId: parsed.value.requestId,
       job,
