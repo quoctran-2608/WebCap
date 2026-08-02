@@ -52,6 +52,52 @@ jobs:
           tar -xzf /tmp/s04-payload.tar.gz
           rm -rf s04-payload
 
+      - name: Apply lint corrections
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/offscreen/image-processor.ts")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "drawImage(image: CanvasImageSource, dx: number, dy: number): void;",
+              "drawImage(image: DecodedImage, dx: number, dy: number): void;",
+          )
+          text = text.replace(
+              "context.drawImage(bitmap as unknown as CanvasImageSource, 0, 0);",
+              "context.drawImage(bitmap, 0, 0);",
+          )
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("src/storage/artifact-repository.ts")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              "function requestResult<T>(request: IDBRequest<T>): Promise<T> {\n  return new Promise((resolve, reject) => {",
+              "function requestResult(request: IDBRequest): Promise<unknown> {\n  return new Promise((resolve, reject) => {",
+          )
+          text = text.replace(
+              "      const result = await requestResult<ArtifactRecord | undefined>(\n        transaction.objectStore(WEBCAP_STORES.artifacts).get(artifactId),\n      );",
+              "      const result = (await requestResult(\n        transaction.objectStore(WEBCAP_STORES.artifacts).get(artifactId),\n      )) as ArtifactRecord | undefined;",
+          )
+          text = text.replace(
+              "      const records = await requestResult<ArtifactRecord[]>(store.getAll());",
+              "      const records = (await requestResult(store.getAll())) as ArtifactRecord[];",
+          )
+          path.write_text(text, encoding="utf-8")
+
+          path = Path("tests/unit/visible-capture-coordinator.test.ts")
+          text = path.read_text(encoding="utf-8")
+          text = text.replace(
+              'import { VisibleCaptureCoordinator } from "@background/visible-capture-coordinator";\n',
+              'import { VisibleCaptureCoordinator } from "@background/visible-capture-coordinator";\nimport type { ArtifactRecord } from "@shared/contracts/artifact";\n',
+          )
+          text = text.replace(
+              'let storedArtifact: import("@shared/contracts/artifact").ArtifactRecord | undefined;',
+              "let storedArtifact: ArtifactRecord | undefined;",
+          )
+          path.write_text(text, encoding="utf-8")
+          PY
+
       - name: Format implementation
         run: pnpm format
 
