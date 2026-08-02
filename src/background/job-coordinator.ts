@@ -263,10 +263,8 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
   }
 
   private async initializeInternal(): Promise<void> {
-    const nowIso = this.now().toISOString();
-    await this.sessions.clearExpiredLocks(nowIso);
-    await this.recoverJobs(nowIso);
     await this.cleanupExpiredInternal();
+    await this.recoverJobs(this.now().toISOString());
   }
 
   private async recoverJobs(nowIso: string): Promise<void> {
