@@ -118,7 +118,7 @@ function invalidModeError(job: CaptureJob): Error {
     createWebCapError({
       code: "E_PROTOCOL_MESSAGE",
       stage: "protocol",
-      message: "Only full-page jobs can use the full-page capture coordinator.",
+      message: "Only full-page and region jobs can use the tiled capture coordinator.",
       userMessageKey: "errors.captureMode",
       retryable: false,
       fallbackAllowed: false,
@@ -225,8 +225,22 @@ export class FullPageCaptureCoordinator {
 
   private async run(jobId: string, cancellation: MutableCaptureCancellation): Promise<void> {
     let job = await this.requireJob(jobId);
-    if (job.mode !== "full-page") {
+    if (job.mode !== "full-page" && job.mode !== "region") {
       throw invalidModeError(job);
+    }
+    if (job.mode === "region" && job.targetRect === undefined) {
+      throw createWebCapRuntimeError(
+        createWebCapError({
+          code: "E_PROTOCOL_MESSAGE",
+          stage: "protocol",
+          message: "Region capture requires a confirmed target rectangle.",
+          userMessageKey: "errors.captureTarget",
+          retryable: false,
+          fallbackAllowed: false,
+          causeCode: "RegionTargetMissing",
+          safeContext: { jobId: job.id },
+        }),
+      );
     }
     if (job.state !== "created") {
       return;
@@ -252,6 +266,8 @@ export class FullPageCaptureCoordinator {
         tabId: job.tabId,
         preparationId: job.id,
         options: {
+          targetStartX: job.targetRect?.x ?? 0,
+          targetStartY: job.targetRect?.y ?? 0,
           maxCssHeight: job.settings.limits.maxCssHeight,
           lazyLoad: job.settings.lazyLoad,
         },
@@ -286,6 +302,7 @@ export class FullPageCaptureCoordinator {
           tabId: job.tabId,
           windowId: job.windowId,
           settings: job.settings,
+          ...(job.targetRect === undefined ? {} : { targetRect: job.targetRect }),
           preparation,
           cancellation,
           onPlan: (metrics, targetRect, tiles) =>

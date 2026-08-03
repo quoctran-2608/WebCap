@@ -1,3 +1,5 @@
+import { openRegionSelector, type RegionSelectorController } from "./region-selector";
+
 export const PAGE_PREPARATION_PROTOCOL_VERSION = 1 as const;
 export const PAGE_PREPARATION_SNAPSHOT_VERSION = 1 as const;
 export const PAGE_PREPARATION_GLOBAL_KEY = "__webcapPagePreparationV1__" as const;
@@ -159,6 +161,13 @@ interface PagePreparationRuntimeState {
     sendResponse: (response: unknown) => void,
   ) => boolean | void;
   pageHideListener: () => void;
+  region?: RegionSelectorController;
+  regionListener?: (
+    message: unknown,
+    sender: chrome.runtime.MessageSender,
+    sendResponse: (response: unknown) => void,
+  ) => boolean | void;
+  regionPageHideListener?: () => void;
 }
 
 interface StateCarrier {
@@ -886,10 +895,157 @@ function handleCancel(
   });
 }
 
+interface RegionSelectionOpenRequest {
+  protocolVersion: 1;
+  requestId: string;
+  source: "background";
+  target: "content";
+  type: "REGION_SELECTION_OPEN";
+  payload: { jobId: string };
+  sentAt: string;
+}
+
+function isRegionSelectionOpenRequest(value: unknown): value is RegionSelectionOpenRequest {
+  return (
+    isRecord(value) &&
+    value.protocolVersion === PAGE_PREPARATION_PROTOCOL_VERSION &&
+    value.source === "background" &&
+    value.target === "content" &&
+    value.type === "REGION_SELECTION_OPEN" &&
+    hasString(value, "requestId") &&
+    hasString(value, "sentAt") &&
+    isRecord(value.payload) &&
+    hasString(value.payload, "jobId")
+  );
+}
+
+function regionSelectionResponse(
+  request: RegionSelectionOpenRequest,
+  type: "REGION_SELECTION_OPENED" | "REGION_SELECTION_ERROR",
+  payload: unknown,
+): Record<string, unknown> {
+  return {
+    protocolVersion: PAGE_PREPARATION_PROTOCOL_VERSION,
+    requestId: request.requestId,
+    source: "content",
+    target: "background",
+    type,
+    payload,
+    sentAt: new Date().toISOString(),
+  };
+}
+
+function regionSelectionError(
+  request: RegionSelectionOpenRequest,
+  message: string,
+  causeCode: string,
+): Record<string, unknown> {
+  return regionSelectionResponse(request, "REGION_SELECTION_ERROR", {
+    code: "E_PROTOCOL_MESSAGE",
+    stage: "protocol",
+    message,
+    userMessageKey: "errors.regionSelection",
+    retryable: true,
+    fallbackAllowed: false,
+    causeCode,
+    safeContext: { jobId: request.payload.jobId },
+  });
+}
+
+async function sendRegionSelectionEvent(
+  type: "REGION_SELECTION_COMMIT" | "REGION_SELECTION_CANCEL",
+  jobId: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  await chrome.runtime.sendMessage({
+    protocolVersion: PAGE_PREPARATION_PROTOCOL_VERSION,
+    requestId: crypto.randomUUID(),
+    source: "content",
+    target: "background",
+    type,
+    payload: { jobId, ...payload },
+    sentAt: new Date().toISOString(),
+  });
+}
+
+function ensureRegionSelectionRuntime(state: PagePreparationRuntimeState): void {
+  if (state.regionListener !== undefined) {
+    return;
+  }
+
+  state.regionListener = (message, sender, sendResponse) => {
+    if (!isRegionSelectionOpenRequest(message) || sender.id !== chrome.runtime.id) {
+      return false;
+    }
+
+    const current = state.region;
+    if (current?.jobId === message.payload.jobId) {
+      sendResponse(
+        regionSelectionResponse(message, "REGION_SELECTION_OPENED", {
+          jobId: message.payload.jobId,
+          reused: true,
+        }),
+      );
+      return false;
+    }
+    if (current !== undefined) {
+      sendResponse(
+        regionSelectionError(
+          message,
+          "This page already has an active WebCap region selector.",
+          "ActiveRegionSelectionConflict",
+        ),
+      );
+      return false;
+    }
+
+    try {
+      state.region = openRegionSelector({
+        jobId: message.payload.jobId,
+        onCommit: async (rect) => {
+          state.region = undefined;
+          await sendRegionSelectionEvent("REGION_SELECTION_COMMIT", message.payload.jobId, {
+            rect,
+          });
+        },
+        onCancel: async (reason) => {
+          state.region = undefined;
+          await sendRegionSelectionEvent("REGION_SELECTION_CANCEL", message.payload.jobId, {
+            reason,
+          });
+        },
+      });
+      sendResponse(
+        regionSelectionResponse(message, "REGION_SELECTION_OPENED", {
+          jobId: message.payload.jobId,
+          reused: false,
+        }),
+      );
+    } catch (error) {
+      sendResponse(
+        regionSelectionError(
+          message,
+          error instanceof Error ? error.message : "Region selector could not be created.",
+          error instanceof Error ? error.name : "RegionSelectionOpenFailure",
+        ),
+      );
+    }
+    return false;
+  };
+
+  state.regionPageHideListener = () => {
+    state.region?.dispose();
+    state.region = undefined;
+  };
+  chrome.runtime.onMessage.addListener(state.regionListener);
+  window.addEventListener("pagehide", state.regionPageHideListener, { once: true });
+}
+
 function installRuntime(): { installed: boolean; reused: boolean; protocolVersion: number } {
   const carrier = globalThis as typeof globalThis & StateCarrier;
   const existing = carrier[PAGE_PREPARATION_GLOBAL_KEY];
   if (existing?.version === PAGE_PREPARATION_PROTOCOL_VERSION) {
+    ensureRegionSelectionRuntime(existing);
     return { installed: true, reused: true, protocolVersion: existing.version };
   }
 
@@ -927,6 +1083,7 @@ function installRuntime(): { installed: boolean; reused: boolean; protocolVersio
 
   chrome.runtime.onMessage.addListener(state.listener);
   window.addEventListener("pagehide", state.pageHideListener, { once: true });
+  ensureRegionSelectionRuntime(state);
   carrier[PAGE_PREPARATION_GLOBAL_KEY] = state;
   return { installed: true, reused: false, protocolVersion: state.version };
 }
