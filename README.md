@@ -6,7 +6,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 ## Current status
 
-**S07 — The debugger measurement and tile-planning foundation is complete.** WebCap now owns short-lived Chrome debugger sessions safely, normalizes CSS page metrics plus DPR/zoom, and creates deterministic 2D tile grids with edge, area, count, and dynamic-split guardrails. The next session is S08 page preparation, lazy-load settling, and restoration.
+**S08 — The page-preparation and restoration foundation is complete.** WebCap can inject a versioned content runtime on demand, pause unstable visual state, pre-scroll lazy content with bounded layout settling, cancel safely, and restore scroll, focus, selection, injected styles, and WebCap-owned inline mutations with compare-before-restore semantics. The next session is S09 CDP tiled full-page capture, progress, and cancellation.
 
 ## Requirements
 
@@ -47,7 +47,7 @@ pnpm package       # Build and verify the unpacked extension; ZIP packaging come
 5. Select the generated `dist/` directory.
 6. Open the WebCap action popup and confirm that **Service worker** shows **Đã kết nối**.
 
-The `dist/` output contains `manifest.json`, `popup.html`, `service-worker.js`, hashed popup assets, and the four extension icons. Generated output, dependency directories, test reports, and local browser profiles must not be committed.
+The `dist/` output contains `manifest.json`, `popup.html`, `service-worker.js`, `content-script.js`, `offscreen.html`, `offscreen.js`, hashed popup assets, and the four extension icons. Generated output, dependency directories, test reports, and local browser profiles must not be committed.
 
 ## Source structure
 
@@ -56,6 +56,7 @@ public/                 Manifest and static extension assets copied as-is.
 assets/                 Internal build-time icon sources.
 src/background/         Manifest V3 service worker and message routing.
 src/capture/            Page measurement and deterministic capture planning.
+src/content/            On-demand page preparation, lazy settle, and restoration runtime.
 src/popup/              React popup entry, shell, styles, and runtime client.
 src/shared/contracts/   Typed cross-context message envelopes.
 src/storage/            IndexedDB and chrome.storage repositories.

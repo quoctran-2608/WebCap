@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S08
+current_session: S09
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -106,8 +106,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | S05 | M1 | Preview UI và visible-capture E2E | S04 | 16k–24k | DONE |
 | S06 | M2 | Persistent job state machine và repositories | S05 | 16k–24k | DONE |
 | S07 | M2 | Debugger client, page metrics và 2D tile planner | S06 | 20k–28k | DONE |
-| S08 | M2 | Page preparation, lazy settle và restoration | S07 | 20k–28k | NEXT |
-| S09 | M2 | CDP tiled full-page capture, progress và cancel | S08 | 22k–30k | READY |
+| S08 | M2 | Page preparation, lazy settle và restoration | S07 | 20k–28k | DONE |
+| S09 | M2 | CDP tiled full-page capture, progress và cancel | S08 | 22k–30k | NEXT |
 | S10 | M2 | Scroll fallback, fixed policy và long-page validation | S09 | 22k–30k | READY |
 | S11 | M3 | CoordinateSpace và region selector | S10 | 18k–26k | READY |
 | S12 | M3 | Element selector và target capture | S11 | 18k–26k | READY |
@@ -357,7 +357,7 @@ pnpm build
 
 **Commit gợi ý:** `Implement debugger metrics and tile planner`.
 
-**Hoàn thành:** 2026-08-03 · PR #11 · validation head `a514f72`.
+**Hoàn thành:** 2026-08-03 · PR #11 · final head `fb03138` · squash `15b4ec6`.
 
 **Ghi chú kỹ thuật:** typed `chrome.debugger` adapter và `DebuggerClient` giới hạn một session sở hữu trên mỗi tab, áp dụng attach/command timeout, chuẩn hóa attach/CDP/unexpected-detach/cleanup errors và detach trên mọi path đã xác nhận. `Page.getLayoutMetrics` ưu tiên CSS metrics, kết hợp `Runtime.evaluate` cho DPR; planner sinh grid 2D row-major deterministic, clamp target, giữ edge remainder, chặn zero/gap, max pixel area/max tiles và hỗ trợ dynamic split. CI sạch pass format, lint, strict typecheck, 136 unit tests, build và 2 Playwright visible-capture E2E.
 
@@ -387,6 +387,10 @@ pnpm build
 **Exit criteria:** không để style/class/scroll thay đổi sau mọi exit path; settle có timeout và không dùng sleep tùy tiện.
 
 **Commit gợi ý:** `Add page preparation and restoration`.
+
+**Hoàn thành:** 2026-08-03 · PR #12 · validation head `b1f07eb`.
+
+**Ghi chú kỹ thuật:** background/content dùng protocol versioned và content runtime classic tự chứa, chỉ inject theo yêu cầu. Preparation snapshot scroll, focus, selection, freeze style và WebCap-owned inline mutations; lazy pre-scroll có RAF, MutationObserver, ResizeObserver, image decode best-effort, timeout/height/cancel guardrails. Restore idempotent dùng compare-before-restore, giữ nguyên inline `style` attribute, không ghi đè thay đổi mới của trang và chuẩn hóa partial cleanup thành `E_CLEANUP_PARTIAL` mà không che lỗi operation chính. CI sạch pass format, lint, strict typecheck, 150 unit tests, build verifier và 5 Playwright E2E gồm lazy/animation/layout-shift/fixed-sticky/cancel cùng hai visible-capture regressions.
 
 ---
 
@@ -801,9 +805,9 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S04 | DONE | 2026-08-02 | PR #8 / a4eeaa5 | format, lint, typecheck, 69 unit, build | Blob artifact persistence, offscreen PNG/JPEG/WebP processing, filename sanitizer, download lifecycle và retry không recapture đã được xác thực. |
 | S05 | DONE | 2026-08-02 | PR #9 / 579f5b6 | format, lint, typecheck, 76 unit, build, 2 Playwright E2E | Visible flow hoàn chỉnh từ capture đến preview, restore popup và download; DPR 2/zoom 125% đã được xác thực. |
 | S06 | DONE | 2026-08-02 | PR #10 / 58fbc61 | format, lint, typecheck, 110 unit, build, 2 Playwright E2E | State transitions, CAS repository, per-tab lease, restart recovery, persistent dedupe và expiry cleanup đã được xác thực. |
-| S07 | DONE | 2026-08-03 | PR #11 / a514f72 | format, lint, typecheck, 136 unit, build, 2 Playwright E2E | Debugger ownership/timeouts/detach, CSS metrics normalization và deterministic 2D tile planning 10k/30k/100k đã được xác thực. |
-| S08 | NEXT | — | — | — | Sẵn sàng triển khai page preparation, lazy settle và restoration. |
-| S09 | READY | — | — | — | — |
+| S07 | DONE | 2026-08-03 | PR #11 / fb03138 / squash 15b4ec6 | format, lint, typecheck, 136 unit, build, 2 Playwright E2E | Debugger ownership/timeouts/detach, CSS metrics normalization và deterministic 2D tile planning 10k/30k/100k đã được xác thực. |
+| S08 | DONE | 2026-08-03 | PR #12 / b1f07eb | format, lint, typecheck, 150 unit, build, 5 Playwright E2E | Content preparation protocol, bounded lazy/layout settle, exact compare-before-restore và success/error/cancel cleanup đã được xác thực. |
+| S09 | NEXT | — | — | — | Sẵn sàng triển khai CDP tiled full-page capture, progress và cancel. |
 | S10 | READY | — | — | — | — |
 | S11 | READY | — | — | — | — |
 | S12 | READY | — | — | — | — |
@@ -818,12 +822,12 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S08 — Page preparation, lazy settle và restoration**.
+Session kế tiếp là **S09 — CDP tiled full-page capture, progress và cancel**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S08.
-2. Đọc SPEC page preparation/restoration/lazy/fixed sections §15–17 và fixtures §27.
-3. Kiểm tra repo/branch và kết quả CI S07.
-4. Chỉ triển khai S08.
-5. Kết thúc với content-script preparation, deterministic settle và idempotent restoration trên success/error/cancel đầy đủ test.
+1. Đọc `PLAN.md` phần S09.
+2. Đọc SPEC §13–17, job/state sections và UI M2.
+3. Kiểm tra repo/branch và kết quả CI S08.
+4. Chỉ triển khai S09.
+5. Kết thúc với prepare → measure → plan → capture tiles → store → ready, progress/cancel checkpoints, debugger detach và page restore đầy đủ test.
