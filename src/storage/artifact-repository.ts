@@ -77,12 +77,9 @@ export class IndexedDbArtifactRepository implements ArtifactRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.artifacts, "readonly");
-      const completed = transactionDone(transaction);
-      const result = (await requestResult(
+      return (await requestResult(
         transaction.objectStore(WEBCAP_STORES.artifacts).get(artifactId),
       )) as ArtifactRecord | undefined;
-      await completed;
-      return result;
     } catch (error) {
       throw storageError("read", error);
     }
