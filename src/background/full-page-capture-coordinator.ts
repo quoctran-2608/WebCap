@@ -6,7 +6,7 @@ import type {
   CaptureProgress,
 } from "@capture/capture-engine";
 import { JOB_PROGRESS_THROTTLE_MS, TILE_RECORD_SCHEMA_VERSION } from "@shared/constants";
-import type { CaptureJob, CaptureTile } from "@shared/contracts/domain";
+import type { CaptureJob, CaptureTile, PageMetrics, Rect } from "@shared/contracts/domain";
 import type { StoredTileRecord } from "@shared/contracts/job";
 import { createJobProgressMessage } from "@shared/contracts/job-progress";
 import {
@@ -270,7 +270,7 @@ export class FullPageCaptureCoordinator {
         const selected = engines[attempt] as CaptureEngine;
         if (attempt > 0) {
           cancellation.throwIfCancelled("capture");
-          await this.resetForFallback(job.id, selected);
+          await this.resetForFallback(job.id);
           const current = await this.requireJob(job.id);
           await this.publish({
             jobId: job.id,
@@ -391,8 +391,8 @@ export class FullPageCaptureCoordinator {
   private async recordPlan(
     jobId: string,
     engine: CaptureEngine,
-    metrics: CaptureJob["metrics"],
-    targetRect: NonNullable<CaptureJob["targetRect"]>,
+    metrics: PageMetrics,
+    targetRect: Rect,
     tiles: CaptureTile[],
   ): Promise<void> {
     const job = await this.requireJob(jobId);
@@ -403,7 +403,6 @@ export class FullPageCaptureCoordinator {
       tilePlan: tiles,
       completedTiles: 0,
       totalTiles: tiles.length,
-      error: undefined,
     };
     if (job.state === "preparing") {
       await this.jobs.transition(job.id, "capturing", patch);
@@ -427,20 +426,8 @@ export class FullPageCaptureCoordinator {
     );
   }
 
-  private async resetForFallback(jobId: string, engine: CaptureEngine): Promise<void> {
+  private async resetForFallback(jobId: string): Promise<void> {
     await this.tiles.deleteByJob(jobId);
-    const job = await this.requireJob(jobId);
-    if (job.state === "capturing") {
-      await this.jobs.update(jobId, {
-        activeEngine: engine.kind,
-        tilePlan: [],
-        completedTiles: 0,
-        totalTiles: 0,
-        metrics: undefined,
-        targetRect: undefined,
-        error: undefined,
-      });
-    }
   }
 
   private async storeTile(jobId: string, tile: CaptureTile, blob: Blob): Promise<void> {
