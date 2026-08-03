@@ -55,23 +55,25 @@ await replaceOnce(
 `,
 );
 
-const manualAppend = `
-
-## S10 scroll fallback, fixed policy, and long-page validation
-
-1. Build and load the extension, open a disposable HTTP page, choose **Toàn bộ trang**, and keep the source tab active while fallback is running.
-2. Attach Chrome DevTools or another debugger to the source tab before starting capture. WebCap must fail CDP attachment, reuse the same persistent job, delete any partial CDP tiles, switch `activeEngine` to `scroll`, and finish with a new complete tile plan.
-3. Inspect IndexedDB `tiles`: every scroll tile must contain a non-empty PNG Blob, row/column/index metadata, the raw viewport `sourceRectCss`, a logical `outputRectCss`, and overlap/crop fields. Logical output rectangles must cover the target without a gap.
-4. On `tests/fixtures/fixed-header-footer.html` with the default smart policy, confirm the bottom fixed element is hidden on the first tile, both repeated edge elements are hidden on middle tiles, and the top fixed element is hidden on the final tile. No `data-webcap-scroll-*` marker or inline-style mutation may remain afterward.
-5. Repeat on `tests/fixtures/sticky-header.html` and verify sticky candidates are treated by the selected preserve/remove/smart policy without duplicating the header outside that policy.
-6. On `tests/fixtures/wide-table.html`, confirm fallback creates multiple rows and columns, horizontal and vertical overlap metadata are present, and the page returns to its original scroll/focus/style state.
-7. On `tests/fixtures/long-page-10k.html`, confirm the active-tab fallback captures at least 19 tiles, completes within the E2E timeout, and restores the original scroll position. The CI reference run completed this case in about 25.4 seconds.
-8. Change tabs during fallback and confirm the job fails with `E_TAB_NOT_ACTIVE` before another screenshot is stored. Add scroll snapping or change document dimensions during capture and confirm `E_LAYOUT_UNSTABLE` cleanup.
-9. Verify screenshot scale is calibrated from the first visible tile independently on the X and Y axes, while later tiles must retain both scales within two pixels; this accommodates scrollbar geometry without accepting zoom/DPR drift.
-10. Run `pnpm test:unit` for deterministic 10k/30k/100k planning and `pnpm test:e2e` for CDP success, automatic fallback, smart fixed policy, 2D wide-table coverage, 10k capture, page restoration, cancellation, and visible-capture regressions.
-
-Reference validation on Chrome for Testing 151: smart fixed fixture about 9.2 seconds, wide-table 2D fixture about 11.2 seconds, and 10k fallback fixture about 25.4 seconds. The 30k and 100k cases remain deterministic planner/guardrail benchmarks because a full rate-limited browser capture would intentionally lengthen CI; their planned tile counts are 56 and 187 respectively.
-`;
+const manualAppend = [
+  "",
+  "",
+  "## S10 scroll fallback, fixed policy, and long-page validation",
+  "",
+  "1. Build and load the extension, open a disposable HTTP page, choose **Toàn bộ trang**, and keep the source tab active while fallback is running.",
+  "2. Attach Chrome DevTools or another debugger to the source tab before starting capture. WebCap must fail CDP attachment, reuse the same persistent job, delete any partial CDP tiles, switch `activeEngine` to `scroll`, and finish with a new complete tile plan.",
+  "3. Inspect IndexedDB `tiles`: every scroll tile must contain a non-empty PNG Blob, row/column/index metadata, the raw viewport `sourceRectCss`, a logical `outputRectCss`, and overlap/crop fields. Logical output rectangles must cover the target without a gap.",
+  "4. On `tests/fixtures/fixed-header-footer.html` with the default smart policy, confirm the bottom fixed element is hidden on the first tile, both repeated edge elements are hidden on middle tiles, and the top fixed element is hidden on the final tile. No `data-webcap-scroll-*` marker or inline-style mutation may remain afterward.",
+  "5. Repeat on `tests/fixtures/sticky-header.html` and verify sticky candidates are treated by the selected preserve/remove/smart policy without duplicating the header outside that policy.",
+  "6. On `tests/fixtures/wide-table.html`, confirm fallback creates multiple rows and columns, horizontal and vertical overlap metadata are present, and the page returns to its original scroll/focus/style state.",
+  "7. On `tests/fixtures/long-page-10k.html`, confirm the active-tab fallback captures at least 19 tiles, completes within the E2E timeout, and restores the original scroll position. The CI reference run completed this case in about 25.4 seconds.",
+  "8. Change tabs during fallback and confirm the job fails with `E_TAB_NOT_ACTIVE` before another screenshot is stored. Add scroll snapping or change document dimensions during capture and confirm `E_LAYOUT_UNSTABLE` cleanup.",
+  "9. Verify screenshot scale is calibrated from the first visible tile independently on the X and Y axes, while later tiles must retain both scales within two pixels; this accommodates scrollbar geometry without accepting zoom/DPR drift.",
+  "10. Run `pnpm test:unit` for deterministic 10k/30k/100k planning and `pnpm test:e2e` for CDP success, automatic fallback, smart fixed policy, 2D wide-table coverage, 10k capture, page restoration, cancellation, and visible-capture regressions.",
+  "",
+  "Reference validation on Chrome for Testing 151: smart fixed fixture about 9.2 seconds, wide-table 2D fixture about 11.2 seconds, and 10k fallback fixture about 25.4 seconds. The 30k and 100k cases remain deterministic planner/guardrail benchmarks because a full rate-limited browser capture would intentionally lengthen CI; their planned tile counts are 56 and 187 respectively.",
+  "",
+].join("\n");
 const manual = await readFile("docs/manual-testing.md", "utf8");
 if (!manual.includes("## S10 scroll fallback, fixed policy, and long-page validation")) {
   await writeFile("docs/manual-testing.md", `${manual.trimEnd()}${manualAppend}`, "utf8");
