@@ -39,11 +39,13 @@ function pageResult(
   };
 }
 
-function setup(options: {
-  pagePatch?: (request: ScrollCapturePageRequest) => Partial<ScrollCapturePageResult>;
-  activeTabId?: number;
-  cleanupSkipped?: number;
-} = {}) {
+function setup(
+  options: {
+    pagePatch?: (request: ScrollCapturePageRequest) => Partial<ScrollCapturePageResult>;
+    activeTabId?: number;
+    cleanupSkipped?: number;
+  } = {},
+) {
   const scrollAndSettle = vi.fn((request: ScrollCapturePageRequest) =>
     Promise.resolve(pageResult(request, options.pagePatch?.(request))),
   );
