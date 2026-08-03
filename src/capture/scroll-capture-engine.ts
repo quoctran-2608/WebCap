@@ -104,27 +104,51 @@ function validatePixelDimensions(
   page: { viewportWidth: number; viewportHeight: number; devicePixelRatio: number },
   actual: { width: number; height: number },
   tileIndex: number,
-): void {
-  const expectedWidth = Math.max(1, Math.round(page.viewportWidth * page.devicePixelRatio));
-  const expectedHeight = Math.max(1, Math.round(page.viewportHeight * page.devicePixelRatio));
-  const tolerance = 2;
-  if (
-    Math.abs(actual.width - expectedWidth) <= tolerance &&
-    Math.abs(actual.height - expectedHeight) <= tolerance
-  ) {
-    return;
+  expectedScale: number | undefined,
+): number {
+  const scaleX = actual.width / page.viewportWidth;
+  const scaleY = actual.height / page.viewportHeight;
+  const calibratedScale = (scaleX + scaleY) / 2;
+  const axisTolerance = 0.02;
+  const minimumScale = 0.25;
+  const maximumScale = 8;
+  const dimensionsAreCoherent =
+    Number.isFinite(scaleX) &&
+    Number.isFinite(scaleY) &&
+    calibratedScale >= minimumScale &&
+    calibratedScale <= maximumScale &&
+    Math.abs(scaleX - scaleY) <= axisTolerance;
+
+  if (dimensionsAreCoherent && expectedScale === undefined) {
+    return calibratedScale;
   }
+
+  const stableScale = expectedScale ?? calibratedScale;
+  const expectedWidth = Math.max(1, Math.round(page.viewportWidth * stableScale));
+  const expectedHeight = Math.max(1, Math.round(page.viewportHeight * stableScale));
+  const pixelTolerance = 2;
+  if (
+    dimensionsAreCoherent &&
+    Math.abs(actual.width - expectedWidth) <= pixelTolerance &&
+    Math.abs(actual.height - expectedHeight) <= pixelTolerance
+  ) {
+    return stableScale;
+  }
+
   throw captureError({
     code: "E_LAYOUT_UNSTABLE",
-    message: "The visible screenshot pixel scale did not match the prepared viewport.",
+    message: "The visible screenshot pixel scale changed or did not match the viewport axes.",
     userMessageKey: "errors.pixelScaleMismatch",
     causeCode: "FallbackPixelScaleMismatch",
     safeContext: {
       tileIndex,
-      expectedWidth,
-      expectedHeight,
+      viewportWidth: page.viewportWidth,
+      viewportHeight: page.viewportHeight,
       actualWidth: actual.width,
       actualHeight: actual.height,
+      scaleX,
+      scaleY,
+      expectedScale: stableScale,
       devicePixelRatio: page.devicePixelRatio,
     },
   });
@@ -195,13 +219,14 @@ export class ScrollCaptureEngine implements CaptureEngine {
       targetRect,
       viewportWidthCss: initial.viewportWidth,
       viewportHeightCss: initial.viewportHeight,
-      pixelScale: initial.devicePixelRatio,
+      pixelScale: 1,
       overlapCss: this.overlapCss,
       maxTiles: context.settings.limits.maxTiles,
     });
     await context.onPlan(metrics, plan.targetRect, plan.tiles);
 
     const storedTiles: CaptureTile[] = [];
+    let captureScale: number | undefined;
     for (const planned of plan.tiles) {
       context.cancellation.throwIfCancelled("capture");
       await this.ensureActiveTab(context.tabId, windowId);
@@ -285,7 +310,7 @@ export class ScrollCaptureEngine implements CaptureEngine {
       if (!metadata.ok) {
         throw createWebCapRuntimeError(metadata.error);
       }
-      validatePixelDimensions(page, metadata.value, planned.index);
+      captureScale = validatePixelDimensions(page, metadata.value, planned.index, captureScale);
       const blob = dataUrlToBlob(dataUrl);
       if (blob.size === 0) {
         throw captureError({
