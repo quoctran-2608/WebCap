@@ -3,8 +3,10 @@ import { planPdfDocument } from "@offscreen/pdf-layout";
 import type { PdfExportPayload, PdfExportProgress } from "@offscreen/pdf-exporter";
 import type { ArtifactMetadata } from "@shared/contracts/artifact";
 import type { CaptureJob, CaptureSettings } from "@shared/contracts/domain";
+import type { PdfEditorPage } from "@shared/contracts/pdf-editor";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
+import type { PdfEditManifestRepositoryPort } from "@storage/pdf-edit-manifest-repository";
 import type { TileRepositoryPort } from "@storage/tile-repository";
 
 import type { PersistentJobCoordinatorPort } from "./job-coordinator";
@@ -17,6 +19,7 @@ export interface PdfExportServiceOptions {
   jobs: PersistentJobCoordinatorPort;
   tiles: TileRepositoryPort;
   offscreen: PdfOffscreenPort;
+  manifests?: PdfEditManifestRepositoryPort;
   now?: () => Date;
   createId?: () => string;
   artifactTtlMs?: number;
@@ -67,15 +70,18 @@ export class PdfExportService {
   private readonly jobs: PersistentJobCoordinatorPort;
   private readonly tiles: TileRepositoryPort;
   private readonly offscreen: PdfOffscreenPort;
+  private readonly manifests: PdfEditManifestRepositoryPort | undefined;
   private readonly now: () => Date;
   private readonly createId: () => string;
   private readonly artifactTtlMs: number;
   private readonly operations = new Map<string, Promise<void>>();
+  private readonly cancelledJobs = new Set<string>();
 
   constructor(options: PdfExportServiceOptions) {
     this.jobs = options.jobs;
     this.tiles = options.tiles;
     this.offscreen = options.offscreen;
+    this.manifests = options.manifests;
     this.now = options.now ?? (() => new Date());
     this.createId = options.createId ?? (() => crypto.randomUUID());
     this.artifactTtlMs = options.artifactTtlMs ?? DEFAULT_ARTIFACT_TTL_MS;
@@ -92,7 +98,7 @@ export class PdfExportService {
     if (current.state === "exporting") {
       return current;
     }
-    if (current.state !== "ready" || current.targetRect === undefined) {
+    if (!["ready", "failed"].includes(current.state) || current.targetRect === undefined) {
       throw jobNotReadyError(current);
     }
 
@@ -109,23 +115,28 @@ export class PdfExportService {
       throw exportSourceError(jobId, "PdfExportTilesMissing");
     }
 
-    const pdfSettings = settings ?? current.settings.pdf;
-    const plan = planPdfDocument(current.targetRect, pdfSettings);
+    const manifest = settings === undefined ? await this.manifests?.load(jobId) : undefined;
+    const pdfSettings = settings ?? manifest?.settings ?? current.settings.pdf;
+    const pages = manifest?.pages;
+    const totalPages =
+      pages?.length ?? planPdfDocument(current.targetRect, pdfSettings).pages.length;
+    this.cancelledJobs.delete(jobId);
     const exporting = await this.jobs.transition(
       jobId,
       "exporting",
       {
         exportProgress: {
           completedPages: 0,
-          totalPages: plan.pages.length,
+          totalPages,
         },
       },
       { sourceArtifactExists: true },
     );
 
     if (!this.operations.has(jobId)) {
-      const operation = this.run(exporting, pdfSettings).finally(() => {
+      const operation = this.run(exporting, pdfSettings, pages).finally(() => {
         this.operations.delete(jobId);
+        this.cancelledJobs.delete(jobId);
       });
       this.operations.set(jobId, operation);
       void operation.catch(() => undefined);
@@ -133,10 +144,27 @@ export class PdfExportService {
     return exporting;
   }
 
+  async cancel(jobId: string): Promise<CaptureJob> {
+    const job = await this.jobs.get(jobId);
+    if (job === undefined) {
+      throw exportSourceError(jobId, "PdfExportJobMissing");
+    }
+    if (job.state !== "exporting") {
+      return job;
+    }
+    this.cancelledJobs.add(jobId);
+    return this.jobs.transition(jobId, "ready", {
+      exportProgress: job.exportProgress ?? { completedPages: 0, totalPages: 1 },
+    });
+  }
+
   async handleProgress(progress: PdfExportProgress): Promise<CaptureJob | undefined> {
+    if (this.cancelledJobs.has(progress.jobId)) {
+      return undefined;
+    }
     const job = await this.jobs.get(progress.jobId);
     if (job === undefined || job.state !== "exporting") {
-      return job;
+      return undefined;
     }
     const current = job.exportProgress;
     if (
@@ -154,7 +182,11 @@ export class PdfExportService {
     });
   }
 
-  private async run(job: CaptureJob, settings: CaptureSettings["pdf"]): Promise<void> {
+  private async run(
+    job: CaptureJob,
+    settings: CaptureSettings["pdf"],
+    pages?: PdfEditorPage[],
+  ): Promise<void> {
     const targetRect = job.targetRect;
     if (targetRect === undefined) {
       throw exportSourceError(job.id, "PdfExportTargetMissing");
@@ -169,6 +201,7 @@ export class PdfExportService {
         targetRect,
         tiles: job.tilePlan,
         settings,
+        ...(pages === undefined ? {} : { pages }),
         filename: buildCaptureFilename({
           ...(job.source.title === undefined ? {} : { title: job.source.title }),
           ...(sourceDomain === undefined ? {} : { domain: sourceDomain }),
@@ -181,7 +214,7 @@ export class PdfExportService {
         ...(sourceDomain === undefined ? {} : { sourceDomain }),
       });
       const latest = await this.jobs.get(job.id);
-      if (latest?.state !== "exporting") {
+      if (latest?.state !== "exporting" || this.cancelledJobs.has(job.id)) {
         return;
       }
       await this.jobs.transition(job.id, "completed", {
@@ -193,7 +226,7 @@ export class PdfExportService {
       });
     } catch (error) {
       const latest = await this.jobs.get(job.id);
-      if (latest?.state !== "exporting") {
+      if (latest?.state !== "exporting" || this.cancelledJobs.has(job.id)) {
         return;
       }
       await this.jobs.transition(job.id, "failed", {
