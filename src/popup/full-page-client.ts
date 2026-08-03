@@ -19,7 +19,7 @@ async function sendJobRequest(
   request: unknown,
   timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
 ): Promise<CaptureJob> {
-  const response = await Promise.race([
+  const response: unknown = await Promise.race([
     chrome.runtime.sendMessage(request),
     rejectAfter(timeoutMs),
   ]);
