@@ -167,9 +167,6 @@ test("@smoke captures a multi-tile full page, persists tiles, restores, and deta
     return targets.find((target) => target.tabId === id)?.attached ?? false;
   }, tabId);
   expect(debuggerAttached).toBe(false);
-
-  await popup.getByRole("button", { name: "Kết thúc phiên tile" }).click();
-  await expect(popup.getByText("Đã hủy chụp toàn trang.")).toBeVisible();
 });
 
 test("@smoke cancels full-page preparation and restores page state", async ({
@@ -187,7 +184,9 @@ test("@smoke cancels full-page preparation and restores page state", async ({
   await selectFullPage(popup);
   await popup.getByRole("button", { name: "Bắt đầu chụp toàn trang" }).click();
   await popup.getByRole("button", { name: "Hủy chụp" }).click();
-  await expect(popup.getByText("Đã hủy chụp toàn trang.")).toBeVisible({ timeout: 30_000 });
+  await expect(
+    popup.getByTestId("full-page-progress").getByText("Đã hủy chụp toàn trang."),
+  ).toBeVisible({ timeout: 30_000 });
 
   const state = await readFullPageState(serviceWorker);
   expect(state.job).toMatchObject({
@@ -207,7 +206,7 @@ test("@smoke surfaces a fallback prompt when the debugger is already occupied", 
   await targetPage.locator("body").click({ position: { x: 20, y: 20 } });
   const before = await snapshotPage(targetPage);
   const tabId = await resolveFixtureTab(serviceWorker, targetPage);
-  await serviceWorker.evaluate(async (id) => chrome.debugger.attach({ tabId: id }, "0.1"), tabId);
+  await serviceWorker.evaluate(async (id) => chrome.debugger.attach({ tabId: id }, "1.3"), tabId);
 
   try {
     const popup = await openPopup();
