@@ -12,6 +12,8 @@ import { ScrollCaptureEngine } from "@capture/scroll-capture-engine";
 import type { CaptureTile } from "@shared/contracts/domain";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 
+const HUNDRED_PIXEL_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAIAAAD/gAIDAAAAnklEQVR42u3QMQEAAAgDILV/51nBzwci0CmuRoEsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWd8Wil4Bx2r6t7cAAAAASUVORK5CYII=";
 const ONE_PIXEL_PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=";
 
@@ -44,6 +46,7 @@ function setup(
     pagePatch?: (request: ScrollCapturePageRequest) => Partial<ScrollCapturePageResult>;
     activeTabId?: number;
     cleanupSkipped?: number;
+    captureDataUrl?: string;
   } = {},
 ) {
   const scrollAndSettle = vi.fn((request: ScrollCapturePageRequest) =>
@@ -58,7 +61,9 @@ function setup(
     }),
   );
   const pages: ScrollCapturePageAdapter = { scrollAndSettle, cleanup };
-  const captureVisibleTab = vi.fn(() => Promise.resolve(ONE_PIXEL_PNG));
+  const captureVisibleTab = vi.fn(() =>
+    Promise.resolve(options.captureDataUrl ?? HUNDRED_PIXEL_PNG),
+  );
   const tabs: TabsCaptureAdapter = {
     queryActiveTab: () =>
       Promise.resolve({
@@ -147,6 +152,8 @@ describe("ScrollCaptureEngine", () => {
         ({ tile, blob }) =>
           tile.status === "stored" &&
           tile.mimeType === "image/png" &&
+          tile.expectedPixelWidth === 100 &&
+          tile.expectedPixelHeight === 100 &&
           tile.byteLength === blob.size &&
           blob.size > 0,
       ),
@@ -178,6 +185,15 @@ describe("ScrollCaptureEngine", () => {
       expect.objectContaining({ name: "E_LAYOUT_UNSTABLE" }),
     );
     expect(harness.captureVisibleTab).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects a screenshot whose pixel dimensions do not match viewport DPR", async () => {
+    const harness = setup({ captureDataUrl: ONE_PIXEL_PNG });
+
+    await expect(harness.engine.capture(harness.context)).rejects.toThrowError(
+      expect.objectContaining({ name: "E_LAYOUT_UNSTABLE" }),
+    );
+    expect(harness.stored).toHaveLength(0);
   });
 
   it("reports compare-before-restore conflicts as partial cleanup", async () => {
