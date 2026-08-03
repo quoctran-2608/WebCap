@@ -100,9 +100,7 @@ async function readPdfState(serviceWorker: Worker): Promise<PdfState> {
                     ...(job.error.causeCode === undefined
                       ? {}
                       : { errorCauseCode: job.error.causeCode }),
-                    ...(job.error.message === undefined
-                      ? {}
-                      : { errorMessage: job.error.message }),
+                    ...(job.error.message === undefined ? {} : { errorMessage: job.error.message }),
                   }),
             },
       artifact:
