@@ -30,8 +30,9 @@ export class IndexedDbTileRepository implements TileRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.tiles, "readwrite");
+      const completed = transactionDone(transaction);
       transaction.objectStore(WEBCAP_STORES.tiles).put(validated);
-      await transactionDone(transaction);
+      await completed;
     } catch (error) {
       throw storageError("write", error);
     }
@@ -41,10 +42,11 @@ export class IndexedDbTileRepository implements TileRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.tiles, "readonly");
+      const completed = transactionDone(transaction);
       const value = await requestResult<unknown>(
         transaction.objectStore(WEBCAP_STORES.tiles).get([jobId, index]),
       );
-      await transactionDone(transaction);
+      await completed;
       return value === undefined ? undefined : parseRecord(value);
     } catch (error) {
       throw storageError("read", error);
@@ -55,9 +57,10 @@ export class IndexedDbTileRepository implements TileRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.tiles, "readonly");
+      const completed = transactionDone(transaction);
       const store = transaction.objectStore(WEBCAP_STORES.tiles);
       const values = await requestResult<unknown[]>(store.index("byJobId").getAll(jobId));
-      await transactionDone(transaction);
+      await completed;
       return values.map(parseRecord).sort((left, right) => left.index - right.index);
     } catch (error) {
       throw storageError("read", error);
@@ -68,13 +71,14 @@ export class IndexedDbTileRepository implements TileRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.tiles, "readwrite");
+      const completed = transactionDone(transaction);
       const store = transaction.objectStore(WEBCAP_STORES.tiles);
       const values = await requestResult<unknown[]>(store.index("byJobId").getAll(jobId));
       const records = values.map(parseRecord);
       for (const record of records) {
         store.delete([record.jobId, record.index]);
       }
-      await transactionDone(transaction);
+      await completed;
       return records.length;
     } catch (error) {
       throw storageError("write", error);
