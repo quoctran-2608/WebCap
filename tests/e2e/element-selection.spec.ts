@@ -201,12 +201,18 @@ test("@smoke selects normal element bounds with parent-child keyboard navigation
   const childBox = await child.boundingBox();
   if (childBox === null) throw new Error("Target child is not visible.");
   await targetPage.mouse.move(childBox.x + 30, childBox.y + 30);
-  await expect(root.getByText(/span#target-child\.capture-child\.violet-panel/u)).toBeVisible();
+  await expect(root.locator("[data-label]")).toContainText(
+    "span#target-child.capture-child.violet-panel",
+  );
   await targetPage.mouse.click(childBox.x + 30, childBox.y + 30);
   await targetPage.keyboard.press("ArrowUp");
-  await expect(root.getByText(/article#target-card\.capture-card\.outer-card/u)).toBeVisible();
+  await expect(root.locator("[data-label]")).toContainText(
+    "article#target-card.capture-card.outer-card",
+  );
   await targetPage.keyboard.press("ArrowDown");
-  await expect(root.getByText(/span#target-child\.capture-child\.violet-panel/u)).toBeVisible();
+  await expect(root.locator("[data-label]")).toContainText(
+    "span#target-child.capture-child.violet-panel",
+  );
   await targetPage.keyboard.press("Enter");
   await expect(root).toHaveCount(0);
 
@@ -252,7 +258,7 @@ test("@smoke selects the deepest target inside an open shadow root", async ({
   if (box === null) throw new Error("Open shadow target is not visible.");
   await targetPage.mouse.move(box.x + 25, box.y + 25);
   await targetPage.mouse.click(box.x + 25, box.y + 25);
-  await expect(root.getByText(/button#shadow-action\.shadow-button/u)).toBeVisible();
+  await expect(root.locator("[data-label]")).toContainText("button#shadow-action.shadow-button");
   await targetPage.keyboard.press("Enter");
 
   const state = await waitForElementState(serviceWorker, "ready");

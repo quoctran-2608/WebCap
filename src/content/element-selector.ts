@@ -105,10 +105,41 @@ function candidateFromComposedPath(path: readonly EventTarget[]): Element | unde
   );
 }
 
+function candidatesAtPoint(
+  root: Document | ShadowRoot,
+  clientX: number,
+  clientY: number,
+): Element[] {
+  return typeof root.elementsFromPoint === "function"
+    ? root.elementsFromPoint(clientX, clientY)
+    : [];
+}
+
+function deepestOpenShadowCandidate(
+  root: Document | ShadowRoot,
+  clientX: number,
+  clientY: number,
+): Element | undefined {
+  for (const candidate of candidatesAtPoint(root, clientX, clientY)) {
+    if (isSelectorNode(candidate)) {
+      continue;
+    }
+    const shadowRoot = candidate.shadowRoot;
+    if (shadowRoot?.mode === "open") {
+      const nested = deepestOpenShadowCandidate(shadowRoot, clientX, clientY);
+      if (nested !== undefined) {
+        return nested;
+      }
+    }
+    if (isSelectableElement(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
 function candidateFromPoint(clientX: number, clientY: number): Element | undefined {
-  return document
-    .elementsFromPoint(clientX, clientY)
-    .find((candidate) => isSelectableElement(candidate));
+  return deepestOpenShadowCandidate(document, clientX, clientY);
 }
 
 function parentCandidate(element: Element): Element | undefined {
@@ -368,8 +399,8 @@ export function openElementSelector(
       return;
     }
     const candidate =
-      candidateFromComposedPath(event.composedPath()) ??
-      candidateFromPoint(event.clientX, event.clientY);
+      candidateFromPoint(event.clientX, event.clientY) ??
+      candidateFromComposedPath(event.composedPath());
     if (selected === undefined && candidate !== hovered) {
       hovered = candidate;
       render();
@@ -381,8 +412,8 @@ export function openElementSelector(
       return;
     }
     const candidate =
-      candidateFromComposedPath(event.composedPath()) ??
-      candidateFromPoint(event.clientX, event.clientY);
+      candidateFromPoint(event.clientX, event.clientY) ??
+      candidateFromComposedPath(event.composedPath());
     if (candidate === undefined) {
       return;
     }
