@@ -11,7 +11,7 @@ export const ArtifactMimeTypeSchema = z.enum([
   "image/webp",
   "application/pdf",
 ]);
-export const ArtifactRoleSchema = z.enum(["source", "output"]);
+export const ArtifactRoleSchema = z.enum(["source", "output", "thumbnail"]);
 
 export const ArtifactMetadataSchema = z
   .object({
