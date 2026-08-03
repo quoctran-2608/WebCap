@@ -152,19 +152,19 @@ export function validateJobInvariants(
     }
   }
 
-  if (
-    job.state === "exporting" &&
-    (context.sourceArtifactExists !== true || job.exportProgress === undefined)
-  ) {
+  if (job.state === "exporting" && context.sourceArtifactExists !== true) {
     return err(
-      stateError(
-        "Exporting requires an existing source and initialized PDF progress.",
-        "ExportSourceMissing",
-        {
-          sourceArtifactExists: context.sourceArtifactExists === true,
-          hasExportProgress: job.exportProgress !== undefined,
-        },
-      ),
+      stateError("Exporting requires an existing source artifact.", "SourceArtifactMissing", {
+        sourceArtifactExists: false,
+      }),
+    );
+  }
+
+  if (job.state === "exporting" && job.exportProgress === undefined) {
+    return err(
+      stateError("PDF exporting requires initialized page progress.", "PdfProgressMissing", {
+        hasExportProgress: false,
+      }),
     );
   }
 
