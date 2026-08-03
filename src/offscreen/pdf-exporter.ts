@@ -2,6 +2,7 @@ import { PDFDocument } from "pdf-lib";
 
 import type { ArtifactMetadata, ArtifactRecord } from "@shared/contracts/artifact";
 import type { CaptureSettings, CaptureTile, Rect } from "@shared/contracts/domain";
+import type { PdfEditorPage } from "@shared/contracts/pdf-editor";
 import {
   WebCapRuntimeError,
   createWebCapError,
@@ -10,7 +11,7 @@ import {
 import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
 import type { TileRepositoryPort } from "@storage/tile-repository";
 
-import { createRunningPixelRanges, planPdfDocument } from "./pdf-layout";
+import { planPdfDocument } from "./pdf-layout";
 import { planPdfTileIntersections } from "./pdf-tile-intersections";
 
 export interface PdfExportPayload {
@@ -19,6 +20,7 @@ export interface PdfExportPayload {
   targetRect: Rect;
   tiles: CaptureTile[];
   settings: CaptureSettings["pdf"];
+  pages?: PdfEditorPage[];
   filename: string;
   createdAt: string;
   expiresAt: string;
@@ -186,6 +188,21 @@ function exportError(message: string, causeCode?: string): Error {
   );
 }
 
+function cancelledError(jobId: string): Error {
+  return createWebCapRuntimeError(
+    createWebCapError({
+      code: "E_CANCELLED",
+      stage: "export",
+      message: "PDF export was cancelled before the output artifact was saved.",
+      userMessageKey: "errors.cancelled",
+      retryable: true,
+      fallbackAllowed: false,
+      causeCode: "PdfExportCancelled",
+      safeContext: { jobId: jobId.slice(0, 24) },
+    }),
+  );
+}
+
 function storageReadError(message: string, safeContext: Record<string, string | number>): Error {
   return createWebCapRuntimeError(
     createWebCapError({
@@ -217,6 +234,17 @@ function roundRange(
   return { start: roundedStart, length: roundedEnd - roundedStart };
 }
 
+function defaultEditorPages(payload: PdfExportPayload): PdfEditorPage[] {
+  return planPdfDocument(payload.targetRect, payload.settings).pages.map((page) => ({
+    id: `page-${page.index + 1}`,
+    originalIndex: page.index,
+    sourceRectCss: page.sourceRectCss,
+    pageWidthPt: page.pageWidthPt,
+    pageHeightPt: page.pageHeightPt,
+    imageRectPt: page.imageRectPt,
+  }));
+}
+
 export class PdfExporter {
   private readonly tiles: TileRepositoryPort;
   private readonly artifacts: ArtifactRepositoryPort;
@@ -230,7 +258,8 @@ export class PdfExporter {
 
   async export(
     payload: PdfExportPayload,
-    reportProgress: (progress: PdfExportProgress) => Promise<void> = () => Promise.resolve(),
+    reportProgress: (progress: PdfExportProgress) => Promise<boolean> = () =>
+      Promise.resolve(true),
   ): Promise<PdfExportResult> {
     const records = await this.tiles.listByJob(payload.jobId);
     const recordByIndex = new Map(records.map((record) => [record.index, record]));
@@ -248,6 +277,10 @@ export class PdfExporter {
     if (firstTile === undefined) {
       throw exportError("PDF export requires at least one stored capture tile.", "PdfTilesMissing");
     }
+    const pages = payload.pages ?? defaultEditorPages(payload);
+    if (pages.length === 0) {
+      throw exportError("PDF export requires at least one selected page.", "PdfPagesMissing");
+    }
     const renderScaleX = positiveScale(
       firstTile.expectedPixelWidth / firstTile.sourceRectCss.width,
       "x",
@@ -256,13 +289,7 @@ export class PdfExporter {
       firstTile.expectedPixelHeight / firstTile.sourceRectCss.height,
       "y",
     );
-    const documentPlan = planPdfDocument(payload.targetRect, payload.settings);
     const totalPixelHeight = Math.max(1, Math.round(payload.targetRect.height * renderScaleY));
-    const pixelRanges = createRunningPixelRanges(
-      documentPlan.pages.map((page) => page.sourceRectCss.height),
-      renderScaleY,
-      totalPixelHeight,
-    );
     const canvasWidth = Math.max(1, Math.round(payload.targetRect.width * renderScaleX));
     const pdf = await this.environment.createDocument();
 
@@ -273,10 +300,14 @@ export class PdfExporter {
     let releasedCanvasCount = 0;
 
     try {
-      for (const page of documentPlan.pages) {
-        const pixelRange = pixelRanges[page.index];
-        if (pixelRange === undefined) {
-          throw exportError("PDF page pixel range is missing.", "PdfPagePixelRangeMissing");
+      for (const [outputIndex, page] of pages.entries()) {
+        const pixelRange = roundRange(
+          (page.sourceRectCss.y - payload.targetRect.y) * renderScaleY,
+          (page.sourceRectCss.y + page.sourceRectCss.height - payload.targetRect.y) * renderScaleY,
+          totalPixelHeight,
+        );
+        if (pixelRange.length <= 0) {
+          throw exportError("PDF page pixel range is empty.", "PdfPagePixelRangeMissing");
         }
         const canvas = this.environment.createCanvas(canvasWidth, pixelRange.length);
         maxCanvasPixelArea = Math.max(maxCanvasPixelArea, canvas.width * canvas.height);
@@ -381,11 +412,14 @@ export class PdfExporter {
           releasedCanvasCount += 1;
         }
 
-        await reportProgress({
+        const accepted = await reportProgress({
           jobId: payload.jobId,
-          completedPages: page.index + 1,
-          totalPages: documentPlan.pages.length,
+          completedPages: outputIndex + 1,
+          totalPages: pages.length,
         });
+        if (!accepted) {
+          throw cancelledError(payload.jobId);
+        }
       }
 
       const bytes = await pdf.save();
@@ -394,6 +428,10 @@ export class PdfExporter {
       }
       const ownedBytes = Uint8Array.from(bytes);
       const blob = new Blob([ownedBytes.buffer], { type: "application/pdf" });
+      const firstPage = pages[0];
+      if (firstPage === undefined) {
+        throw exportError("PDF output page metadata is unavailable.", "PdfPagesMissing");
+      }
       const record: ArtifactRecord = {
         artifactId: payload.outputArtifactId,
         sourceArtifactId: payload.jobId,
@@ -403,9 +441,9 @@ export class PdfExporter {
         mimeType: "application/pdf",
         filename: payload.filename,
         byteLength: blob.size,
-        width: Math.max(1, Math.round(documentPlan.pageBox.widthPt)),
-        height: Math.max(1, Math.round(documentPlan.pageBox.heightPt)),
-        pageCount: documentPlan.pages.length,
+        width: Math.max(1, Math.round(firstPage.pageWidthPt)),
+        height: Math.max(1, Math.round(firstPage.pageHeightPt)),
+        pageCount: pages.length,
         createdAt: payload.createdAt,
         expiresAt: payload.expiresAt,
         blob,
@@ -429,7 +467,7 @@ export class PdfExporter {
       return {
         artifact,
         diagnostics: {
-          pageCount: documentPlan.pages.length,
+          pageCount: pages.length,
           decodedTileCount,
           maxDecodedTiles,
           maxCanvasPixelArea,
