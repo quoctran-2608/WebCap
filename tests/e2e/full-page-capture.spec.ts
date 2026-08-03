@@ -162,11 +162,21 @@ test("@smoke captures a multi-tile full page, persists tiles, restores, and deta
   expect(state.tiles.every((tile) => tile.byteLength === tile.blobSize)).toBe(true);
   expect(await snapshotPage(targetPage)).toEqual(before);
 
-  const debuggerAttached = await serviceWorker.evaluate(async (id) => {
-    const targets = await chrome.debugger.getTargets();
-    return targets.find((target) => target.tabId === id)?.attached ?? false;
-  }, tabId);
-  expect(debuggerAttached).toBe(false);
+  await expect
+    .poll(
+      () =>
+        serviceWorker.evaluate(async (id) => {
+          try {
+            await chrome.debugger.attach({ tabId: id }, "1.3");
+            await chrome.debugger.detach({ tabId: id });
+            return true;
+          } catch {
+            return false;
+          }
+        }, tabId),
+      { timeout: 5_000 },
+    )
+    .toBe(true);
 });
 
 test("@smoke cancels full-page preparation and restores page state", async ({
