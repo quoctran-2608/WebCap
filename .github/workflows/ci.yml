@@ -39,17 +39,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Apply shadow fixture viewport fix
+      - name: Apply shadow coordinate assertion fix
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/s12-element-selector'
         run: |
-          node scripts/fix-s12-shadow-fixture.mjs
+          node scripts/fix-s12-shadow-coordinate-assertion.mjs
           pnpm format
-          rm scripts/fix-s12-shadow-fixture.mjs
+          rm scripts/fix-s12-shadow-coordinate-assertion.mjs
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add -A
-            git commit -m "Fix open shadow fixture viewport"
+            git commit -m "Fix shadow document coordinate assertion"
             git push origin HEAD:${GITHUB_HEAD_REF}
           fi
 
