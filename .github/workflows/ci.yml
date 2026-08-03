@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -21,8 +21,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -38,20 +36,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Format fallback E2E harness
-        if: github.event_name == 'pull_request' && github.head_ref == 'agent/s10-scroll-fallback-fixed-policy'
-        run: |
-          pnpm exec prettier --write \
-            tests/e2e/full-page-capture.spec.ts \
-            tests/e2e/scroll-fallback-long.spec.ts
-          if ! git diff --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add tests/e2e/full-page-capture.spec.ts tests/e2e/scroll-fallback-long.spec.ts
-            git commit -m "Format fallback E2E harness"
-            git push origin HEAD:${GITHUB_HEAD_REF}
-          fi
 
       - name: Check formatting
         run: pnpm format:check
