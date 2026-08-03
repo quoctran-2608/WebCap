@@ -32,10 +32,7 @@ describe("PDF page layout", () => {
     const landscape = resolvePdfPageBox({ ...base, orientation: "landscape" }, 1200);
     expect(landscape.widthPt).toBeGreaterThan(landscape.heightPt);
 
-    const fitWidth = resolvePdfPageBox(
-      { ...base, pageSize: "fit-width", marginMm: 0 },
-      960,
-    );
+    const fitWidth = resolvePdfPageBox({ ...base, pageSize: "fit-width", marginMm: 0 }, 960);
     expect(fitWidth.printableWidthPt).toBeCloseTo(720, 8);
   });
 
@@ -51,14 +48,14 @@ describe("PDF page layout", () => {
       expect(previous).toBeDefined();
       expect(current).toBeDefined();
       expect(current?.y).toBeCloseTo((previous?.y ?? 0) + (previous?.height ?? 0), 8);
-      expect(current?.sourceRectCss).toBeUndefined();
     }
     const last = plan.pages.at(-1)?.sourceRectCss;
     expect(last).toBeDefined();
     expect((last?.y ?? 0) + (last?.height ?? 0)).toBeCloseTo(source.y + source.height, 8);
-    expect(
-      plan.pages.reduce((sum, page) => sum + page.sourceRectCss.height, 0),
-    ).toBeCloseTo(source.height, 8);
+    expect(plan.pages.reduce((sum, page) => sum + page.sourceRectCss.height, 0)).toBeCloseTo(
+      source.height,
+      8,
+    );
   });
 
   it("carries fractional pixel residuals and reaches the exact final pixel", () => {

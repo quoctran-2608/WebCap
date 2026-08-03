@@ -3,12 +3,7 @@ import { describe, expect, it } from "vitest";
 import { planPdfTileIntersections, resolveTileOutputRect } from "@offscreen/pdf-tile-intersections";
 import type { CaptureTile } from "@shared/contracts/domain";
 
-function tile(
-  index: number,
-  sourceY: number,
-  outputY: number,
-  outputHeight: number,
-): CaptureTile {
+function tile(index: number, sourceY: number, outputY: number, outputHeight: number): CaptureTile {
   return {
     id: `job-1:${index}`,
     jobId: "job-1",

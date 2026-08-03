@@ -127,7 +127,9 @@ describe("PdfExporter", () => {
             },
           }),
           convertToJpeg: () =>
-            Promise.resolve(new Blob([ONE_PIXEL_JPEG], { type: "image/jpeg" })),
+            Promise.resolve(
+              new Blob([Uint8Array.from(ONE_PIXEL_JPEG).buffer], { type: "image/jpeg" }),
+            ),
           release() {
             releaseCount += 1;
           },
