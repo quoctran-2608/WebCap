@@ -53,7 +53,8 @@ class PdfEditorJobCoordinator implements PersistentJobCoordinatorPort {
     return Promise.resolve();
   }
 
-  create(_options: CreatePersistentJobOptions): Promise<CaptureJob> {
+  create(options: CreatePersistentJobOptions): Promise<CaptureJob> {
+    void options;
     return Promise.reject(new Error("PDF editor cannot create capture jobs."));
   }
 
@@ -88,7 +89,9 @@ class PdfEditorJobCoordinator implements PersistentJobCoordinatorPort {
     return result.value;
   }
 
-  cancel(_jobId: string, _reason?: string): Promise<CaptureJob> {
+  cancel(jobId: string, reason?: string): Promise<CaptureJob> {
+    void jobId;
+    void reason;
     return Promise.reject(new Error("PDF editor uses export-only cancellation."));
   }
 
