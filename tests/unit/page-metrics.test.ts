@@ -89,15 +89,15 @@ describe("page metrics", () => {
     const calls: Array<{ method: string; params?: Record<string, unknown> }> = [];
     const session: DebuggerSession = {
       tabId: 1,
-      async sendCommand<T>(method: string, params?: Record<string, unknown>): Promise<T> {
+      sendCommand<T>(method: string, params?: Record<string, unknown>): Promise<T> {
         calls.push({ method, ...(params === undefined ? {} : { params }) });
         if (method === "Page.getLayoutMetrics") {
-          return cssLayoutMetrics as T;
+          return Promise.resolve(cssLayoutMetrics as T);
         }
         if (method === "Runtime.evaluate") {
-          return { result: { value: 2 } } as T;
+          return Promise.resolve({ result: { value: 2 } } as T);
         }
-        return undefined as T;
+        return Promise.resolve(undefined as T);
       },
     };
 
