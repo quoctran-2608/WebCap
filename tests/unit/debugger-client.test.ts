@@ -75,7 +75,7 @@ describe("DebuggerClient", () => {
       client.withSession(9, (session) => session.sendCommand("Page.getLayoutMetrics")),
     ).resolves.toEqual({ ok: true });
 
-    expect(adapter.calls).toEqual(["attach:9:0.1", "command:9:Page.getLayoutMetrics", "detach:9"]);
+    expect(adapter.calls).toEqual(["attach:9:1.3", "command:9:Page.getLayoutMetrics", "detach:9"]);
     expect(adapter.listeners.size).toBe(0);
   });
 
@@ -89,7 +89,7 @@ describe("DebuggerClient", () => {
       .catch((value: unknown) => value);
 
     expectRuntimeError(error, "E_CDP_COMMAND");
-    expect(adapter.calls).toEqual(["attach:3:0.1", "command:3:Page.getLayoutMetrics", "detach:3"]);
+    expect(adapter.calls).toEqual(["attach:3:1.3", "command:3:Page.getLayoutMetrics", "detach:3"]);
   });
 
   it("normalizes attach errors without trying to detach", async () => {
@@ -102,7 +102,7 @@ describe("DebuggerClient", () => {
       .catch((value: unknown) => value);
 
     expectRuntimeError(error, "E_DEBUGGER_ATTACH");
-    expect(adapter.calls).toEqual(["attach:7:0.1"]);
+    expect(adapter.calls).toEqual(["attach:7:1.3"]);
   });
 
   it("times out an attach that never settles", async () => {
@@ -116,7 +116,7 @@ describe("DebuggerClient", () => {
 
     const runtimeError = expectRuntimeError(error, "E_DEBUGGER_ATTACH");
     expect(runtimeError.data.causeCode).toBe("TimeoutError");
-    expect(adapter.calls).toEqual(["attach:13:0.1"]);
+    expect(adapter.calls).toEqual(["attach:13:1.3"]);
     expect(adapter.listeners.size).toBe(0);
   });
 
@@ -132,7 +132,7 @@ describe("DebuggerClient", () => {
     const runtimeError = expectRuntimeError(error, "E_CDP_COMMAND");
     expect(runtimeError.data.causeCode).toBe("TimeoutError");
     expect(adapter.calls).toEqual([
-      "attach:15:0.1",
+      "attach:15:1.3",
       "command:15:Page.getLayoutMetrics",
       "detach:15",
     ]);
@@ -150,7 +150,7 @@ describe("DebuggerClient", () => {
           releaseTask = resolve;
         }),
     );
-    await vi.waitFor(() => expect(adapter.calls).toContain("attach:11:0.1"));
+    await vi.waitFor(() => expect(adapter.calls).toContain("attach:11:1.3"));
     adapter.emitDetach({ target: { tabId: 11 }, reason: "canceled_by_user" });
 
     const error = await work.catch((value: unknown) => value);
@@ -171,7 +171,7 @@ describe("DebuggerClient", () => {
           releaseFirst = resolve;
         }),
     );
-    await vi.waitFor(() => expect(adapter.calls).toContain("attach:5:0.1"));
+    await vi.waitFor(() => expect(adapter.calls).toContain("attach:5:1.3"));
 
     const error = await client
       .withSession(5, () => Promise.resolve(undefined))
