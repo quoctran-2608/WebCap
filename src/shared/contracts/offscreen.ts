@@ -2,7 +2,12 @@ import { z } from "zod";
 
 import { PROTOCOL_VERSION } from "@shared/constants";
 import { ArtifactMetadataSchema } from "@shared/contracts/artifact";
-import { ImageFormatSchema } from "@shared/contracts/domain";
+import {
+  CaptureSettingsSchema,
+  CaptureTileSchema,
+  ImageFormatSchema,
+  RectSchema,
+} from "@shared/contracts/domain";
 import { WebCapErrorDataSchema, type WebCapErrorData } from "@shared/errors/error";
 import { err, ok, type Result } from "@shared/result";
 
@@ -52,6 +57,58 @@ export const OffscreenImageProcessedMessageSchema = EnvelopeBaseSchema.extend({
   payload: ArtifactMetadataSchema,
 }).strict();
 
+export const OffscreenExportPdfMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("background"),
+  target: z.literal("offscreen"),
+  type: z.literal("OFFSCREEN_EXPORT_PDF"),
+  payload: z
+    .object({
+      jobId: z.string().min(1).max(160),
+      outputArtifactId: z.string().min(1).max(160),
+      targetRect: RectSchema,
+      tiles: z.array(CaptureTileSchema).min(1),
+      settings: CaptureSettingsSchema.shape.pdf,
+      filename: z.string().min(1).max(180),
+      createdAt: IsoDateTimeSchema,
+      expiresAt: IsoDateTimeSchema,
+      sourceTitle: z.string().max(300).optional(),
+      sourceDomain: z.string().max(300).optional(),
+    })
+    .strict(),
+}).strict();
+
+export const OffscreenPdfExportedMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("offscreen"),
+  target: z.literal("background"),
+  type: z.literal("OFFSCREEN_PDF_EXPORTED"),
+  payload: ArtifactMetadataSchema,
+}).strict();
+
+export const OffscreenPdfExportProgressMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("offscreen"),
+  target: z.literal("background"),
+  type: z.literal("OFFSCREEN_PDF_EXPORT_PROGRESS"),
+  payload: z
+    .object({
+      jobId: z.string().min(1).max(160),
+      completedPages: z.number().int().nonnegative(),
+      totalPages: z.number().int().positive(),
+    })
+    .strict(),
+}).strict();
+
+export const OffscreenPdfExportProgressAckMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("background"),
+  target: z.literal("offscreen"),
+  type: z.literal("OFFSCREEN_PDF_EXPORT_PROGRESS_ACK"),
+  payload: z
+    .object({
+      jobId: z.string().min(1).max(160),
+      accepted: z.boolean(),
+    })
+    .strict(),
+}).strict();
+
 export const OffscreenCreateObjectUrlMessageSchema = EnvelopeBaseSchema.extend({
   source: z.literal("background"),
   target: z.literal("offscreen"),
@@ -90,6 +147,7 @@ export const OffscreenErrorMessageSchema = EnvelopeBaseSchema.extend({
 export const OffscreenRequestSchema = z.discriminatedUnion("type", [
   OffscreenPingMessageSchema,
   OffscreenProcessImageMessageSchema,
+  OffscreenExportPdfMessageSchema,
   OffscreenCreateObjectUrlMessageSchema,
   OffscreenRevokeObjectUrlMessageSchema,
 ]);
@@ -97,6 +155,8 @@ export const OffscreenRequestSchema = z.discriminatedUnion("type", [
 export const OffscreenResponseSchema = z.discriminatedUnion("type", [
   OffscreenReadyMessageSchema,
   OffscreenImageProcessedMessageSchema,
+  OffscreenPdfExportedMessageSchema,
+  OffscreenPdfExportProgressAckMessageSchema,
   OffscreenObjectUrlCreatedMessageSchema,
   OffscreenObjectUrlRevokedMessageSchema,
   OffscreenErrorMessageSchema,
@@ -106,6 +166,14 @@ export type OffscreenPingMessage = z.infer<typeof OffscreenPingMessageSchema>;
 export type OffscreenReadyMessage = z.infer<typeof OffscreenReadyMessageSchema>;
 export type OffscreenProcessImageMessage = z.infer<typeof OffscreenProcessImageMessageSchema>;
 export type OffscreenImageProcessedMessage = z.infer<typeof OffscreenImageProcessedMessageSchema>;
+export type OffscreenExportPdfMessage = z.infer<typeof OffscreenExportPdfMessageSchema>;
+export type OffscreenPdfExportedMessage = z.infer<typeof OffscreenPdfExportedMessageSchema>;
+export type OffscreenPdfExportProgressMessage = z.infer<
+  typeof OffscreenPdfExportProgressMessageSchema
+>;
+export type OffscreenPdfExportProgressAckMessage = z.infer<
+  typeof OffscreenPdfExportProgressAckMessageSchema
+>;
 export type OffscreenCreateObjectUrlMessage = z.infer<typeof OffscreenCreateObjectUrlMessageSchema>;
 export type OffscreenObjectUrlCreatedMessage = z.infer<
   typeof OffscreenObjectUrlCreatedMessageSchema
@@ -179,6 +247,77 @@ export function createOffscreenImageProcessedMessage(
     target: "background",
     type: "OFFSCREEN_IMAGE_PROCESSED",
     payload: options.artifact,
+    sentAt: options.sentAt,
+  });
+}
+
+export function createOffscreenExportPdfMessage(
+  options: MessageOptions & OffscreenExportPdfMessage["payload"],
+): OffscreenExportPdfMessage {
+  return OffscreenExportPdfMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "offscreen",
+    type: "OFFSCREEN_EXPORT_PDF",
+    payload: {
+      jobId: options.jobId,
+      outputArtifactId: options.outputArtifactId,
+      targetRect: options.targetRect,
+      tiles: options.tiles,
+      settings: options.settings,
+      filename: options.filename,
+      createdAt: options.createdAt,
+      expiresAt: options.expiresAt,
+      ...(options.sourceTitle === undefined ? {} : { sourceTitle: options.sourceTitle }),
+      ...(options.sourceDomain === undefined ? {} : { sourceDomain: options.sourceDomain }),
+    },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createOffscreenPdfExportedMessage(
+  options: MessageOptions & { artifact: OffscreenPdfExportedMessage["payload"] },
+): OffscreenPdfExportedMessage {
+  return OffscreenPdfExportedMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "offscreen",
+    target: "background",
+    type: "OFFSCREEN_PDF_EXPORTED",
+    payload: options.artifact,
+    sentAt: options.sentAt,
+  });
+}
+
+export function createOffscreenPdfExportProgressMessage(
+  options: MessageOptions & OffscreenPdfExportProgressMessage["payload"],
+): OffscreenPdfExportProgressMessage {
+  return OffscreenPdfExportProgressMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "offscreen",
+    target: "background",
+    type: "OFFSCREEN_PDF_EXPORT_PROGRESS",
+    payload: {
+      jobId: options.jobId,
+      completedPages: options.completedPages,
+      totalPages: options.totalPages,
+    },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createOffscreenPdfExportProgressAckMessage(
+  options: MessageOptions & OffscreenPdfExportProgressAckMessage["payload"],
+): OffscreenPdfExportProgressAckMessage {
+  return OffscreenPdfExportProgressAckMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "offscreen",
+    type: "OFFSCREEN_PDF_EXPORT_PROGRESS_ACK",
+    payload: { jobId: options.jobId, accepted: options.accepted },
     sentAt: options.sentAt,
   });
 }
@@ -277,6 +416,18 @@ export function isOffscreenImageProcessedMessage(
   value: unknown,
 ): value is OffscreenImageProcessedMessage {
   return OffscreenImageProcessedMessageSchema.safeParse(value).success;
+}
+
+export function isOffscreenPdfExportedMessage(
+  value: unknown,
+): value is OffscreenPdfExportedMessage {
+  return OffscreenPdfExportedMessageSchema.safeParse(value).success;
+}
+
+export function isOffscreenPdfExportProgressMessage(
+  value: unknown,
+): value is OffscreenPdfExportProgressMessage {
+  return OffscreenPdfExportProgressMessageSchema.safeParse(value).success;
 }
 
 export function isOffscreenObjectUrlCreatedMessage(

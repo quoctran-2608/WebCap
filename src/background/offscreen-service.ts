@@ -2,14 +2,17 @@ import type { ArtifactMetadata } from "@shared/contracts/artifact";
 import type { ImageFormat } from "@shared/contracts/domain";
 import {
   createOffscreenCreateObjectUrlMessage,
+  createOffscreenExportPdfMessage,
   createOffscreenPingMessage,
   createOffscreenProcessImageMessage,
   createOffscreenRevokeObjectUrlMessage,
   isOffscreenErrorMessage,
   isOffscreenImageProcessedMessage,
+  isOffscreenPdfExportedMessage,
   isOffscreenObjectUrlCreatedMessage,
   isOffscreenObjectUrlRevokedMessage,
   isOffscreenReadyMessage,
+  type OffscreenExportPdfMessage,
 } from "@shared/contracts/offscreen";
 import {
   createWebCapError,
@@ -186,6 +189,24 @@ export class OffscreenService {
     });
   }
 
+  async exportPdf(options: OffscreenExportPdfMessage["payload"]): Promise<ArtifactMetadata> {
+    return this.withDocument(async () => {
+      const request = createOffscreenExportPdfMessage({
+        requestId: this.createRequestId(),
+        sentAt: this.now().toISOString(),
+        ...options,
+      });
+      const response = await this.runtime.sendMessage(request);
+      throwOffscreenError(response);
+      if (!isOffscreenPdfExportedMessage(response) || response.requestId !== request.requestId) {
+        throw unavailableError(
+          new TypeError("Offscreen processor returned an invalid PDF response."),
+        );
+      }
+      return response.payload;
+    });
+  }
+
   async createObjectUrl(artifactId: string): Promise<string> {
     return this.withDocument(async () => {
       const request = createOffscreenCreateObjectUrlMessage({
@@ -261,7 +282,7 @@ export class OffscreenService {
       await this.offscreen.createDocument({
         url: OFFSCREEN_PATH,
         reasons: ["BLOBS"],
-        justification: "Encode captured images and manage local download Blob URLs.",
+        justification: "Encode captured images and PDFs and manage local download Blob URLs.",
       });
       await this.handshake();
     } catch (error) {

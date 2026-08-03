@@ -32,6 +32,12 @@ export const JobStateSchema = z.enum([
 export const FixedElementModeSchema = z.enum(["preserve", "smart", "remove"]);
 export const ImageFormatSchema = z.enum(["png", "jpeg", "webp"]);
 export const OutputFormatSchema = z.enum(["png", "jpeg", "webp", "pdf"]);
+export const ExportProgressSchema = z
+  .object({
+    completedPages: NonNegativeIntegerSchema,
+    totalPages: PositiveIntegerSchema,
+  })
+  .strict();
 
 export const RectSchema = z
   .object({
@@ -158,6 +164,8 @@ export const CaptureJobSchema = z
     totalTiles: NonNegativeIntegerSchema,
     settings: CaptureSettingsSchema,
     cleanup: CleanupStateSchema,
+    exportProgress: ExportProgressSchema.optional(),
+    outputArtifactId: z.string().min(1).max(160).optional(),
     error: WebCapErrorDataSchema.optional(),
     createdAt: IsoDateTimeSchema,
     updatedAt: IsoDateTimeSchema,
@@ -171,6 +179,7 @@ export type JobState = z.infer<typeof JobStateSchema>;
 export type FixedElementMode = z.infer<typeof FixedElementModeSchema>;
 export type ImageFormat = z.infer<typeof ImageFormatSchema>;
 export type OutputFormat = z.infer<typeof OutputFormatSchema>;
+export type ExportProgress = z.infer<typeof ExportProgressSchema>;
 export type Rect = z.infer<typeof RectSchema>;
 export type ElementTargetDescriptor = z.infer<typeof ElementTargetDescriptorSchema>;
 export type PageMetrics = z.infer<typeof PageMetricsSchema>;
