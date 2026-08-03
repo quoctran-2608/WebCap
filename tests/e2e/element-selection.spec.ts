@@ -306,7 +306,9 @@ test("@smoke fails stale target safely instead of capturing a replacement", asyn
   await targetPage.bringToFront();
   await serviceWorker.evaluate(async (id) => chrome.tabs.update(id, { active: true }), tabId);
   await popup.reload();
-  await expect(popup.getByRole("heading", { name: "Không thể hoàn tất chụp phần tử" })).toBeVisible();
+  await expect(
+    popup.getByRole("heading", { name: "Không thể hoàn tất chụp phần tử" }),
+  ).toBeVisible();
   await expect(popup.getByRole("button", { name: "Chọn lại phần tử" })).toBeVisible();
 });
 

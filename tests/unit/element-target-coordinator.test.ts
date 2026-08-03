@@ -189,7 +189,12 @@ describe("element target capture coordination", () => {
     const engine: CaptureEngine = {
       kind: "cdp",
       async capture(context: CaptureEngineContext) {
-        const target = context.targetRect as { x: number; y: number; width: number; height: number };
+        const target = context.targetRect as {
+          x: number;
+          y: number;
+          width: number;
+          height: number;
+        };
         const planned = tile(target);
         await context.onPlan(metrics, target, [planned]);
         await context.storeTile(

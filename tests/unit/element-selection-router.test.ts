@@ -7,7 +7,10 @@ import {
 import type { JobCleanupReport, PersistentJobCoordinatorPort } from "@background/job-coordinator";
 import { PROTOCOL_VERSION } from "@shared/constants";
 import type { CaptureJob } from "@shared/contracts/domain";
-import { ElementSelectionCommitMessageSchema, ElementSelectionCancelMessageSchema } from "@shared/contracts/element-selection";
+import {
+  ElementSelectionCommitMessageSchema,
+  ElementSelectionCancelMessageSchema,
+} from "@shared/contracts/element-selection";
 import type { StoredDedupeRecord } from "@shared/contracts/job";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 import type { DedupeRepositoryPort } from "@storage/dedupe-repository";
@@ -150,7 +153,10 @@ describe("element selection routing", () => {
       type: "ELEMENT_SELECTION_EVENT_ACK",
       payload: { jobId: "element-job", accepted: true },
     });
-    expect(jobs.updateCall).toHaveBeenCalledWith({ targetRect: rect, targetDescriptor: descriptor });
+    expect(jobs.updateCall).toHaveBeenCalledWith({
+      targetRect: rect,
+      targetDescriptor: descriptor,
+    });
     expect(current.start).toHaveBeenCalledWith("element-job");
   });
 

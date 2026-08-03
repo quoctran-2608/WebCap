@@ -65,7 +65,11 @@ describe("ElementSelectionService", () => {
         sentAt: now.toISOString(),
       },
     ]);
-    const service = new ElementSelectionService(current.browser, () => now, () => "request-1");
+    const service = new ElementSelectionService(
+      current.browser,
+      () => now,
+      () => "request-1",
+    );
 
     await service.start(7, "job-1");
 
@@ -92,7 +96,11 @@ describe("ElementSelectionService", () => {
         sentAt: now.toISOString(),
       },
     ]);
-    const service = new ElementSelectionService(current.browser, () => now, () => "validate-1");
+    const service = new ElementSelectionService(
+      current.browser,
+      () => now,
+      () => "validate-1",
+    );
 
     await expect(service.revalidate(elementJob())).resolves.toEqual({
       x: 90,
