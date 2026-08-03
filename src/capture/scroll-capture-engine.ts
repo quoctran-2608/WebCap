@@ -100,6 +100,36 @@ function metricsFromPage(result: {
   };
 }
 
+function validatePixelDimensions(
+  page: { viewportWidth: number; viewportHeight: number; devicePixelRatio: number },
+  actual: { width: number; height: number },
+  tileIndex: number,
+): void {
+  const expectedWidth = Math.max(1, Math.round(page.viewportWidth * page.devicePixelRatio));
+  const expectedHeight = Math.max(1, Math.round(page.viewportHeight * page.devicePixelRatio));
+  const tolerance = 2;
+  if (
+    Math.abs(actual.width - expectedWidth) <= tolerance &&
+    Math.abs(actual.height - expectedHeight) <= tolerance
+  ) {
+    return;
+  }
+  throw captureError({
+    code: "E_LAYOUT_UNSTABLE",
+    message: "The visible screenshot pixel scale did not match the prepared viewport.",
+    userMessageKey: "errors.pixelScaleMismatch",
+    causeCode: "FallbackPixelScaleMismatch",
+    safeContext: {
+      tileIndex,
+      expectedWidth,
+      expectedHeight,
+      actualWidth: actual.width,
+      actualHeight: actual.height,
+      devicePixelRatio: page.devicePixelRatio,
+    },
+  });
+}
+
 export class ScrollCaptureEngine implements CaptureEngine {
   readonly kind = "scroll" as const;
   private readonly pages: ScrollCapturePageAdapter;
@@ -118,7 +148,8 @@ export class ScrollCaptureEngine implements CaptureEngine {
 
   async capture(context: CaptureEngineContext): Promise<CaptureEngineResult> {
     const preparation = context.preparation;
-    if (preparation === undefined || context.windowId === undefined) {
+    const windowId = context.windowId;
+    if (preparation === undefined || windowId === undefined) {
       throw captureError({
         code: "E_PROTOCOL_MESSAGE",
         message: "Scroll fallback requires prepared-page and window context.",
@@ -173,7 +204,7 @@ export class ScrollCaptureEngine implements CaptureEngine {
     const storedTiles: CaptureTile[] = [];
     for (const planned of plan.tiles) {
       context.cancellation.throwIfCancelled("capture");
-      await this.ensureActiveTab(context.tabId, context.windowId);
+      await this.ensureActiveTab(context.tabId, windowId);
       await context.reportProgress({
         jobId: context.jobId,
         state: "capturing",
@@ -224,7 +255,7 @@ export class ScrollCaptureEngine implements CaptureEngine {
       }
 
       context.cancellation.throwIfCancelled("capture");
-      await this.ensureActiveTab(context.tabId, context.windowId);
+      await this.ensureActiveTab(context.tabId, windowId);
       await context.reportProgress({
         jobId: context.jobId,
         state: "capturing",
@@ -236,9 +267,7 @@ export class ScrollCaptureEngine implements CaptureEngine {
 
       let dataUrl: string;
       try {
-        dataUrl = await this.limiter.run(() =>
-          this.tabs.captureVisibleTab(context.windowId as number),
-        );
+        dataUrl = await this.limiter.run(() => this.tabs.captureVisibleTab(windowId));
       } catch (error) {
         throw createWebCapRuntimeError(
           normalizeError(error, {
@@ -256,6 +285,7 @@ export class ScrollCaptureEngine implements CaptureEngine {
       if (!metadata.ok) {
         throw createWebCapRuntimeError(metadata.error);
       }
+      validatePixelDimensions(page, metadata.value, planned.index);
       const blob = dataUrlToBlob(dataUrl);
       if (blob.size === 0) {
         throw captureError({
