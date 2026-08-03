@@ -90,3 +90,75 @@ await replaceInFile(
       };
     },`,
 );
+
+await replaceInFile(
+  "src/content/entry.ts",
+  `  try {
+    if (snapshot.styleElement.isConnected) {
+      const stillOwned =
+        snapshot.styleElement.getAttribute(PAGE_PREPARATION_STYLE_ATTRIBUTE) ===
+          snapshot.preparationId && snapshot.styleElement.textContent === snapshot.styleText;
+      if (stillOwned) {
+        snapshot.styleElement.remove();
+        report.styleRemoved = true;
+      } else {
+        report.residualMutations += 1;
+      }
+    } else {
+      report.styleRemoved = true;
+    }
+  } catch {
+    report.errors += 1;
+    report.residualMutations += 1;
+  }
+
+  try {
+    const scrollStillOwned =
+      Math.abs(window.scrollX - snapshot.preparedScrollX) <= 1 &&
+      Math.abs(window.scrollY - snapshot.preparedScrollY) <= 1;
+    if (scrollStillOwned) {
+      window.scrollTo({
+        left: snapshot.originalScrollX,
+        top: snapshot.originalScrollY,
+        behavior: "auto",
+      });
+      report.scrollRestored = true;
+    }
+  } catch {
+    report.errors += 1;
+  }`,
+  `  try {
+    const scrollStillOwned =
+      Math.abs(window.scrollX - snapshot.preparedScrollX) <= 1 &&
+      Math.abs(window.scrollY - snapshot.preparedScrollY) <= 1;
+    if (scrollStillOwned) {
+      window.scrollTo({
+        left: snapshot.originalScrollX,
+        top: snapshot.originalScrollY,
+        behavior: "auto",
+      });
+      report.scrollRestored = true;
+    }
+  } catch {
+    report.errors += 1;
+  }
+
+  try {
+    if (snapshot.styleElement.isConnected) {
+      const stillOwned =
+        snapshot.styleElement.getAttribute(PAGE_PREPARATION_STYLE_ATTRIBUTE) ===
+          snapshot.preparationId && snapshot.styleElement.textContent === snapshot.styleText;
+      if (stillOwned) {
+        snapshot.styleElement.remove();
+        report.styleRemoved = true;
+      } else {
+        report.residualMutations += 1;
+      }
+    } else {
+      report.styleRemoved = true;
+    }
+  } catch {
+    report.errors += 1;
+    report.residualMutations += 1;
+  }`,
+);
