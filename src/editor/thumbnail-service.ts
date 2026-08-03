@@ -10,6 +10,8 @@ import { IndexedDbTileRepository } from "@storage/tile-repository";
 const THUMBNAIL_MAX_EDGE = 320;
 const THUMBNAIL_QUALITY = 0.62;
 
+let renderQueue: Promise<void> = Promise.resolve();
+
 export interface DecodedThumbnailTile {
   width: number;
   height: number;
@@ -51,6 +53,15 @@ export interface PdfThumbnailOptions {
   tileRepository?: TileRepositoryPort;
   environment?: ThumbnailEnvironment;
   now?: () => Date;
+}
+
+function scheduleRender<T>(operation: () => Promise<T>): Promise<T> {
+  const result = renderQueue.then(operation, operation);
+  renderQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
 }
 
 function artifactIdFor(jobId: string, revision: number, pageId: string): string {
@@ -153,7 +164,7 @@ const browserEnvironment: ThumbnailEnvironment = {
   },
 };
 
-export async function createPdfPageThumbnail(
+async function renderPdfPageThumbnail(
   options: PdfThumbnailOptions,
 ): Promise<ArtifactMetadata> {
   const artifacts = options.artifacts ?? new IndexedDbArtifactRepository();
@@ -254,4 +265,10 @@ export async function createPdfPageThumbnail(
   } finally {
     canvas.release();
   }
+}
+
+export function createPdfPageThumbnail(
+  options: PdfThumbnailOptions,
+): Promise<ArtifactMetadata> {
+  return scheduleRender(() => renderPdfPageThumbnail(options));
 }
