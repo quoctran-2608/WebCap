@@ -116,3 +116,16 @@ Reference validation on Chrome for Testing 151: smart fixed fixture about 9.2 se
 10. Repeat at DPR 2 and Chrome zoom 125%. The confirmed `targetRect` must remain stable in CSS document coordinates while the capture engine handles screenshot pixel scale separately.
 
 Run `pnpm test:unit` for the coordinate matrix, protocol, selector service, router, active-job lookup, and cancellation semantics. Run `pnpm test:e2e` for region auto-scroll capture, overlay pixel exclusion, popup recovery, Escape cancellation, zoom/DPR, and all existing visible/full-page regressions. Reference CI run `30799895160` passed 188 unit tests across 49 files and 14 Playwright tests on Chrome for Testing 151.
+
+## S12 element selector and stale-target validation
+
+1. Build and load the extension, serve `tests/fixtures/element-selection.html`, open WebCap, choose **Phần tử**, and start selection.
+2. Move the pointer over nested elements. Confirm the cyan highlight follows the deepest valid candidate and the label contains only sanitized tag, optional id, up to three classes, and visible dimensions; page text must not be copied into persistent metadata.
+3. Click the violet child panel, press **ArrowUp** to select its article parent, then **ArrowDown** to return to the previously selected child. Press **Enter** and confirm the stored CSS document rectangle matches the child bounds and the resulting PNG tile contains the violet target rather than the selector UI.
+4. Repeat on the open shadow-root button. Confirm WebCap selects `button#shadow-action.shadow-button` rather than only the custom-element host, even after the fixture was scrolled before selection.
+5. Select the stale fixture target, remove it from the page before pressing Enter, and confirm the job fails with retryable `E_TARGET_STALE`, stores no tiles, restores scroll/focus/styles, and offers **Chọn lại phần tử**. Replacing it with another node at the same position must not be accepted as the original identity.
+6. Start selection with the focus fixture button active, confirm the selector dialog and Hủy button are keyboard reachable, press **Escape**, and verify the job is cancelled with `E_CANCELLED` while the original focus, scroll, and inline styles are restored.
+7. Inspect IndexedDB: the job may contain the sanitized opaque target descriptor and CSS rectangle, but not a DOM node, page text, HTML, screenshot bytes, or selector state. Binary tiles remain Blob values in the tile store.
+8. Verify normal element capture revalidates the same content-runtime identity after page preparation and again before the engine attempt; moving the same connected node may update its bounds, but disconnecting/replacing it must stop capture.
+9. A scrollable candidate is labelled as scrollable but S12 captures visible bounds only. Full internal scroll content remains disabled until S16. Closed shadow-root deep inspection is unsupported and must not be represented as available.
+10. Run `pnpm test:unit` and `pnpm test:e2e`. The reference S12 suite contains 200 unit tests across 53 files and 18 Playwright cases, including all prior visible, full-page, fallback, preparation, and region regressions.

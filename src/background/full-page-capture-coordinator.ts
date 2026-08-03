@@ -7,6 +7,7 @@ import type {
 } from "@capture/capture-engine";
 import { JOB_PROGRESS_THROTTLE_MS, TILE_RECORD_SCHEMA_VERSION } from "@shared/constants";
 import type { CaptureJob, CaptureTile, PageMetrics, Rect } from "@shared/contracts/domain";
+import type { ElementTargetValidationPort } from "@background/element-selection-service";
 import type { StoredTileRecord } from "@shared/contracts/job";
 import { createJobProgressMessage } from "@shared/contracts/job-progress";
 import {
@@ -32,6 +33,7 @@ export interface FullPageCaptureCoordinatorOptions {
   engine: CaptureEngine;
   fallbackEngine?: CaptureEngine;
   tiles: TileRepositoryPort;
+  targetValidator?: ElementTargetValidationPort;
   progress?: JobProgressPublisher;
   now?: () => Date;
   requestId?: () => string;
@@ -168,6 +170,7 @@ export class FullPageCaptureCoordinator {
   private readonly engine: CaptureEngine;
   private readonly fallbackEngine: CaptureEngine | undefined;
   private readonly tiles: TileRepositoryPort;
+  private readonly targetValidator: ElementTargetValidationPort | undefined;
   private readonly progress: JobProgressPublisher;
   private readonly now: () => Date;
   private readonly active = new Map<string, ActiveCaptureRun>();
@@ -179,6 +182,7 @@ export class FullPageCaptureCoordinator {
     this.engine = options.engine;
     this.fallbackEngine = options.fallbackEngine;
     this.tiles = options.tiles;
+    this.targetValidator = options.targetValidator;
     this.now = options.now ?? (() => new Date());
     const requestId = options.requestId ?? (() => crypto.randomUUID());
     this.progress = options.progress ?? new ChromeRuntimeJobProgressPublisher(this.now, requestId);
@@ -223,21 +227,43 @@ export class FullPageCaptureCoordinator {
     return this.active.has(jobId);
   }
 
+  private async revalidateElementTarget(job: CaptureJob): Promise<CaptureJob> {
+    if (job.mode !== "element") {
+      return job;
+    }
+    if (this.targetValidator === undefined || job.targetDescriptor === undefined) {
+      throw createWebCapRuntimeError(
+        createWebCapError({
+          code: "E_TARGET_STALE",
+          stage: "capture",
+          message: "The selected element target is unavailable.",
+          userMessageKey: "errors.targetStale",
+          retryable: true,
+          fallbackAllowed: false,
+          causeCode: "ElementTargetValidatorMissing",
+          safeContext: { jobId: job.id },
+        }),
+      );
+    }
+    const targetRect = await this.targetValidator.revalidate(job);
+    return this.jobs.update(job.id, { targetRect });
+  }
+
   private async run(jobId: string, cancellation: MutableCaptureCancellation): Promise<void> {
     let job = await this.requireJob(jobId);
-    if (job.mode !== "full-page" && job.mode !== "region") {
+    if (job.mode !== "full-page" && job.mode !== "region" && job.mode !== "element") {
       throw invalidModeError(job);
     }
-    if (job.mode === "region" && job.targetRect === undefined) {
+    if ((job.mode === "region" || job.mode === "element") && job.targetRect === undefined) {
       throw createWebCapRuntimeError(
         createWebCapError({
           code: "E_PROTOCOL_MESSAGE",
           stage: "protocol",
-          message: "Region capture requires a confirmed target rectangle.",
+          message: "Targeted capture requires a confirmed rectangle.",
           userMessageKey: "errors.captureTarget",
           retryable: false,
           fallbackAllowed: false,
-          causeCode: "RegionTargetMissing",
+          causeCode: "CaptureTargetMissing",
           safeContext: { jobId: job.id },
         }),
       );
@@ -274,6 +300,7 @@ export class FullPageCaptureCoordinator {
       });
       prepared = true;
       cancellation.throwIfCancelled("prepare");
+      job = await this.revalidateElementTarget(job);
 
       const preferred =
         job.preferredEngine === "scroll" && this.fallbackEngine !== undefined
@@ -284,6 +311,7 @@ export class FullPageCaptureCoordinator {
 
       for (let attempt = 0; attempt < engines.length; attempt += 1) {
         const selected = engines[attempt] as CaptureEngine;
+        job = await this.revalidateElementTarget(await this.requireJob(job.id));
         if (attempt > 0) {
           cancellation.throwIfCancelled("capture");
           await this.resetForFallback(job.id);

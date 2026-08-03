@@ -27,6 +27,7 @@ export type JobTransitionPatch = Partial<
     | "activeEngine"
     | "metrics"
     | "targetRect"
+    | "targetDescriptor"
     | "tilePlan"
     | "completedTiles"
     | "totalTiles"

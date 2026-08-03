@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S12
+current_session: S13
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -110,8 +110,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | S09 | M2 | CDP tiled full-page capture, progress và cancel | S08 | 22k–30k | DONE |
 | S10 | M2 | Scroll fallback, fixed policy và long-page validation | S09 | 22k–30k | DONE |
 | S11 | M3 | CoordinateSpace và region selector | S10 | 18k–26k | DONE |
-| S12 | M3 | Element selector và target capture | S11 | 18k–26k | NEXT |
-| S13 | M4 | PDF page slicing và page-at-a-time exporter | S12 | 20k–28k | READY |
+| S12 | M3 | Element selector và target capture | S11 | 18k–26k | DONE |
+| S13 | M4 | PDF page slicing và page-at-a-time exporter | S12 | 20k–28k | NEXT |
 | S14 | M4 | Editor, PDF options và export retry | S13 | 20k–28k | READY |
 | S15 | M4 | PDF benchmarks, integrity và memory guards | S14 | 18k–26k | READY |
 | S16 | M5 | Scrollable-container detection và capture | S15 | 22k–30k | READY |
@@ -822,8 +822,8 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S09 | DONE | 2026-08-03 | PR #13 / 547887d / CI 30787032374 | format, lint, typecheck, 160 unit, build, 8 Playwright E2E | CDP multi-tile capture, immediate IndexedDB tile persistence, progress/cancel, exact restore, debugger release và fallback prompt đã được xác thực. |
 | S10 | DONE | 2026-08-03 | PR #14 / 2d6f39c / CI 30791809060 | format, lint, typecheck, 174 unit, build, 11 Playwright E2E | Automatic CDP fallback, overlap/crop metadata, fixed policy, exact cleanup và 10k/30k/100k validation đã được xác thực. |
 | S11 | DONE | 2026-08-03 | PR #15 / 798fd47 / CI 30799895160 | format, lint, typecheck, 188 unit, build, 14 Playwright E2E | CoordinateSpace, overlay accessible, auto-scroll, persistent region job, target capture, exact restore và zoom/DPR đã được xác thực. |
-| S12 | NEXT | — | — | — | Sẵn sàng triển khai element selector và stale-target handling. |
-| S13 | READY | — | — | — | — |
+| S12 | DONE | 2026-08-03 | PR #16 / 8a74815 / CI 30805006996 | format, lint, typecheck, 200 unit, build, 18 Playwright E2E | Hover/highlight, sanitized descriptor, parent-child keyboard flow, open Shadow DOM, double revalidation, stale-target safety, exact restore và reselection đã được xác thực. |
+| S13 | NEXT | — | — | — | Sẵn sàng triển khai PDF page slicing và page-at-a-time exporter. |
 | S14 | READY | — | — | — | — |
 | S15 | READY | — | — | — | — |
 | S16 | READY | — | — | — | — |
@@ -834,12 +834,12 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S12 — Element selector và target capture**.
+Session kế tiếp là **S13 — PDF page slicing và page-at-a-time exporter**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S12.
-2. Đọc SPEC §19 và phần scroll candidate §20.
-3. Kiểm tra repo/branch và kết quả CI S11.
-4. Chỉ triển khai S12.
-5. Kết thúc với hover/highlight, parent-child keyboard navigation, stable target descriptor, revalidation, `E_TARGET_STALE`, open Shadow DOM fixture và E2E normal/shadow/stale.
+1. Đọc `PLAN.md` phần S13.
+2. Đọc SPEC §21–23, TV-02 và acceptance criteria PDF trong PRD.
+3. Kiểm tra repo/branch và kết quả CI S12.
+4. Chỉ triển khai S13.
+5. Kết thúc với unit conversion, pure page slicing, tile-to-page intersections, page-at-a-time offscreen canvas, PDF artifact persistence, export progress và integrity tests không tạo canvas toàn trang.

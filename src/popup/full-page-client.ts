@@ -48,7 +48,7 @@ function startTiledCapture(options: {
   tabId: number;
   windowId: number;
   outputFormat: ImageFormat;
-  mode: "full-page" | "region";
+  mode: "full-page" | "region" | "element";
 }): Promise<CaptureJob> {
   return sendJobRequest(
     createJobCreateMessage({
@@ -80,6 +80,14 @@ export function startRegionCapture(options: {
   outputFormat: ImageFormat;
 }): Promise<CaptureJob> {
   return startTiledCapture({ ...options, mode: "region" });
+}
+
+export function startElementCapture(options: {
+  tabId: number;
+  windowId: number;
+  outputFormat: ImageFormat;
+}): Promise<CaptureJob> {
+  return startTiledCapture({ ...options, mode: "element" });
 }
 
 export function getCaptureJob(jobId: string): Promise<CaptureJob> {
