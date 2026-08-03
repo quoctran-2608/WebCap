@@ -248,12 +248,13 @@ test("@smoke selects the deepest target inside an open shadow root", async ({
   openPopup,
 }) => {
   await targetPage.goto("http://127.0.0.1:4174/element-selection.html");
+  const shadowButton = targetPage.locator("open-shadow-card").locator("#shadow-action");
+  await shadowButton.scrollIntoViewIfNeeded();
   const popup = await openPopup();
   await startElementSelection(popup);
   await targetPage.bringToFront();
 
   const root = targetPage.locator("[data-webcap-element-selector]");
-  const shadowButton = targetPage.locator("open-shadow-card").locator("#shadow-action");
   const box = await shadowButton.boundingBox();
   if (box === null) throw new Error("Open shadow target is not visible.");
   await targetPage.mouse.move(box.x + 25, box.y + 25);
