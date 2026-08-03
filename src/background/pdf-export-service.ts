@@ -176,12 +176,16 @@ export class PdfExportService {
     ) {
       return job;
     }
-    return this.jobs.update(job.id, {
-      exportProgress: {
-        completedPages: progress.completedPages,
-        totalPages: progress.totalPages,
+    return this.jobs.update(
+      job.id,
+      {
+        exportProgress: {
+          completedPages: progress.completedPages,
+          totalPages: progress.totalPages,
+        },
       },
-    });
+      { sourceArtifactExists: true },
+    );
   }
 
   private async run(
