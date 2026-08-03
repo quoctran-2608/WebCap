@@ -43,6 +43,11 @@ export interface ThumbnailEnvironment {
   createCanvas(width: number, height: number): ThumbnailCanvasPort;
 }
 
+export interface PdfThumbnailResult {
+  metadata: ArtifactMetadata;
+  blob: Blob;
+}
+
 export interface PdfThumbnailOptions {
   jobId: string;
   manifestRevision: number;
@@ -153,7 +158,7 @@ const browserEnvironment: ThumbnailEnvironment = {
   },
 };
 
-async function renderPdfPageThumbnail(options: PdfThumbnailOptions): Promise<ArtifactMetadata> {
+async function renderPdfPageThumbnail(options: PdfThumbnailOptions): Promise<PdfThumbnailResult> {
   const artifacts = options.artifacts ?? new IndexedDbArtifactRepository();
   const tiles = options.tileRepository ?? new IndexedDbTileRepository();
   const environment = options.environment ?? browserEnvironment;
@@ -161,7 +166,7 @@ async function renderPdfPageThumbnail(options: PdfThumbnailOptions): Promise<Art
   const artifactId = artifactIdFor(options.jobId, options.manifestRevision, options.page.id);
   const cached = await artifacts.get(artifactId);
   if (cached !== undefined && cached.role === "thumbnail" && cached.blob.size > 0) {
-    return metadata(cached);
+    return { metadata: metadata(cached), blob: cached.blob };
   }
 
   const records = await tiles.listByJob(options.jobId);
@@ -248,12 +253,12 @@ async function renderPdfPageThumbnail(options: PdfThumbnailOptions): Promise<Art
       blob,
     };
     await artifacts.put(record);
-    return metadata(record);
+    return { metadata: metadata(record), blob };
   } finally {
     canvas.release();
   }
 }
 
-export function createPdfPageThumbnail(options: PdfThumbnailOptions): Promise<ArtifactMetadata> {
+export function createPdfPageThumbnail(options: PdfThumbnailOptions): Promise<PdfThumbnailResult> {
   return scheduleRender(() => renderPdfPageThumbnail(options));
 }

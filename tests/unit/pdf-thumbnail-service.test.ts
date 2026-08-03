@@ -130,13 +130,14 @@ describe("createPdfPageThumbnail", () => {
     const second = await createPdfPageThumbnail(options);
 
     expect(first).toEqual(second);
-    expect(first).toMatchObject({
+    expect(first.metadata).toMatchObject({
       format: "jpeg",
       mimeType: "image/jpeg",
       width: 213,
       height: 320,
     });
-    expect(Math.max(first.width, first.height)).toBeLessThanOrEqual(320);
+    expect(first.blob.type).toBe("image/jpeg");
+    expect(Math.max(first.metadata.width, first.metadata.height)).toBeLessThanOrEqual(320);
     expect(canvasSizes).toEqual([{ width: 213, height: 320 }]);
     expect(decodeCount).toBe(1);
     expect(closeCount).toBe(1);

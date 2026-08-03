@@ -6,8 +6,6 @@ import type {
   PdfEditorSettings,
   PdfEditorSnapshot,
 } from "@shared/contracts/pdf-editor";
-import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
-
 import {
   cancelPdfEditorExport,
   getPdfEditorSnapshot,
@@ -15,8 +13,6 @@ import {
   updatePdfEditor,
 } from "./editor-client";
 import { createPdfPageThumbnail } from "./thumbnail-service";
-
-const artifacts = new IndexedDbArtifactRepository();
 
 function formatBytes(value: number): string {
   if (value < 1_024) return `${value} B`;
@@ -46,16 +42,15 @@ function PageThumbnail({ snapshot, page }: PageThumbnailProps) {
 
     const load = async () => {
       try {
-        const metadata = await createPdfPageThumbnail({
+        const thumbnail = await createPdfPageThumbnail({
           jobId: snapshot.job.id,
           manifestRevision: snapshot.manifest.revision,
           page,
           tiles: snapshot.job.tilePlan,
           expiresAt: snapshot.job.expiresAt,
         });
-        const record = await artifacts.get(metadata.artifactId);
-        if (!active || record?.blob === undefined) return;
-        objectUrl = URL.createObjectURL(record.blob);
+        if (!active) return;
+        objectUrl = URL.createObjectURL(thumbnail.blob);
         setUrl(objectUrl);
       } catch {
         if (active) setFailed(true);
