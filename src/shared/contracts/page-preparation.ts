@@ -7,7 +7,6 @@ import {
   DEFAULT_MAX_CSS_HEIGHT,
   PROTOCOL_VERSION,
 } from "@shared/constants";
-import { FixedElementModeSchema } from "@shared/contracts/domain";
 import { WebCapErrorDataSchema } from "@shared/errors/error";
 import { err, ok, type Result } from "@shared/result";
 
@@ -17,15 +16,13 @@ const IsoDateTimeSchema = z.string().datetime({ offset: true });
 const RequestIdSchema = z.string().min(1).max(160);
 const PreparationIdSchema = z.string().min(1).max(160);
 const FiniteNonNegativeSchema = z.number().finite().nonnegative();
-const PositiveFiniteSchema = z.number().finite().positive();
 const PositiveIntegerSchema = z.number().int().positive();
-const NonNegativeIntegerSchema = z.number().int().nonnegative();
 
 export const PagePreparationOptionsSchema = z
   .object({
     targetStartX: FiniteNonNegativeSchema.default(0),
     targetStartY: FiniteNonNegativeSchema.default(0),
-    maxCssHeight: PositiveFiniteSchema.default(DEFAULT_MAX_CSS_HEIGHT),
+    maxCssHeight: z.number().finite().positive().default(DEFAULT_MAX_CSS_HEIGHT),
     lazyLoad: z
       .object({
         enabled: z.boolean().default(true),
@@ -61,34 +58,12 @@ export const PagePreparationReadyPayloadSchema = z
     snapshotVersion: z.literal(PAGE_PREPARATION_SNAPSHOT_VERSION),
     originalScroll: ScrollPointSchema,
     preparedScroll: ScrollPointSchema,
-    documentWidth: PositiveFiniteSchema,
-    documentHeight: PositiveFiniteSchema,
-    viewportWidth: PositiveFiniteSchema,
-    viewportHeight: PositiveFiniteSchema,
-    devicePixelRatio: PositiveFiniteSchema,
+    documentWidth: z.number().finite().positive(),
+    documentHeight: z.number().finite().positive(),
     reachedLimit: z.boolean(),
-    stableSamples: NonNegativeIntegerSchema,
-    mutationCount: NonNegativeIntegerSchema,
-    modifiedNodeCount: NonNegativeIntegerSchema,
-  })
-  .strict();
-
-export const PagePreparationScrollPayloadSchema = z
-  .object({
-    preparationId: PreparationIdSchema,
-    requestedScroll: ScrollPointSchema,
-    actualScroll: ScrollPointSchema,
-    viewportWidth: PositiveFiniteSchema,
-    viewportHeight: PositiveFiniteSchema,
-    documentWidth: PositiveFiniteSchema,
-    documentHeight: PositiveFiniteSchema,
-    devicePixelRatio: PositiveFiniteSchema,
-    fixedCandidates: NonNegativeIntegerSchema,
-    hiddenFixedElements: NonNegativeIntegerSchema,
-    stableSamples: NonNegativeIntegerSchema,
-    mutationCount: NonNegativeIntegerSchema,
-    scrollSnapped: z.boolean(),
-    layoutChanged: z.boolean(),
+    stableSamples: z.number().int().nonnegative(),
+    mutationCount: z.number().int().nonnegative(),
+    modifiedNodeCount: z.number().int().nonnegative(),
   })
   .strict();
 
@@ -97,14 +72,14 @@ export const PagePreparationCleanupReportSchema = z
     preparationId: PreparationIdSchema,
     attempted: z.literal(true),
     completed: z.boolean(),
-    restoredProperties: NonNegativeIntegerSchema,
-    skippedChangedProperties: NonNegativeIntegerSchema,
-    missingNodes: NonNegativeIntegerSchema,
-    residualMutations: NonNegativeIntegerSchema,
+    restoredProperties: z.number().int().nonnegative(),
+    skippedChangedProperties: z.number().int().nonnegative(),
+    missingNodes: z.number().int().nonnegative(),
+    residualMutations: z.number().int().nonnegative(),
     styleRemoved: z.boolean(),
     scrollRestored: z.boolean(),
     focusRestored: z.boolean(),
-    errors: NonNegativeIntegerSchema,
+    errors: z.number().int().nonnegative(),
   })
   .strict();
 
@@ -134,23 +109,6 @@ export const PagePreparationPrepareMessageSchema = ContentRequestEnvelopeSchema.
     .strict(),
 }).strict();
 
-export const PagePreparationScrollMessageSchema = ContentRequestEnvelopeSchema.extend({
-  type: z.literal("PAGE_PREPARATION_SCROLL"),
-  payload: z
-    .object({
-      preparationId: PreparationIdSchema,
-      scrollX: FiniteNonNegativeSchema,
-      scrollY: FiniteNonNegativeSchema,
-      tileIndex: NonNegativeIntegerSchema,
-      totalTiles: PositiveIntegerSchema,
-      fixedElementMode: FixedElementModeSchema,
-      settleMs: z.number().int().min(0).max(5_000),
-      expectedDocumentWidth: PositiveFiniteSchema,
-      expectedDocumentHeight: PositiveFiniteSchema,
-    })
-    .strict(),
-}).strict();
-
 export const PagePreparationRestoreMessageSchema = ContentRequestEnvelopeSchema.extend({
   type: z.literal("PAGE_PREPARATION_RESTORE"),
   payload: z.object({ preparationId: PreparationIdSchema }).strict(),
@@ -164,11 +122,6 @@ export const PagePreparationCancelMessageSchema = ContentRequestEnvelopeSchema.e
 export const PagePreparationReadyMessageSchema = ContentResponseEnvelopeSchema.extend({
   type: z.literal("PAGE_PREPARATION_READY"),
   payload: PagePreparationReadyPayloadSchema,
-}).strict();
-
-export const PagePreparationScrolledMessageSchema = ContentResponseEnvelopeSchema.extend({
-  type: z.literal("PAGE_PREPARATION_SCROLLED"),
-  payload: PagePreparationScrollPayloadSchema,
 }).strict();
 
 export const PagePreparationRestoredMessageSchema = ContentResponseEnvelopeSchema.extend({
@@ -193,14 +146,12 @@ export const PagePreparationErrorMessageSchema = ContentResponseEnvelopeSchema.e
 
 export const PagePreparationRequestSchema = z.discriminatedUnion("type", [
   PagePreparationPrepareMessageSchema,
-  PagePreparationScrollMessageSchema,
   PagePreparationRestoreMessageSchema,
   PagePreparationCancelMessageSchema,
 ]);
 
 export const PagePreparationResponseSchema = z.discriminatedUnion("type", [
   PagePreparationReadyMessageSchema,
-  PagePreparationScrolledMessageSchema,
   PagePreparationRestoredMessageSchema,
   PagePreparationCancelledMessageSchema,
   PagePreparationErrorMessageSchema,
@@ -208,14 +159,11 @@ export const PagePreparationResponseSchema = z.discriminatedUnion("type", [
 
 export type PagePreparationOptions = z.infer<typeof PagePreparationOptionsSchema>;
 export type PagePreparationReadyPayload = z.infer<typeof PagePreparationReadyPayloadSchema>;
-export type PagePreparationScrollPayload = z.infer<typeof PagePreparationScrollPayloadSchema>;
 export type PagePreparationCleanupReport = z.infer<typeof PagePreparationCleanupReportSchema>;
 export type PagePreparationPrepareMessage = z.infer<typeof PagePreparationPrepareMessageSchema>;
-export type PagePreparationScrollMessage = z.infer<typeof PagePreparationScrollMessageSchema>;
 export type PagePreparationRestoreMessage = z.infer<typeof PagePreparationRestoreMessageSchema>;
 export type PagePreparationCancelMessage = z.infer<typeof PagePreparationCancelMessageSchema>;
 export type PagePreparationReadyMessage = z.infer<typeof PagePreparationReadyMessageSchema>;
-export type PagePreparationScrolledMessage = z.infer<typeof PagePreparationScrolledMessageSchema>;
 export type PagePreparationRestoredMessage = z.infer<typeof PagePreparationRestoredMessageSchema>;
 export type PagePreparationCancelledMessage = z.infer<typeof PagePreparationCancelledMessageSchema>;
 export type PagePreparationErrorMessage = z.infer<typeof PagePreparationErrorMessageSchema>;
@@ -226,17 +174,6 @@ export interface PagePreparationMessageOptions {
   requestId: string;
   preparationId: string;
   sentAt: string;
-}
-
-export interface PagePreparationScrollMessageOptions extends PagePreparationMessageOptions {
-  scrollX: number;
-  scrollY: number;
-  tileIndex: number;
-  totalTiles: number;
-  fixedElementMode: z.infer<typeof FixedElementModeSchema>;
-  settleMs: number;
-  expectedDocumentWidth: number;
-  expectedDocumentHeight: number;
 }
 
 export function createPagePreparationPrepareMessage(
@@ -252,30 +189,6 @@ export function createPagePreparationPrepareMessage(
     payload: {
       preparationId: options.preparationId,
       options: preparationOptions,
-    },
-    sentAt: options.sentAt,
-  });
-}
-
-export function createPagePreparationScrollMessage(
-  options: PagePreparationScrollMessageOptions,
-): PagePreparationScrollMessage {
-  return PagePreparationScrollMessageSchema.parse({
-    protocolVersion: PROTOCOL_VERSION,
-    requestId: options.requestId,
-    source: "background",
-    target: "content",
-    type: "PAGE_PREPARATION_SCROLL",
-    payload: {
-      preparationId: options.preparationId,
-      scrollX: options.scrollX,
-      scrollY: options.scrollY,
-      tileIndex: options.tileIndex,
-      totalTiles: options.totalTiles,
-      fixedElementMode: options.fixedElementMode,
-      settleMs: options.settleMs,
-      expectedDocumentWidth: options.expectedDocumentWidth,
-      expectedDocumentHeight: options.expectedDocumentHeight,
     },
     sentAt: options.sentAt,
   });
