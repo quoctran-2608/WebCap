@@ -1,10 +1,6 @@
 import type { DebuggerClient } from "@background/debugger-client";
 import { readPageMetrics } from "@capture/page-metrics";
-import {
-  planCaptureTiles,
-  type TilePlan,
-  type TilePlannerLimits,
-} from "@capture/tile-planner";
+import { planCaptureTiles, type TilePlan, type TilePlannerLimits } from "@capture/tile-planner";
 import type { PageMetrics, Rect } from "@shared/contracts/domain";
 
 export interface MeasureAndPlanRequest {

@@ -191,14 +191,7 @@ export class DebuggerClient {
           method: string,
           commandParams?: Record<string, unknown>,
           options: DebuggerCommandOptions = { stage: "measure" },
-        ) =>
-          this.sendCommand<TCommand>(
-            target,
-            method,
-            commandParams,
-            options,
-            detached.promise,
-          ),
+        ) => this.sendCommand<TCommand>(target, method, commandParams, options, detached.promise),
       };
 
       result = await Promise.race([task(session), detached.promise]);

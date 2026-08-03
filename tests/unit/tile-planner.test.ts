@@ -90,9 +90,7 @@ describe("tile planner", () => {
   });
 
   it("rejects targets that do not intersect the document", () => {
-    expect(() => plan({ x: 30_000, y: 0, width: 10, height: 10 })).toThrowError(
-      WebCapRuntimeError,
-    );
+    expect(() => plan({ x: 30_000, y: 0, width: 10, height: 10 })).toThrowError(WebCapRuntimeError);
   });
 
   it.each([10_000, 30_000, 100_000])("covers a %i CSS-pixel tall page", (height) => {
@@ -147,11 +145,7 @@ describe("tile planner", () => {
   });
 
   it("dynamically bisects an oversized rectangle until every piece is safe", () => {
-    const pieces = splitRectForPixelArea(
-      { x: 0, y: 0, width: 8000, height: 8000 },
-      2,
-      16_000_000,
-    );
+    const pieces = splitRectForPixelArea({ x: 0, y: 0, width: 8000, height: 8000 }, 2, 16_000_000);
 
     expect(pieces.length).toBeGreaterThan(1);
     for (const piece of pieces) {

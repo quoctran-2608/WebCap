@@ -147,11 +147,7 @@ function resolveTileSize(
     throw planError("The pixel-area guardrail cannot fit a single tile.", "PixelAreaTooSmall");
   }
 
-  let height = Math.min(
-    targetRect.height,
-    maxTileHeightCss,
-    maxPixelHeightByArea / pixelScale,
-  );
+  let height = Math.min(targetRect.height, maxTileHeightCss, maxPixelHeightByArea / pixelScale);
 
   while (
     expectedPixels(width, pixelScale) * expectedPixels(height, pixelScale) >
@@ -234,7 +230,12 @@ export function validateTileCoverage(
     for (let column = 0; column < columnCount; column += 1) {
       const index = row * columnCount + column;
       const tile = tiles[index];
-      if (tile === undefined || tile.index !== index || tile.row !== row || tile.column !== column) {
+      if (
+        tile === undefined ||
+        tile.index !== index ||
+        tile.row !== row ||
+        tile.column !== column
+      ) {
         throw planError("Tile indexes are not deterministic row-major values.", "InvalidTileIndex");
       }
 
@@ -262,7 +263,10 @@ export function validateTileCoverage(
     Math.abs(right(lastTile.sourceRectCss) - right(targetRect)) > TILE_COVERAGE_EPSILON_CSS ||
     Math.abs(bottom(lastTile.sourceRectCss) - bottom(targetRect)) > TILE_COVERAGE_EPSILON_CSS
   ) {
-    throw planError("The tile grid does not cover the full target rectangle.", "IncompleteCoverage");
+    throw planError(
+      "The tile grid does not cover the full target rectangle.",
+      "IncompleteCoverage",
+    );
   }
 }
 
@@ -299,8 +303,7 @@ export function splitRectForPixelArea(
     }
 
     const splitHorizontally =
-      expectedPixels(current.width, pixelScale) >=
-      expectedPixels(current.height, pixelScale);
+      expectedPixels(current.width, pixelScale) >= expectedPixels(current.height, pixelScale);
     if (splitHorizontally) {
       const firstWidth = current.width / 2;
       pending.push(

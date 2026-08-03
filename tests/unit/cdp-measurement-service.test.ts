@@ -28,8 +28,8 @@ describe("CdpMeasurementService", () => {
         return undefined as T;
       },
     };
-    const withSession = vi.fn(async (_tabId: number, task: (value: DebuggerSession) => Promise<unknown>) =>
-      task(session),
+    const withSession = vi.fn(
+      async (_tabId: number, task: (value: DebuggerSession) => Promise<unknown>) => task(session),
     );
     const debuggerClient = { withSession } as unknown as DebuggerClient;
     const service = new CdpMeasurementService(debuggerClient);

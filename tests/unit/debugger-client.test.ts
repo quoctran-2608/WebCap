@@ -69,11 +69,7 @@ describe("DebuggerClient", () => {
       client.withSession(9, (session) => session.sendCommand("Page.getLayoutMetrics")),
     ).resolves.toEqual({ ok: true });
 
-    expect(adapter.calls).toEqual([
-      "attach:9:0.1",
-      "command:9:Page.getLayoutMetrics",
-      "detach:9",
-    ]);
+    expect(adapter.calls).toEqual(["attach:9:0.1", "command:9:Page.getLayoutMetrics", "detach:9"]);
     expect(adapter.listeners.size).toBe(0);
   });
 
@@ -87,11 +83,7 @@ describe("DebuggerClient", () => {
       .catch((value: unknown) => value);
 
     expectRuntimeError(error, "E_CDP_COMMAND");
-    expect(adapter.calls).toEqual([
-      "attach:3:0.1",
-      "command:3:Page.getLayoutMetrics",
-      "detach:3",
-    ]);
+    expect(adapter.calls).toEqual(["attach:3:0.1", "command:3:Page.getLayoutMetrics", "detach:3"]);
   });
 
   it("normalizes attach errors without trying to detach", async () => {
@@ -99,7 +91,9 @@ describe("DebuggerClient", () => {
     adapter.attachError = new Error("Another debugger is already attached");
     const client = new DebuggerClient(adapter);
 
-    const error = await client.withSession(7, async () => undefined).catch((value: unknown) => value);
+    const error = await client
+      .withSession(7, async () => undefined)
+      .catch((value: unknown) => value);
 
     expectRuntimeError(error, "E_DEBUGGER_ATTACH");
     expect(adapter.calls).toEqual(["attach:7:0.1"]);
@@ -140,7 +134,9 @@ describe("DebuggerClient", () => {
     );
     await vi.waitFor(() => expect(adapter.calls).toContain("attach:5:0.1"));
 
-    const error = await client.withSession(5, async () => undefined).catch((value: unknown) => value);
+    const error = await client
+      .withSession(5, async () => undefined)
+      .catch((value: unknown) => value);
     expectRuntimeError(error, "E_DEBUGGER_ATTACH");
 
     releaseFirst?.();

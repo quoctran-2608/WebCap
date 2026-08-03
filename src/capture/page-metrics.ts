@@ -84,7 +84,10 @@ function viewportRect(viewport: z.infer<typeof LayoutViewportSchema>): Rect {
 export function normalizePageMetrics(measurement: RawPageMeasurement): PageMetrics {
   const layoutResult = LayoutMetricsResponseSchema.safeParse(measurement.layoutMetrics);
   if (!layoutResult.success) {
-    throw measurementError("Chrome returned malformed page layout metrics.", "InvalidLayoutMetrics");
+    throw measurementError(
+      "Chrome returned malformed page layout metrics.",
+      "InvalidLayoutMetrics",
+    );
   }
 
   const dprResult = RuntimeEvaluateResponseSchema.safeParse(measurement.devicePixelRatioResult);
@@ -93,10 +96,8 @@ export function normalizePageMetrics(measurement: RawPageMeasurement): PageMetri
   }
 
   const content = layoutResult.data.cssContentSize ?? layoutResult.data.contentSize;
-  const layoutViewport =
-    layoutResult.data.cssLayoutViewport ?? layoutResult.data.layoutViewport;
-  const visualViewport =
-    layoutResult.data.cssVisualViewport ?? layoutResult.data.visualViewport;
+  const layoutViewport = layoutResult.data.cssLayoutViewport ?? layoutResult.data.layoutViewport;
+  const visualViewport = layoutResult.data.cssVisualViewport ?? layoutResult.data.visualViewport;
   const devicePixelRatio = dprResult.data.result.value;
 
   if (content === undefined || layoutViewport === undefined || visualViewport === undefined) {
