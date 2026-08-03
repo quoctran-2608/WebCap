@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { downloadArtifact } from "@popup/worker-client";
-import type { PdfEditorPage, PdfEditorSettings, PdfEditorSnapshot } from "@shared/contracts/pdf-editor";
+import type {
+  PdfEditorPage,
+  PdfEditorSettings,
+  PdfEditorSnapshot,
+} from "@shared/contracts/pdf-editor";
 import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
 
 import {
@@ -386,14 +390,21 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
             />
           </label>
 
-          <button type="button" className="secondary-action" onClick={applySettings} disabled={!canEdit}>
+          <button
+            type="button"
+            className="secondary-action"
+            onClick={applySettings}
+            disabled={!canEdit}
+          >
             Áp dụng tùy chọn
           </button>
 
           <div className="estimate-card">
             <span>Kích thước xấp xỉ</span>
             <strong>{formatBytes(snapshot.estimate.estimatedBytes)}</strong>
-            <small>Ước tính từ source tiles, chất lượng và số trang; file thực tế có thể khác.</small>
+            <small>
+              Ước tính từ source tiles, chất lượng và số trang; file thực tế có thể khác.
+            </small>
           </div>
 
           {exporting ? (
@@ -426,13 +437,10 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
               type="button"
               className="primary-action"
               onClick={() =>
-                void mutate(
-                  async () => {
-                    await downloadArtifact(snapshot.job.outputArtifactId ?? "");
-                    return refresh();
-                  },
-                  "Đã bắt đầu tải PDF.",
-                )
+                void mutate(async () => {
+                  await downloadArtifact(snapshot.job.outputArtifactId ?? "");
+                  return refresh();
+                }, "Đã bắt đầu tải PDF.")
               }
               disabled={busy}
             >
