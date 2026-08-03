@@ -71,7 +71,7 @@ const CAPTURE_STATUS_COPY: Record<Exclude<UiStatus, "idle">, string> = {
 const FULL_PAGE_STATUS_COPY: Record<CaptureJob["state"], string> = {
   created: "Đang khởi tạo phiên chụp…",
   preparing: "Đang chuẩn bị và làm ổn định trang…",
-  capturing: "Đang chụp các tile bằng Chrome DevTools Protocol…",
+  capturing: "Đang chụp các tile; WebCap tự chuyển sang scroll fallback khi cần…",
   processing: "Đang xác nhận tile set…",
   ready: "Tile set toàn trang đã sẵn sàng.",
   exporting: "Đang xuất kết quả…",
@@ -682,14 +682,14 @@ export function App(): React.JSX.Element {
           {selectedMode === "full-page" && fullPageJob?.state === "failed" && (
             <div className="feedback feedback--error" role="alert">
               <h3 ref={feedbackHeadingRef} tabIndex={-1}>
-                CDP không thể hoàn tất
+                Không thể hoàn tất chụp toàn trang
               </h3>
               <p>{fullPageJob.error?.message ?? "Không thể chụp toàn bộ trang."}</p>
-              {fullPageJob.error?.fallbackAllowed && (
-                <p>Trang này có thể dùng scroll fallback khi S10 được triển khai.</p>
+              {fullPageJob.activeEngine === "scroll" && (
+                <p>Scroll fallback đã dừng an toàn và trang đã được phục hồi.</p>
               )}
               <button className="text-action" type="button" onClick={() => void handleRetry()}>
-                Thử lại CDP
+                Thử lại chụp toàn trang
               </button>
             </div>
           )}

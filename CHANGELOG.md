@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Automatic full-page routing from eligible CDP failures to a rate-limited active-tab scroll capture engine without creating a second job.
+- Deterministic two-dimensional scroll tile planning with 64 CSS-pixel overlap, explicit logical output rectangles, edge crop metadata, and max-tile guardrails.
+- Preserve, remove, and smart fixed/sticky policies with namespaced inline markers, compare-before-restore cleanup, and service-worker restart recovery.
+- Scroll fallback guards for inactive tabs, scroll snapping, document-size drift, implausible screenshot scale, and per-axis pixel-scale changes between tiles.
+- Fixed header/footer, sticky header, wide-table, and 10,000 CSS-pixel fixtures plus 10k/30k/100k deterministic planner benchmarks and Playwright fallback coverage.
 - Primary CDP full-page capture engine using one short-lived stable-protocol debugger session and `Page.captureScreenshot` clips beyond the viewport.
 - Immediate PNG tile persistence in IndexedDB with row-major ordering, stored-status metadata, bounded retry backoff, and progress only after durable storage.
 - Persistent full-page job execution from prepare through measure, plan, capture, restore, processing, and ready, including cancellation checkpoints and primary-error preservation.

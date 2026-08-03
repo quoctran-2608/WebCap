@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S10
+current_session: S11
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -108,8 +108,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | S07 | M2 | Debugger client, page metrics và 2D tile planner | S06 | 20k–28k | DONE |
 | S08 | M2 | Page preparation, lazy settle và restoration | S07 | 20k–28k | DONE |
 | S09 | M2 | CDP tiled full-page capture, progress và cancel | S08 | 22k–30k | DONE |
-| S10 | M2 | Scroll fallback, fixed policy và long-page validation | S09 | 22k–30k | NEXT |
-| S11 | M3 | CoordinateSpace và region selector | S10 | 18k–26k | READY |
+| S10 | M2 | Scroll fallback, fixed policy và long-page validation | S09 | 22k–30k | DONE |
+| S11 | M3 | CoordinateSpace và region selector | S10 | 18k–26k | NEXT |
 | S12 | M3 | Element selector và target capture | S11 | 18k–26k | READY |
 | S13 | M4 | PDF page slicing và page-at-a-time exporter | S12 | 20k–28k | READY |
 | S14 | M4 | Editor, PDF options và export retry | S13 | 20k–28k | READY |
@@ -450,6 +450,10 @@ pnpm build
 **Exit criteria M2:** full-page CDP và fallback chạy; progress/cancel/restore đạt AC liên quan; benchmark được ghi vào docs.
 
 **Commit gợi ý:** `Add full-page scroll fallback`.
+
+**Hoàn thành:** 2026-08-03 · PR #14 · validation code head `2d6f39c` · CI run `30791809060`.
+
+**Ghi chú kỹ thuật:** coordinator thử CDP trước và chỉ chuyển cùng persistent job sang scroll engine khi lỗi cho phép fallback; tile CDP dở được xóa trước plan mới. Scroll engine giữ tab nguồn active, rate-limit 550 ms, lập grid 2D row-major với overlap/crop metadata, hiệu chỉnh pixel scale X/Y từ tile đầu và chặn scale/layout/scroll drift. Fixed mode preserve/remove/smart dùng marker namespace và compare-before-restore; cleanup chạy trước S08 restore và cả recovery sau service-worker restart. CI sạch pass format, lint, strict typecheck, 174 unit tests, build và 11 Playwright E2E, gồm smart fixed, wide-table 2D và capture 10k CSS px khoảng 25,4 giây; planner 30k/100k lần lượt 56/187 tile.
 
 ---
 
@@ -812,8 +816,8 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S07 | DONE | 2026-08-03 | PR #11 / fb03138 / squash 15b4ec6 | format, lint, typecheck, 136 unit, build, 2 Playwright E2E | Debugger ownership/timeouts/detach, CSS metrics normalization và deterministic 2D tile planning 10k/30k/100k đã được xác thực. |
 | S08 | DONE | 2026-08-03 | PR #12 / b1f07eb | format, lint, typecheck, 150 unit, build, 5 Playwright E2E | Content preparation protocol, bounded lazy/layout settle, exact compare-before-restore và success/error/cancel cleanup đã được xác thực. |
 | S09 | DONE | 2026-08-03 | PR #13 / 547887d / CI 30787032374 | format, lint, typecheck, 160 unit, build, 8 Playwright E2E | CDP multi-tile capture, immediate IndexedDB tile persistence, progress/cancel, exact restore, debugger release và fallback prompt đã được xác thực. |
-| S10 | NEXT | — | — | — | Sẵn sàng triển khai scroll fallback, fixed policy và long-page validation. |
-| S11 | READY | — | — | — | — |
+| S10 | DONE | 2026-08-03 | PR #14 / 2d6f39c / CI 30791809060 | format, lint, typecheck, 174 unit, build, 11 Playwright E2E | Automatic CDP fallback, overlap/crop metadata, fixed policy, exact cleanup và 10k/30k/100k validation đã được xác thực. |
+| S11 | NEXT | — | — | — | Sẵn sàng triển khai CoordinateSpace và region selector. |
 | S12 | READY | — | — | — | — |
 | S13 | READY | — | — | — | — |
 | S14 | READY | — | — | — | — |
@@ -826,12 +830,12 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S10 — Scroll fallback, fixed policy và long-page validation**.
+Session kế tiếp là **S11 — CoordinateSpace và region selector**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S10.
-2. Đọc SPEC scroll fallback/fixed/overlap sections §14–17 và test/performance §27.
-3. Kiểm tra repo/branch và kết quả CI S09.
-4. Chỉ triển khai S10.
-5. Kết thúc với fallback usable, overlap/crop metadata, fixed policy, automatic fallback routing và benchmark/visual validation trên trang dài.
+1. Đọc `PLAN.md` phần S11.
+2. Đọc SPEC §18, coordinate contracts và UI M3.
+3. Kiểm tra repo/branch và kết quả CI S10.
+4. Chỉ triển khai S11.
+5. Kết thúc với CoordinateSpace pure module, overlay accessible, drag/resize/keyboard flow, auto-scroll, target rect document coordinates và E2E zoom/DPR.
