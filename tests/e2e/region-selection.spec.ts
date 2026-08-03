@@ -181,6 +181,7 @@ test("@smoke selects a region longer than the viewport and captures it without t
 }) => {
   await targetPage.goto("http://127.0.0.1:4174/region-selection.html");
   await targetPage.locator("#focus-target").focus();
+  const tabId = await resolveTab(serviceWorker, targetPage);
   const before = await snapshotPage(targetPage);
   const popup = await openPopup();
 
@@ -216,7 +217,8 @@ test("@smoke selects a region longer than the viewport and captures it without t
   expect(state.firstPixel?.[2]).toBeCloseTo(235, -1);
   expect(await snapshotPage(targetPage)).toEqual(before);
 
-  await popup.bringToFront();
+  await targetPage.bringToFront();
+  await serviceWorker.evaluate(async (id) => chrome.tabs.update(id, { active: true }), tabId);
   await popup.reload();
   await expect(popup.getByText("Tile set vùng chọn đã sẵn sàng.")).toBeVisible();
 });

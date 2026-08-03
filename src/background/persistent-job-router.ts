@@ -93,6 +93,9 @@ function defaultDependencies(): PersistentJobRouterDependencies {
         if (job.mode !== "full-page" && job.mode !== "region") {
           return;
         }
+        if (job.mode === "region" && job.targetRect === undefined) {
+          return;
+        }
         let scrollCleanupError: unknown;
         try {
           await scrollPages.cleanup(job.tabId, job.id, 0, 0);

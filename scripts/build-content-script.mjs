@@ -23,10 +23,5 @@ await build({
       formats: ["iife"],
       fileName: () => "content-script.js",
     },
-    rollupOptions: {
-      output: {
-        inlineDynamicImports: true,
-      },
-    },
   },
 });
