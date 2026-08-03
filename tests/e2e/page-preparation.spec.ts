@@ -52,7 +52,13 @@ async function sendContentMessage(
   message: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   return serviceWorker.evaluate(
-    async ({ id, payload }) => await chrome.tabs.sendMessage<Record<string, unknown>>(id, payload),
+    async ({ id, payload }) => {
+      const response: unknown = await chrome.tabs.sendMessage(id, payload);
+      if (typeof response !== "object" || response === null) {
+        throw new TypeError("The content script returned a non-object response.");
+      }
+      return response as Record<string, unknown>;
+    },
     { id: tabId, payload: message },
   );
 }
@@ -251,11 +257,22 @@ test("@smoke restores automatically after unstable layout and cancellation", asy
 
   const result = await serviceWorker.evaluate(
     async ({ id, prepare, cancel }) => {
-      const pending = chrome.tabs.sendMessage<Record<string, unknown>>(id, prepare);
+      const pending: Promise<unknown> = chrome.tabs.sendMessage(id, prepare);
       await new Promise((resolve) => setTimeout(resolve, 60));
-      const cancelResponse = await chrome.tabs.sendMessage<Record<string, unknown>>(id, cancel);
-      const prepareResponse = await pending;
-      return { cancelResponse, prepareResponse };
+      const cancelResponse: unknown = await chrome.tabs.sendMessage(id, cancel);
+      const prepareResponse: unknown = await pending;
+      if (
+        typeof cancelResponse !== "object" ||
+        cancelResponse === null ||
+        typeof prepareResponse !== "object" ||
+        prepareResponse === null
+      ) {
+        throw new TypeError("The content script returned a non-object response.");
+      }
+      return {
+        cancelResponse: cancelResponse as Record<string, unknown>,
+        prepareResponse: prepareResponse as Record<string, unknown>,
+      };
     },
     {
       id: tabId,

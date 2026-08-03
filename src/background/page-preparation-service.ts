@@ -227,7 +227,18 @@ export class PagePreparationService {
       );
     }
     if (cleanupError !== undefined) {
-      throw cleanupError;
+      if (cleanupError instanceof Error) {
+        throw cleanupError;
+      }
+      throw createWebCapRuntimeError(
+        normalizeError(cleanupError, {
+          code: "E_CLEANUP_PARTIAL",
+          stage: "cleanup",
+          userMessageKey: "errors.cleanupPartial",
+          retryable: true,
+          fallbackAllowed: false,
+        }),
+      );
     }
     return operationResult as T;
   }
