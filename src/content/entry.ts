@@ -122,6 +122,8 @@ interface CssPropertyMutation {
   beforePriority: string;
   appliedValue: string;
   appliedPriority: string;
+  beforeStyleAttribute: string | null;
+  appliedStyleAttribute: string | null;
 }
 
 interface PreparationSnapshot {
@@ -494,6 +496,7 @@ function applyCssProperty(
 ): CssPropertyMutation {
   const beforeValue = element.style.getPropertyValue(property);
   const beforePriority = element.style.getPropertyPriority(property);
+  const beforeStyleAttribute = element.getAttribute("style");
   element.style.setProperty(property, value, priority);
   return {
     element,
@@ -502,6 +505,8 @@ function applyCssProperty(
     beforePriority,
     appliedValue: element.style.getPropertyValue(property),
     appliedPriority: element.style.getPropertyPriority(property),
+    beforeStyleAttribute,
+    appliedStyleAttribute: element.getAttribute("style"),
   };
 }
 
@@ -589,24 +594,12 @@ async function restoreSnapshot(
         report.missingNodes += 1;
         continue;
       }
-      const currentValue = mutation.element.style.getPropertyValue(mutation.property);
-      const currentPriority = mutation.element.style.getPropertyPriority(mutation.property);
-      if (
-        shouldRestoreCssProperty(
-          currentValue,
-          currentPriority,
-          mutation.appliedValue,
-          mutation.appliedPriority,
-        )
-      ) {
-        if (mutation.beforeValue.length === 0) {
-          mutation.element.style.removeProperty(mutation.property);
+      const currentStyleAttribute = mutation.element.getAttribute("style");
+      if (currentStyleAttribute === mutation.appliedStyleAttribute) {
+        if (mutation.beforeStyleAttribute === null) {
+          mutation.element.removeAttribute("style");
         } else {
-          mutation.element.style.setProperty(
-            mutation.property,
-            mutation.beforeValue,
-            mutation.beforePriority,
-          );
+          mutation.element.setAttribute("style", mutation.beforeStyleAttribute);
         }
         report.restoredProperties += 1;
       } else {
@@ -684,6 +677,12 @@ async function restoreSnapshot(
   return report;
 }
 
+function scrollPreparedPage(active: ActivePreparation, left: number, top: number): void {
+  window.scrollTo({ left, top, behavior: "auto" });
+  active.snapshot.preparedScrollX = window.scrollX;
+  active.snapshot.preparedScrollY = window.scrollY;
+}
+
 async function runLazyPreScroll(
   active: ActivePreparation,
   options: PagePreparationOptions,
@@ -699,7 +698,7 @@ async function runLazyPreScroll(
   const targetStartX = Math.max(0, options.targetStartX);
   const targetStartY = Math.max(0, options.targetStartY);
 
-  window.scrollTo({ left: targetStartX, top: targetStartY, behavior: "auto" });
+  scrollPreparedPage(active, targetStartX, targetStartY);
   const initialSettle = await waitForLayoutSettle(
     active,
     settleMs,
@@ -732,7 +731,7 @@ async function runLazyPreScroll(
       );
 
       if (Math.abs(nextY - currentY) > 0.5) {
-        window.scrollTo({ left: targetStartX, top: nextY, behavior: "auto" });
+        scrollPreparedPage(active, targetStartX, nextY);
       }
 
       const remaining = deadline - Date.now();
@@ -769,12 +768,10 @@ async function runLazyPreScroll(
   }
 
   throwIfCancelled(active);
-  window.scrollTo({ left: targetStartX, top: targetStartY, behavior: "auto" });
+  scrollPreparedPage(active, targetStartX, targetStartY);
   const finalSettle = await waitForLayoutSettle(active, settleMs, Math.max(1_000, settleMs * 8), 2);
   stableSamples += finalSettle.stableSamples;
   mutationCount += finalSettle.mutationCount;
-  active.snapshot.preparedScrollX = window.scrollX;
-  active.snapshot.preparedScrollY = window.scrollY;
 
   return {
     reachedLimit,
