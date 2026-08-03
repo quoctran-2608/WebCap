@@ -6,6 +6,7 @@ import type {
   PageMetrics,
   Rect,
 } from "@shared/contracts/domain";
+import type { PagePreparationReadyPayload } from "@shared/contracts/page-preparation";
 import type { CaptureProgressStage } from "@shared/contracts/job-progress";
 
 export interface CaptureProgress {
@@ -25,8 +26,10 @@ export interface CaptureCancellation {
 export interface CaptureEngineContext {
   jobId: string;
   tabId: number;
+  windowId?: number;
   settings: CaptureSettings;
   targetRect?: Rect;
+  preparation?: PagePreparationReadyPayload;
   cancellation: CaptureCancellation;
   onPlan(metrics: PageMetrics, targetRect: Rect, tiles: CaptureTile[]): Promise<void>;
   storeTile(tile: CaptureTile, blob: Blob): Promise<void>;
@@ -42,4 +45,5 @@ export interface CaptureEngineResult {
 export interface CaptureEngine {
   readonly kind: CaptureEngineKind;
   capture(context: CaptureEngineContext): Promise<CaptureEngineResult>;
+  cleanup?(context: CaptureEngineContext): Promise<void>;
 }
