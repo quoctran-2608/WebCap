@@ -39,11 +39,53 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Format S08 branch
+      - name: Fix and format S08 branch
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/s08-page-preparation'
         run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          replacements = {
+              "src/content/entry.ts": [(
+                  'function hasString(value: Record<string, unknown>, key: string): boolean {\n  return typeof value[key] === "string" && (value[key] as string).length > 0;\n}',
+                  'function hasString(value: Record<string, unknown>, key: string): boolean {\n  const candidate = value[key];\n  return typeof candidate === "string" && candidate.length > 0;\n}',
+              )],
+              "src/background/page-preparation-service.ts": [(
+                  '    if (!operationSucceeded) {\n      throw operationError;\n    }',
+                  '    if (!operationSucceeded) {\n      if (operationError instanceof Error) {\n        throw operationError;\n      }\n      throw createWebCapRuntimeError(\n        normalizeError(operationError, {\n          stage: "capture",\n          userMessageKey: "errors.captureFailed",\n          retryable: true,\n          fallbackAllowed: false,\n        }),\n      );\n    }',
+              )],
+              "tests/e2e/page-preparation.spec.ts": [
+                  (
+                      '(await chrome.tabs.sendMessage(id, payload)) as Record<string, unknown>',
+                      'await chrome.tabs.sendMessage<Record<string, unknown>>(id, payload)',
+                  ),
+                  (
+                      'const pending = chrome.tabs.sendMessage(id, prepare) as Promise<Record<string, unknown>>;',
+                      'const pending = chrome.tabs.sendMessage<Record<string, unknown>>(id, prepare);',
+                  ),
+                  (
+                      'const cancelResponse = (await chrome.tabs.sendMessage(id, cancel)) as Record<string, unknown>;',
+                      'const cancelResponse = await chrome.tabs.sendMessage<Record<string, unknown>>(id, cancel);',
+                  ),
+              ],
+              "tests/unit/page-preparation-service.test.ts": [(
+                  'const operation = vi.fn(async () => "captured");',
+                  'const operation = vi.fn(() => Promise.resolve("captured"));',
+              )],
+          }
+
+          for file_name, pairs in replacements.items():
+              path = Path(file_name)
+              text = path.read_text()
+              for before, after in pairs:
+                  if before not in text:
+                      raise SystemExit(f"Expected lint pattern not found in {file_name}: {before[:80]}")
+                  text = text.replace(before, after)
+              path.write_text(text)
+          PY
           pnpm exec prettier --write \
             src/content/entry.ts \
+            src/background/page-preparation-service.ts \
             src/shared/contracts/page-preparation.ts \
             tests/e2e/page-preparation.spec.ts \
             tests/fixtures/animated-page.html \
@@ -57,6 +99,7 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add \
               src/content/entry.ts \
+              src/background/page-preparation-service.ts \
               src/shared/contracts/page-preparation.ts \
               tests/e2e/page-preparation.spec.ts \
               tests/fixtures/animated-page.html \
@@ -65,7 +108,7 @@ jobs:
               tests/fixtures/lazy-images.html \
               tests/unit/page-preparation-content.test.ts \
               tests/unit/page-preparation-service.test.ts
-            git commit -m "Format page preparation files"
+            git commit -m "Fix and format page preparation files"
             git push origin HEAD:${GITHUB_HEAD_REF}
           fi
 
