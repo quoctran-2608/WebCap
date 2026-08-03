@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PdfExportService } from "@background/pdf-export-service";
 import type { PersistentJobCoordinatorPort } from "@background/job-coordinator";
+import type { PdfExportPayload } from "@offscreen/pdf-exporter";
 import type { ArtifactMetadata } from "@shared/contracts/artifact";
 import type { CaptureJob, CaptureTile, JobState } from "@shared/contracts/domain";
 import type { PdfEditManifest } from "@shared/contracts/pdf-editor";
@@ -167,8 +168,8 @@ describe("PdfExportService editor lifecycle", () => {
     const state = harness();
     const tiles = storedTileRepository();
     let resolveExport: ((value: ArtifactMetadata) => void) | undefined;
-    const exportPdf = vi.fn(
-      () =>
+    const exportPdf = vi.fn<(options: PdfExportPayload) => Promise<ArtifactMetadata>>(
+      (_options) =>
         new Promise<ArtifactMetadata>((resolve) => {
           resolveExport = resolve;
         }),
@@ -183,15 +184,9 @@ describe("PdfExportService editor lifecycle", () => {
     });
 
     await service.start("job-1");
-    expect(exportPdf).toHaveBeenCalledWith(
-      expect.objectContaining({
-        pages: expect.arrayContaining([
-          expect.objectContaining({ id: "page-3" }),
-          expect.objectContaining({ id: "page-1" }),
-        ]),
-        settings: expect.objectContaining({ jpegQuality: 0.7 }),
-      }),
-    );
+    const request = exportPdf.mock.calls[0]?.[0];
+    expect(request?.pages?.map((page) => page.id)).toEqual(["page-3", "page-1"]);
+    expect(request?.settings.jpegQuality).toBe(0.7);
     const cancelled = await service.cancel("job-1");
     expect(cancelled.state).toBe("ready");
     expect(tiles.records).toHaveLength(1);
@@ -205,12 +200,14 @@ describe("PdfExportService editor lifecycle", () => {
     const state = harness();
     const tiles = storedTileRepository();
     let attempt = 0;
-    const exportPdf = vi.fn(() => {
-      attempt += 1;
-      return attempt === 1
-        ? Promise.reject(new Error("first export failed"))
-        : Promise.resolve(artifact("pdf-2"));
-    });
+    const exportPdf = vi.fn<(options: PdfExportPayload) => Promise<ArtifactMetadata>>(
+      (_options) => {
+        attempt += 1;
+        return attempt === 1
+          ? Promise.reject(new Error("first export failed"))
+          : Promise.resolve(artifact("pdf-2"));
+      },
+    );
     const service = new PdfExportService({
       jobs: state.jobs,
       tiles,
