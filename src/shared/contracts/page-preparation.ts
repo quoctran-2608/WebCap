@@ -26,18 +26,8 @@ export const PagePreparationOptionsSchema = z
     lazyLoad: z
       .object({
         enabled: z.boolean().default(true),
-        stepRatio: z
-          .number()
-          .finite()
-          .min(0.1)
-          .max(1)
-          .default(DEFAULT_LAZY_LOAD_STEP_RATIO),
-        settleMs: z
-          .number()
-          .int()
-          .min(0)
-          .max(5_000)
-          .default(DEFAULT_LAZY_LOAD_SETTLE_MS),
+        stepRatio: z.number().finite().min(0.1).max(1).default(DEFAULT_LAZY_LOAD_STEP_RATIO),
+        settleMs: z.number().int().min(0).max(5_000).default(DEFAULT_LAZY_LOAD_SETTLE_MS),
         maxDurationMs: z
           .number()
           .int()
@@ -162,28 +152,14 @@ export const PagePreparationResponseSchema = z.discriminatedUnion("type", [
 ]);
 
 export type PagePreparationOptions = z.infer<typeof PagePreparationOptionsSchema>;
-export type PagePreparationReadyPayload = z.infer<
-  typeof PagePreparationReadyPayloadSchema
->;
-export type PagePreparationCleanupReport = z.infer<
-  typeof PagePreparationCleanupReportSchema
->;
-export type PagePreparationPrepareMessage = z.infer<
-  typeof PagePreparationPrepareMessageSchema
->;
-export type PagePreparationRestoreMessage = z.infer<
-  typeof PagePreparationRestoreMessageSchema
->;
-export type PagePreparationCancelMessage = z.infer<
-  typeof PagePreparationCancelMessageSchema
->;
+export type PagePreparationReadyPayload = z.infer<typeof PagePreparationReadyPayloadSchema>;
+export type PagePreparationCleanupReport = z.infer<typeof PagePreparationCleanupReportSchema>;
+export type PagePreparationPrepareMessage = z.infer<typeof PagePreparationPrepareMessageSchema>;
+export type PagePreparationRestoreMessage = z.infer<typeof PagePreparationRestoreMessageSchema>;
+export type PagePreparationCancelMessage = z.infer<typeof PagePreparationCancelMessageSchema>;
 export type PagePreparationReadyMessage = z.infer<typeof PagePreparationReadyMessageSchema>;
-export type PagePreparationRestoredMessage = z.infer<
-  typeof PagePreparationRestoredMessageSchema
->;
-export type PagePreparationCancelledMessage = z.infer<
-  typeof PagePreparationCancelledMessageSchema
->;
+export type PagePreparationRestoredMessage = z.infer<typeof PagePreparationRestoredMessageSchema>;
+export type PagePreparationCancelledMessage = z.infer<typeof PagePreparationCancelledMessageSchema>;
 export type PagePreparationErrorMessage = z.infer<typeof PagePreparationErrorMessageSchema>;
 export type PagePreparationRequest = z.infer<typeof PagePreparationRequestSchema>;
 export type PagePreparationResponse = z.infer<typeof PagePreparationResponseSchema>;
@@ -246,7 +222,9 @@ export function parsePagePreparationResponse(
 ): Result<PagePreparationResponse, ReturnType<typeof protocolError>> {
   const parsed = PagePreparationResponseSchema.safeParse(value);
   if (!parsed.success) {
-    return err(protocolError("The content script returned an invalid response.", "InvalidResponse"));
+    return err(
+      protocolError("The content script returned an invalid response.", "InvalidResponse"),
+    );
   }
   if (parsed.data.requestId !== expectedRequestId) {
     return err(

@@ -151,11 +151,7 @@ test("@smoke prepares lazy content and restores page state", async ({
     ),
   ).toBe(1);
 
-  const restored = await sendContentMessage(
-    serviceWorker,
-    tabId,
-    restoreMessage(preparationId),
-  );
+  const restored = await sendContentMessage(serviceWorker, tabId, restoreMessage(preparationId));
   expect(restored.type).toBe("PAGE_PREPARATION_RESTORED");
   expect((restored.payload as { completed: boolean }).completed).toBe(true);
 
@@ -182,14 +178,14 @@ test("@smoke freezes animation, hides WebCap overlay, and preserves fixed elemen
   );
   expect(animatedReady.type).toBe("PAGE_PREPARATION_READY");
   expect(
-    await targetPage.locator("#animated").evaluate((element) =>
-      getComputedStyle(element).animationPlayState,
-    ),
+    await targetPage
+      .locator("#animated")
+      .evaluate((element) => getComputedStyle(element).animationPlayState),
   ).toBe("paused");
   expect(
-    await targetPage.locator("#focus-target").evaluate((element) =>
-      getComputedStyle(element).caretColor,
-    ),
+    await targetPage
+      .locator("#focus-target")
+      .evaluate((element) => getComputedStyle(element).caretColor),
   ).toBe("rgba(0, 0, 0, 0)");
   await sendContentMessage(serviceWorker, tabId, restoreMessage(animatedId));
   expect(await snapshotPage(targetPage)).toEqual(animatedBefore);
@@ -212,9 +208,9 @@ test("@smoke freezes animation, hides WebCap overlay, and preserves fixed elemen
   expect(fixedReady.type).toBe("PAGE_PREPARATION_READY");
   expect(await targetPage.locator("#fixed").getAttribute("style")).toBe(fixedStyleBefore);
   expect(
-    await targetPage.locator("#overlay").evaluate((element) =>
-      getComputedStyle(element).visibility,
-    ),
+    await targetPage
+      .locator("#overlay")
+      .evaluate((element) => getComputedStyle(element).visibility),
   ).toBe("hidden");
 
   const restored = await sendContentMessage(serviceWorker, tabId, restoreMessage(fixedId));
@@ -258,10 +254,7 @@ test("@smoke restores automatically after unstable layout and cancellation", asy
     async ({ id, prepare, cancel }) => {
       const pending = chrome.tabs.sendMessage(id, prepare) as Promise<Record<string, unknown>>;
       await new Promise((resolve) => setTimeout(resolve, 60));
-      const cancelResponse = (await chrome.tabs.sendMessage(
-        id,
-        cancel,
-      )) as Record<string, unknown>;
+      const cancelResponse = (await chrome.tabs.sendMessage(id, cancel)) as Record<string, unknown>;
       const prepareResponse = await pending;
       return { cancelResponse, prepareResponse };
     },

@@ -237,8 +237,7 @@ export function isPagePreparationRequest(value: unknown): value is PagePreparati
   }
 
   return (
-    (value.type === "PAGE_PREPARATION_RESTORE" ||
-      value.type === "PAGE_PREPARATION_CANCEL") &&
+    (value.type === "PAGE_PREPARATION_RESTORE" || value.type === "PAGE_PREPARATION_CANCEL") &&
     hasString(value.payload, "preparationId")
   );
 }
@@ -263,7 +262,7 @@ function errorResponse(request: PagePreparationRequest, error: unknown): Record<
   const normalized =
     error instanceof PreparationFailure
       ? error.data
-      : {
+      : ({
           code: "E_UNKNOWN",
           stage: request.type === "PAGE_PREPARATION_RESTORE" ? "cleanup" : "prepare",
           message:
@@ -274,7 +273,7 @@ function errorResponse(request: PagePreparationRequest, error: unknown): Record<
           retryable: true,
           fallbackAllowed: false,
           causeCode: error instanceof Error ? error.name : "UnknownError",
-        } satisfies ErrorLike;
+        } satisfies ErrorLike);
   return responseEnvelope(request, "PAGE_PREPARATION_ERROR", normalized);
 }
 
@@ -525,8 +524,7 @@ function createSnapshot(preparationId: string): PreparationSnapshot {
     originalScrollY: window.scrollY,
     preparedScrollX: window.scrollX,
     preparedScrollY: window.scrollY,
-    activeElement:
-      document.activeElement instanceof HTMLElement ? document.activeElement : null,
+    activeElement: document.activeElement instanceof HTMLElement ? document.activeElement : null,
     selectionRanges: captureSelection(),
     styleElement,
     styleText: styleElement.textContent ?? "",
@@ -771,12 +769,7 @@ async function runLazyPreScroll(
 
   throwIfCancelled(active);
   window.scrollTo({ left: targetStartX, top: targetStartY, behavior: "auto" });
-  const finalSettle = await waitForLayoutSettle(
-    active,
-    settleMs,
-    Math.max(1_000, settleMs * 8),
-    2,
-  );
+  const finalSettle = await waitForLayoutSettle(active, settleMs, Math.max(1_000, settleMs * 8), 2);
   stableSamples += finalSettle.stableSamples;
   mutationCount += finalSettle.mutationCount;
   active.snapshot.preparedScrollX = window.scrollX;

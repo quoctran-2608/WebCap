@@ -26,9 +26,7 @@ describe("page preparation content helpers", () => {
   });
 
   it("restores a property only while the WebCap-applied value still owns it", () => {
-    expect(shouldRestoreCssProperty("hidden", "important", "hidden", "important")).toBe(
-      true,
-    );
+    expect(shouldRestoreCssProperty("hidden", "important", "hidden", "important")).toBe(true);
     expect(shouldRestoreCssProperty("visible", "", "hidden", "important")).toBe(false);
     expect(shouldRestoreCssProperty("hidden", "", "hidden", "important")).toBe(false);
   });

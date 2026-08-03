@@ -109,10 +109,7 @@ describe("PagePreparationService", () => {
 
     await expect(first).resolves.toMatchObject({ preparationId: "job-7" });
     await expect(second).resolves.toMatchObject({ preparationId: "job-7" });
-    expect(browser.calls).toEqual([
-      "inject:7",
-      "message:7:PAGE_PREPARATION_PREPARE",
-    ]);
+    expect(browser.calls).toEqual(["inject:7", "message:7:PAGE_PREPARATION_PREPARE"]);
   });
 
   it("rejects a competing preparation on the same tab", async () => {
@@ -128,9 +125,9 @@ describe("PagePreparationService", () => {
     const service = createService(browser);
     const active = service.prepare({ tabId: 8, preparationId: "job-a" });
 
-    await expect(
-      service.prepare({ tabId: 8, preparationId: "job-b" }),
-    ).rejects.toMatchObject({ code: "E_PROTOCOL_MESSAGE" });
+    await expect(service.prepare({ tabId: 8, preparationId: "job-b" })).rejects.toMatchObject({
+      code: "E_PROTOCOL_MESSAGE",
+    });
 
     resolveResponse(
       readyResponse({
@@ -188,16 +185,17 @@ describe("PagePreparationService", () => {
   });
 
   it("normalizes content-script errors without losing their code", async () => {
-    const browser = new FakePagePreparationBrowser((message) =>
-      envelope(message, "PAGE_PREPARATION_ERROR", {
-        code: "E_LAYOUT_UNSTABLE",
-        stage: "prepare",
-        message: "Layout kept changing.",
-        userMessageKey: "errors.layoutUnstable",
-        retryable: true,
-        fallbackAllowed: true,
-        causeCode: "LayoutSettleTimeout",
-      }) as PagePreparationResponse,
+    const browser = new FakePagePreparationBrowser(
+      (message) =>
+        envelope(message, "PAGE_PREPARATION_ERROR", {
+          code: "E_LAYOUT_UNSTABLE",
+          stage: "prepare",
+          message: "Layout kept changing.",
+          userMessageKey: "errors.layoutUnstable",
+          retryable: true,
+          fallbackAllowed: true,
+          causeCode: "LayoutSettleTimeout",
+        }) as PagePreparationResponse,
     );
     const service = createService(browser);
 
