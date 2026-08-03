@@ -57,14 +57,21 @@ function defaultDependencies(): PersistentJobRouterDependencies {
   const jobRepository = new IndexedDbJobRepository();
   const sessions = new JobSessionRepository();
   const tiles = new IndexedDbTileRepository();
+  const pages = new PagePreparationService({
+    browser: createChromePagePreparationAdapter(),
+  });
   const jobs = new PersistentJobCoordinator({
     jobs: jobRepository,
     sessions,
     tiles,
     artifacts: new IndexedDbJobArtifactCleanupRepository(),
-  });
-  const pages = new PagePreparationService({
-    browser: createChromePagePreparationAdapter(),
+    cleanup: {
+      async cleanup(job) {
+        if (job.mode === "full-page") {
+          await pages.restore(job.tabId, job.id);
+        }
+      },
+    },
   });
   const captures = new FullPageCaptureCoordinator({
     jobs,
