@@ -9,7 +9,7 @@ export const JOB_SESSION_SCHEMA_VERSION = 1 as const;
 export const TILE_RECORD_SCHEMA_VERSION = 1 as const;
 export const DEDUPE_RECORD_SCHEMA_VERSION = 1 as const;
 
-export const CDP_PROTOCOL_VERSION = "0.1" as const;
+export const CDP_PROTOCOL_VERSION = "1.3" as const;
 export const DEBUGGER_ATTACH_TIMEOUT_MS = 5_000;
 export const DEBUGGER_COMMAND_TIMEOUT_MS = 10_000;
 export const CDP_TILE_MAX_ATTEMPTS = 3;
