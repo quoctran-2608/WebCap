@@ -45,14 +45,18 @@ jobs:
           pnpm exec prettier --write \
             src/background/scroll-capture-page-adapter.ts \
             src/capture/overlap-resolver.ts \
-            src/capture/scroll-capture-engine.ts
+            src/capture/scroll-capture-engine.ts \
+            tests/unit/full-page-fallback-coordinator.test.ts \
+            tests/unit/scroll-capture-engine.test.ts
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add \
               src/background/scroll-capture-page-adapter.ts \
               src/capture/overlap-resolver.ts \
-              src/capture/scroll-capture-engine.ts
+              src/capture/scroll-capture-engine.ts \
+              tests/unit/full-page-fallback-coordinator.test.ts \
+              tests/unit/scroll-capture-engine.test.ts
             git commit -m "Format S10 scroll fallback changes"
             git push origin HEAD:${GITHUB_HEAD_REF}
           fi
