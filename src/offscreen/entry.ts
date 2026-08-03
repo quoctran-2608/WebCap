@@ -1,10 +1,10 @@
 import {
   createOffscreenErrorMessage,
   createOffscreenImageProcessedMessage,
-  createOffscreenPdfExportedMessage,
-  createOffscreenPdfExportProgressMessage,
   createOffscreenObjectUrlCreatedMessage,
   createOffscreenObjectUrlRevokedMessage,
+  createOffscreenPdfExportedMessage,
+  createOffscreenPdfExportProgressMessage,
   createOffscreenReadyMessage,
   parseOffscreenRequest,
   type OffscreenResponse,
@@ -91,8 +91,20 @@ export async function routeOffscreenMessage(
           sentAt: dependencies.now().toISOString(),
         });
       case "OFFSCREEN_EXPORT_PDF": {
+        const payload = parsed.value.payload;
         const result = await dependencies.pdfExporter.export(
-          parsed.value.payload,
+          {
+            jobId: payload.jobId,
+            outputArtifactId: payload.outputArtifactId,
+            targetRect: payload.targetRect,
+            tiles: payload.tiles,
+            settings: payload.settings,
+            filename: payload.filename,
+            createdAt: payload.createdAt,
+            expiresAt: payload.expiresAt,
+            ...(payload.sourceTitle === undefined ? {} : { sourceTitle: payload.sourceTitle }),
+            ...(payload.sourceDomain === undefined ? {} : { sourceDomain: payload.sourceDomain }),
+          },
           dependencies.reportPdfProgress,
         );
         return createOffscreenPdfExportedMessage({
