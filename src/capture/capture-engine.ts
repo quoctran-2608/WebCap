@@ -6,18 +6,7 @@ import type {
   PageMetrics,
   Rect,
 } from "@shared/contracts/domain";
-
-export const CAPTURE_PROGRESS_STAGES = [
-  "preparing",
-  "measuring",
-  "planning",
-  "capturing",
-  "storing",
-  "restoring",
-  "ready",
-] as const;
-
-export type CaptureProgressStage = (typeof CAPTURE_PROGRESS_STAGES)[number];
+import type { CaptureProgressStage } from "@shared/contracts/job-progress";
 
 export interface CaptureProgress {
   jobId: string;
