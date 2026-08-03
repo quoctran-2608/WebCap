@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Typed Chrome debugger adapter and owned-session client with attach/command timeouts, unexpected-detach handling, and deterministic cleanup.
+- CSS-first `Page.getLayoutMetrics` normalization with layout/visual viewports, device pixel ratio, zoom, and legacy-field fallback.
+- Deterministic row-major 2D tile planner with target clamping, edge remainders, pixel-area and tile-count guardrails, and dynamic rectangle splitting.
+- Coverage for short, wide, fractional, 10k, 30k, and 100k CSS-pixel pages plus debugger success, error, timeout, and detach paths.
 - Persistent capture-job state machine with guarded transitions, invariants, and optimistic `stateRevision` compare-and-set writes.
 - Versioned IndexedDB job, tile, artifact-cleanup, and request-dedupe repositories with normalized transaction failures.
 - Metadata-only job summaries and per-tab leases in `chrome.storage.session`, including service-worker restart recovery.

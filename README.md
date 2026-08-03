@@ -6,7 +6,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 ## Current status
 
-**S06 — The persistent capture-job foundation is complete.** WebCap now stores full capture jobs and tile records in IndexedDB, keeps metadata-only recovery summaries and per-tab leases in `chrome.storage.session`, rejects stale state revisions, restores interrupted jobs after service-worker restart, and deduplicates persistent job commands by request ID. The next session is S07 debugger metrics and deterministic 2D tile planning.
+**S07 — The debugger measurement and tile-planning foundation is complete.** WebCap now owns short-lived Chrome debugger sessions safely, normalizes CSS page metrics plus DPR/zoom, and creates deterministic 2D tile grids with edge, area, count, and dynamic-split guardrails. The next session is S08 page preparation, lazy-load settling, and restoration.
 
 ## Requirements
 
@@ -55,6 +55,7 @@ The `dist/` output contains `manifest.json`, `popup.html`, `service-worker.js`, 
 public/                 Manifest and static extension assets copied as-is.
 assets/                 Internal build-time icon sources.
 src/background/         Manifest V3 service worker and message routing.
+src/capture/            Page measurement and deterministic capture planning.
 src/popup/              React popup entry, shell, styles, and runtime client.
 src/shared/contracts/   Typed cross-context message envelopes.
 src/storage/            IndexedDB and chrome.storage repositories.

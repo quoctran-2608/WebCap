@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S07
+current_session: S08
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -105,8 +105,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | S04 | M1 | Offscreen processing, artifact storage và download | S03 | 18k–26k | DONE |
 | S05 | M1 | Preview UI và visible-capture E2E | S04 | 16k–24k | DONE |
 | S06 | M2 | Persistent job state machine và repositories | S05 | 16k–24k | DONE |
-| S07 | M2 | Debugger client, page metrics và 2D tile planner | S06 | 20k–28k | NEXT |
-| S08 | M2 | Page preparation, lazy settle và restoration | S07 | 20k–28k | READY |
+| S07 | M2 | Debugger client, page metrics và 2D tile planner | S06 | 20k–28k | DONE |
+| S08 | M2 | Page preparation, lazy settle và restoration | S07 | 20k–28k | NEXT |
 | S09 | M2 | CDP tiled full-page capture, progress và cancel | S08 | 22k–30k | READY |
 | S10 | M2 | Scroll fallback, fixed policy và long-page validation | S09 | 22k–30k | READY |
 | S11 | M3 | CoordinateSpace và region selector | S10 | 18k–26k | READY |
@@ -356,6 +356,10 @@ pnpm build
 **Exit criteria:** có thể attach, đọc metrics, lập plan và detach mà không chụp; planner không tạo gap/negative/zero tile.
 
 **Commit gợi ý:** `Implement debugger metrics and tile planner`.
+
+**Hoàn thành:** 2026-08-03 · PR #11 · validation head `a514f72`.
+
+**Ghi chú kỹ thuật:** typed `chrome.debugger` adapter và `DebuggerClient` giới hạn một session sở hữu trên mỗi tab, áp dụng attach/command timeout, chuẩn hóa attach/CDP/unexpected-detach/cleanup errors và detach trên mọi path đã xác nhận. `Page.getLayoutMetrics` ưu tiên CSS metrics, kết hợp `Runtime.evaluate` cho DPR; planner sinh grid 2D row-major deterministic, clamp target, giữ edge remainder, chặn zero/gap, max pixel area/max tiles và hỗ trợ dynamic split. CI sạch pass format, lint, strict typecheck, 136 unit tests, build và 2 Playwright visible-capture E2E.
 
 ---
 
@@ -797,8 +801,8 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S04 | DONE | 2026-08-02 | PR #8 / a4eeaa5 | format, lint, typecheck, 69 unit, build | Blob artifact persistence, offscreen PNG/JPEG/WebP processing, filename sanitizer, download lifecycle và retry không recapture đã được xác thực. |
 | S05 | DONE | 2026-08-02 | PR #9 / 579f5b6 | format, lint, typecheck, 76 unit, build, 2 Playwright E2E | Visible flow hoàn chỉnh từ capture đến preview, restore popup và download; DPR 2/zoom 125% đã được xác thực. |
 | S06 | DONE | 2026-08-02 | PR #10 / 58fbc61 | format, lint, typecheck, 110 unit, build, 2 Playwright E2E | State transitions, CAS repository, per-tab lease, restart recovery, persistent dedupe và expiry cleanup đã được xác thực. |
-| S07 | NEXT | — | — | — | Sẵn sàng triển khai debugger client, page metrics và 2D tile planner. |
-| S08 | READY | — | — | — | — |
+| S07 | DONE | 2026-08-03 | PR #11 / a514f72 | format, lint, typecheck, 136 unit, build, 2 Playwright E2E | Debugger ownership/timeouts/detach, CSS metrics normalization và deterministic 2D tile planning 10k/30k/100k đã được xác thực. |
+| S08 | NEXT | — | — | — | Sẵn sàng triển khai page preparation, lazy settle và restoration. |
 | S09 | READY | — | — | — | — |
 | S10 | READY | — | — | — | — |
 | S11 | READY | — | — | — | — |
@@ -814,12 +818,12 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S07 — Debugger client, page metrics và 2D tile planner**.
+Session kế tiếp là **S08 — Page preparation, lazy settle và restoration**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S07.
-2. Đọc SPEC debugger/metrics/tile sections §13–16, TV-01 và error model.
-3. Kiểm tra repo/branch và kết quả CI S06.
-4. Chỉ triển khai S07.
-5. Kết thúc với debugger attach/detach an toàn, normalized page metrics và 2D tile planner deterministic đầy đủ test.
+1. Đọc `PLAN.md` phần S08.
+2. Đọc SPEC page preparation/restoration/lazy/fixed sections §15–17 và fixtures §27.
+3. Kiểm tra repo/branch và kết quả CI S07.
+4. Chỉ triển khai S08.
+5. Kết thúc với content-script preparation, deterministic settle và idempotent restoration trên success/error/cancel đầy đủ test.

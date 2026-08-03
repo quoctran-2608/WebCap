@@ -41,3 +41,16 @@ S06 is an infrastructure milestone and does not expose full-page controls yet. A
 6. Verify expiry cleanup removes job, tile, artifact, summary, and lock records but skips a job whose lease is still valid.
 
 The deterministic S06 behavior is covered by `pnpm test:unit`; existing `pnpm test:e2e` remains the regression gate for the completed visible-capture slice.
+
+## S07 debugger metrics and tile planning inspection
+
+S07 remains an infrastructure milestone and does not expose a full-page capture button yet. Use the unit suite as the deterministic gate, and inspect a development invocation of `CdpMeasurementService` only on a disposable web tab:
+
+1. Confirm WebCap attaches with protocol version `0.1`, enables the Page domain, reads `Page.getLayoutMetrics`, evaluates `window.devicePixelRatio`, and detaches immediately after measurement/planning.
+2. Open Chrome DevTools or another debugger before measurement; WebCap must return a normalized retryable `E_DEBUGGER_ATTACH` instead of stealing or hiding the existing debugger session.
+3. Close or cancel the debugger while the task is active; WebCap must surface `E_DEBUGGER_DETACHED` and release its per-tab ownership.
+4. Inspect normalized metrics: CSS content size is preferred, layout/visual viewport scroll offsets are retained, DPR and zoom are finite positive values, and no page URL/content is logged.
+5. Plan short, wide, fractional, 10k, 30k, and 100k CSS-pixel rectangles. Tile IDs and indexes must be stable row-major values; final rows/columns cover only the remainder with no gap, overlap, negative, or zero dimension.
+6. Raise pixel scale or lower the pixel-area guardrail and confirm tile height shrinks or dynamic splitting produces safe sub-rectangles; exceeding `maxTiles` must fail with `E_TILE_PLAN`.
+
+Run `pnpm test:unit` for debugger/metrics/planner behavior and `pnpm test:e2e` to preserve the completed visible-capture regression slice.

@@ -25,6 +25,7 @@
     "types": ["chrome", "node", "vite/client", "vitest/globals"],
     "paths": {
       "@background/*": ["./src/background/*"],
+      "@capture/*": ["./src/capture/*"],
       "@popup/*": ["./src/popup/*"],
       "@offscreen/*": ["./src/offscreen/*"],
       "@shared/*": ["./src/shared/*"],
