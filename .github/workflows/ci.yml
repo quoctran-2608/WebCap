@@ -36,6 +36,9 @@ jobs:
           node-version: 22.22.0
           cache: pnpm
 
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Complete S10 documentation
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/s10-scroll-fallback-fixed-policy'
         run: |
@@ -49,9 +52,6 @@ jobs:
             git commit -m "Complete S10 documentation and roadmap"
             git push origin HEAD:${GITHUB_HEAD_REF}
           fi
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Check formatting
         run: pnpm format:check
