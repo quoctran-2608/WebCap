@@ -55,6 +55,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "@background": resolve(projectRoot, "src/background"),
+      "@capture": resolve(projectRoot, "src/capture"),
       "@popup": resolve(projectRoot, "src/popup"),
       "@offscreen": resolve(projectRoot, "src/offscreen"),
       "@shared": resolve(projectRoot, "src/shared"),

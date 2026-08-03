@@ -9,8 +9,13 @@ export const JOB_SESSION_SCHEMA_VERSION = 1 as const;
 export const TILE_RECORD_SCHEMA_VERSION = 1 as const;
 export const DEDUPE_RECORD_SCHEMA_VERSION = 1 as const;
 
+export const CDP_PROTOCOL_VERSION = "0.1" as const;
+export const DEBUGGER_ATTACH_TIMEOUT_MS = 5_000;
+export const DEBUGGER_COMMAND_TIMEOUT_MS = 10_000;
 export const TILE_TARGET_WIDTH_CSS = 8_192;
 export const TILE_TARGET_HEIGHT_CSS = 8_192;
+export const TILE_MAX_PIXEL_AREA = 8_192 * 8_192;
+export const TILE_COVERAGE_EPSILON_CSS = 0.01;
 export const FALLBACK_OVERLAP_CSS = 64;
 export const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 export const VISIBLE_CAPTURE_MIN_INTERVAL_MS = 550;
