@@ -277,7 +277,9 @@ test("@smoke falls back to scroll capture when the debugger is already occupied"
     expect(await snapshotPage(targetPage)).toEqual(before);
 
     await popup.bringToFront();
-    await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({ timeout: 5_000 });
+    await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({
+      timeout: 5_000,
+    });
   } finally {
     await serviceWorker
       .evaluate(async (id) => chrome.debugger.detach({ tabId: id }), tabId)
