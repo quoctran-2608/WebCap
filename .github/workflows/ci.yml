@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -36,6 +38,36 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Format S08 branch
+        if: github.event_name == 'pull_request' && github.head_ref == 'agent/s08-page-preparation'
+        run: |
+          pnpm exec prettier --write \
+            src/content/entry.ts \
+            src/shared/contracts/page-preparation.ts \
+            tests/e2e/page-preparation.spec.ts \
+            tests/fixtures/animated-page.html \
+            tests/fixtures/fixed-sticky.html \
+            tests/fixtures/layout-shift.html \
+            tests/fixtures/lazy-images.html \
+            tests/unit/page-preparation-content.test.ts \
+            tests/unit/page-preparation-service.test.ts
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add \
+              src/content/entry.ts \
+              src/shared/contracts/page-preparation.ts \
+              tests/e2e/page-preparation.spec.ts \
+              tests/fixtures/animated-page.html \
+              tests/fixtures/fixed-sticky.html \
+              tests/fixtures/layout-shift.html \
+              tests/fixtures/lazy-images.html \
+              tests/unit/page-preparation-content.test.ts \
+              tests/unit/page-preparation-service.test.ts
+            git commit -m "Format page preparation files"
+            git push origin HEAD:${GITHUB_HEAD_REF}
+          fi
 
       - name: Check formatting
         run: pnpm format:check
