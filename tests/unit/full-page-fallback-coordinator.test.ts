@@ -256,7 +256,11 @@ describe("FullPageCaptureCoordinator fallback", () => {
   it("does not fallback when the primary error forbids it", async () => {
     const jobs = new MemoryJobs();
     const tiles = new MemoryTiles();
-    const fallback = { kind: "scroll", capture: vi.fn() } as unknown as CaptureEngine;
+    const fallbackCapture = vi.fn();
+    const fallback = {
+      kind: "scroll",
+      capture: fallbackCapture,
+    } as unknown as CaptureEngine;
     const primary: CaptureEngine = {
       kind: "cdp",
       capture: () =>
@@ -290,6 +294,6 @@ describe("FullPageCaptureCoordinator fallback", () => {
 
     expect(jobs.job.state).toBe("failed");
     expect(jobs.job.error?.code).toBe("E_CDP_COMMAND");
-    expect(fallback.capture).not.toHaveBeenCalled();
+    expect(fallbackCapture).not.toHaveBeenCalled();
   });
 });
