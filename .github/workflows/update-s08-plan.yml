@@ -1,0 +1,46 @@
+name: Update S08 plan
+
+on:
+  push:
+    branches: [agent/s08-page-preparation]
+
+permissions:
+  contents: write
+
+jobs:
+  update-plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out S08 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/s08-page-preparation
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Update roadmap and remove one-time updater
+        run: |
+          node scripts/update-s08-plan.mjs
+          pnpm exec prettier --write PLAN.md
+          rm scripts/update-s08-plan.mjs
+          rm .github/workflows/update-s08-plan.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PLAN.md scripts/update-s08-plan.mjs .github/workflows/update-s08-plan.yml
+          git commit -m "Advance roadmap to S09"
+          git push origin HEAD:agent/s08-page-preparation
