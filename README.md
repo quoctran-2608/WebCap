@@ -6,7 +6,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 ## Current status
 
-**S13 — Paged PDF export foundation is complete.** WebCap can now convert a stored logical tile set into A4, Letter, or fit-width PDF pages using pure physical-unit conversion, continuous CSS page slicing, running fractional pixel ranges, and strict tile-to-page intersection coverage. The offscreen exporter allocates only one PDF-page-sized canvas, decodes one tile at a time, JPEG-encodes each page, embeds it with local `pdf-lib`, releases page resources, and persists the final `application/pdf` Blob with page count and export progress. Automated coverage reloads a real generated PDF, rejects gaps/overlaps, verifies exact final pixel coverage, preserves source tiles on failure, and completes a real 9,600 CSS-pixel browser export. PDF remains hidden in the popup until S14 adds the editor, options, retry, and download UX.
+**S14 — PDF editor, options, and non-destructive retry are implemented.** A ready tiled capture can now open a dedicated React editor routed by job ID. The editor restores a persistent edit manifest after reload, lazy-loads page thumbnails from local source tiles, supports logical page removal and keyboard-accessible reordering, and exposes A4, Letter, fit-width, portrait/landscape, margin, and JPEG-quality settings with an explicitly approximate size estimate. Export uses the S13 page-at-a-time pipeline, reports per-page progress, supports cooperative cancellation and retry without recapturing, and downloads the completed local PDF artifact. Source tiles remain immutable and reusable; thumbnails and PDF bytes stay as IndexedDB Blob values rather than crossing runtime messages. S15 remains responsible for 10k/30k/100k PDF benchmarks, integrity checks, and memory guardrails.
 
 ## Requirements
 
@@ -47,7 +47,7 @@ pnpm package       # Build and verify the unpacked extension; ZIP packaging come
 5. Select the generated `dist/` directory.
 6. Open the WebCap action popup and confirm that **Service worker** shows **Đã kết nối**.
 
-The `dist/` output contains `manifest.json`, `popup.html`, `service-worker.js`, `content-script.js`, `offscreen.html`, `offscreen.js`, hashed popup assets, and the four extension icons. Generated output, dependency directories, test reports, and local browser profiles must not be committed.
+The `dist/` output contains `manifest.json`, `popup.html`, `editor.html`, `service-worker.js`, `content-script.js`, `offscreen.html`, `offscreen.js`, hashed popup/editor assets, and the four extension icons. Generated output, dependency directories, test reports, and local browser profiles must not be committed.
 
 ## Source structure
 
@@ -57,6 +57,7 @@ assets/                 Internal build-time icon sources.
 src/background/         Manifest V3 service worker, job routing, capture coordination, and Chrome adapters.
 src/capture/            Page measurement, deterministic tile planning, and capture engines.
 src/content/            On-demand page preparation, lazy settle, and restoration runtime.
+src/editor/             React PDF editor, persistent manifest client, and lazy thumbnail rendering.
 src/popup/              React popup entry, capture controls, progress UI, and runtime clients.
 src/shared/contracts/   Typed cross-context message envelopes.
 src/storage/            IndexedDB and chrome.storage repositories.
