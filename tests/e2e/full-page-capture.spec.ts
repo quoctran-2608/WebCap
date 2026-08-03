@@ -15,9 +15,11 @@ interface StoredFullPageState {
   job: {
     id: string;
     state: string;
+    activeEngine?: string;
     completedTiles: number;
     totalTiles: number;
     errorCode?: string;
+    errorCause?: string;
     fallbackAllowed?: boolean;
     cleanupCompleted: boolean;
     tileStatuses: string[];
@@ -28,6 +30,7 @@ interface StoredFullPageState {
     attempts: number;
     byteLength: number;
     blobSize: number;
+    outputRect: { x: number; y: number; width: number; height: number } | null;
   }>;
 }
 
@@ -39,6 +42,19 @@ async function resolveFixtureTab(serviceWorker: Worker, page: Page): Promise<num
       throw new Error("The full-page fixture tab could not be resolved.");
     }
     return tab.id;
+  }, page.url());
+}
+
+async function activateFixtureTab(serviceWorker: Worker, page: Page): Promise<void> {
+  await page.bringToFront();
+  await serviceWorker.evaluate(async (url) => {
+    const tabs = await chrome.tabs.query({});
+    const tab = tabs.find((candidate) => candidate.url === url);
+    if (tab?.id === undefined || tab.windowId === undefined) {
+      throw new Error("The full-page fixture tab could not be activated.");
+    }
+    await chrome.tabs.update(tab.id, { active: true });
+    await chrome.windows.update(tab.windowId, { focused: true });
   }, page.url());
 }
 
@@ -74,11 +90,12 @@ async function readFullPageState(serviceWorker: Worker): Promise<StoredFullPageS
       id: string;
       mode: string;
       state: string;
+      activeEngine?: string;
       completedTiles: number;
       totalTiles: number;
       updatedAt: string;
       cleanup: { completed: boolean };
-      error?: { code: string; fallbackAllowed: boolean };
+      error?: { code: string; causeCode?: string; fallbackAllowed: boolean };
       tilePlan: Array<{ status: string }>;
     }>;
     const job = jobs
@@ -88,7 +105,12 @@ async function readFullPageState(serviceWorker: Worker): Promise<StoredFullPageS
       tileValues as Array<{
         jobId: string;
         index: number;
-        tile: { status: string; attempts: number; byteLength?: number };
+        tile: {
+          status: string;
+          attempts: number;
+          byteLength?: number;
+          outputRectCss?: { x: number; y: number; width: number; height: number };
+        };
         blob?: Blob;
       }>
     )
@@ -100,6 +122,7 @@ async function readFullPageState(serviceWorker: Worker): Promise<StoredFullPageS
         attempts: record.tile.attempts,
         byteLength: record.tile.byteLength ?? 0,
         blobSize: record.blob?.size ?? 0,
+        outputRect: record.tile.outputRectCss ?? null,
       }));
     database.close();
     return {
@@ -109,12 +132,16 @@ async function readFullPageState(serviceWorker: Worker): Promise<StoredFullPageS
           : {
               id: job.id,
               state: job.state,
+              ...(job.activeEngine === undefined ? {} : { activeEngine: job.activeEngine }),
               completedTiles: job.completedTiles,
               totalTiles: job.totalTiles,
               ...(job.error === undefined
                 ? {}
                 : {
                     errorCode: job.error.code,
+                    ...(job.error.causeCode === undefined
+                      ? {}
+                      : { errorCause: job.error.causeCode }),
                     fallbackAllowed: job.error.fallbackAllowed,
                   }),
               cleanupCompleted: job.cleanup.completed,
@@ -152,6 +179,7 @@ test("@smoke captures a multi-tile full page, persists tiles, restores, and deta
   const state = await readFullPageState(serviceWorker);
   expect(state.job).toMatchObject({
     state: "ready",
+    activeEngine: "cdp",
     completedTiles: 2,
     totalTiles: 2,
     cleanupCompleted: true,
@@ -160,6 +188,7 @@ test("@smoke captures a multi-tile full page, persists tiles, restores, and deta
   expect(state.tiles.map((tile) => tile.index)).toEqual([0, 1]);
   expect(state.tiles.every((tile) => tile.status === "stored" && tile.blobSize > 0)).toBe(true);
   expect(state.tiles.every((tile) => tile.byteLength === tile.blobSize)).toBe(true);
+  expect(state.tiles.every((tile) => tile.outputRect === null)).toBe(true);
   expect(await snapshotPage(targetPage)).toEqual(before);
 
   await expect
@@ -207,7 +236,7 @@ test("@smoke cancels full-page preparation and restores page state", async ({
   expect(await snapshotPage(targetPage)).toEqual(before);
 });
 
-test("@smoke surfaces a fallback prompt when the debugger is already occupied", async ({
+test("@smoke falls back to scroll capture when the debugger is already occupied", async ({
   serviceWorker,
   targetPage,
   openPopup,
@@ -222,19 +251,35 @@ test("@smoke surfaces a fallback prompt when the debugger is already occupied", 
     const popup = await openPopup();
     await selectFullPage(popup);
     await popup.getByRole("button", { name: "Bắt đầu chụp toàn trang" }).click();
-    await expect(popup.getByText("CDP không thể hoàn tất")).toBeVisible({ timeout: 30_000 });
-    await expect(
-      popup.getByText("Trang này có thể dùng scroll fallback khi S10 được triển khai."),
-    ).toBeVisible();
+    await activateFixtureTab(serviceWorker, targetPage);
+    await expect
+      .poll(
+        async () => {
+          const state = await readFullPageState(serviceWorker);
+          if (state.job?.state === "failed" || state.job?.state === "cancelled") {
+            return `${state.job.state}:${state.job.errorCode ?? "unknown"}:${state.job.errorCause ?? "unknown"}`;
+          }
+          return state.job?.state ?? "missing";
+        },
+        { timeout: 45_000 },
+      )
+      .toBe("ready");
 
     const state = await readFullPageState(serviceWorker);
     expect(state.job).toMatchObject({
-      state: "failed",
-      errorCode: "E_DEBUGGER_ATTACH",
-      fallbackAllowed: true,
+      state: "ready",
+      activeEngine: "scroll",
       cleanupCompleted: true,
     });
+    expect(state.job?.completedTiles).toBe(state.job?.totalTiles);
+    expect(state.tiles.length).toBeGreaterThan(0);
+    expect(state.tiles.every((tile) => tile.outputRect !== null && tile.blobSize > 0)).toBe(true);
     expect(await snapshotPage(targetPage)).toEqual(before);
+
+    await popup.bringToFront();
+    await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({
+      timeout: 5_000,
+    });
   } finally {
     await serviceWorker
       .evaluate(async (id) => chrome.debugger.detach({ tabId: id }), tabId)

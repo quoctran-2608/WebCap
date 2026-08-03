@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebCap 10k scroll fallback fixture</title>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        color-scheme: light;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        background: #f8fafc;
+      }
+
+      main {
+        height: 10000px;
+        padding: 32px;
+        background: repeating-linear-gradient(
+          180deg,
+          #fee2e2 0,
+          #fee2e2 500px,
+          #dcfce7 500px,
+          #dcfce7 1000px,
+          #dbeafe 1000px,
+          #dbeafe 1500px,
+          #fef3c7 1500px,
+          #fef3c7 2000px
+        );
+      }
+
+      .marker {
+        height: 500px;
+        padding: 24px;
+        border-top: 4px solid rgba(15, 23, 42, 0.4);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <button id="focus-target" type="button">Điểm focus 10k</button>
+      <div class="marker">0 px</div>
+      <div class="marker">500 px</div>
+      <div class="marker">1000 px</div>
+      <div class="marker">1500 px</div>
+      <div class="marker">2000 px</div>
+      <div class="marker">2500 px</div>
+      <div class="marker">3000 px</div>
+      <div class="marker">3500 px</div>
+      <div class="marker">4000 px</div>
+      <div class="marker">4500 px</div>
+      <div class="marker">5000 px</div>
+      <div class="marker">5500 px</div>
+      <div class="marker">6000 px</div>
+      <div class="marker">6500 px</div>
+      <div class="marker">7000 px</div>
+      <div class="marker">7500 px</div>
+      <div class="marker">8000 px</div>
+      <div class="marker">8500 px</div>
+      <div class="marker">9000 px</div>
+      <div class="marker">9500 px</div>
+    </main>
+  </body>
+</html>

@@ -1,7 +1,12 @@
 import type { PagePreparationService } from "@background/page-preparation-service";
-import type { CaptureCancellation, CaptureEngine, CaptureProgress } from "@capture/capture-engine";
+import type {
+  CaptureCancellation,
+  CaptureEngine,
+  CaptureEngineContext,
+  CaptureProgress,
+} from "@capture/capture-engine";
 import { JOB_PROGRESS_THROTTLE_MS, TILE_RECORD_SCHEMA_VERSION } from "@shared/constants";
-import type { CaptureJob, CaptureTile } from "@shared/contracts/domain";
+import type { CaptureJob, CaptureTile, PageMetrics, Rect } from "@shared/contracts/domain";
 import type { StoredTileRecord } from "@shared/contracts/job";
 import { createJobProgressMessage } from "@shared/contracts/job-progress";
 import {
@@ -25,6 +30,7 @@ export interface FullPageCaptureCoordinatorOptions {
   jobs: PersistentJobCoordinatorPort;
   pages: PagePreparationService;
   engine: CaptureEngine;
+  fallbackEngine?: CaptureEngine;
   tiles: TileRepositoryPort;
   progress?: JobProgressPublisher;
   now?: () => Date;
@@ -112,7 +118,7 @@ function invalidModeError(job: CaptureJob): Error {
     createWebCapError({
       code: "E_PROTOCOL_MESSAGE",
       stage: "protocol",
-      message: "Only full-page jobs can use the CDP full-page coordinator.",
+      message: "Only full-page jobs can use the full-page capture coordinator.",
       userMessageKey: "errors.captureMode",
       retryable: false,
       fallbackAllowed: false,
@@ -127,11 +133,11 @@ function normalizedOperationError(error: unknown): WebCapErrorData {
     return error.data;
   }
   return normalizeError(error, {
-    code: "E_CDP_COMMAND",
+    code: "E_CAPTURE_EMPTY",
     stage: "capture",
     userMessageKey: "errors.fullPageCapture",
     retryable: true,
-    fallbackAllowed: true,
+    fallbackAllowed: false,
   });
 }
 
@@ -152,10 +158,15 @@ function cleanupState(error: unknown): CaptureJob["cleanup"] {
   return { attempted: true, completed: false, error: normalized };
 }
 
+function fallbackAllowed(error: unknown): boolean {
+  return error instanceof WebCapRuntimeError && error.fallbackAllowed;
+}
+
 export class FullPageCaptureCoordinator {
   private readonly jobs: PersistentJobCoordinatorPort;
   private readonly pages: PagePreparationService;
   private readonly engine: CaptureEngine;
+  private readonly fallbackEngine: CaptureEngine | undefined;
   private readonly tiles: TileRepositoryPort;
   private readonly progress: JobProgressPublisher;
   private readonly now: () => Date;
@@ -166,6 +177,7 @@ export class FullPageCaptureCoordinator {
     this.jobs = options.jobs;
     this.pages = options.pages;
     this.engine = options.engine;
+    this.fallbackEngine = options.fallbackEngine;
     this.tiles = options.tiles;
     this.now = options.now ?? (() => new Date());
     const requestId = options.requestId ?? (() => crypto.randomUUID());
@@ -232,9 +244,11 @@ export class FullPageCaptureCoordinator {
     let prepared = false;
     let operationError: unknown;
     let restoreError: unknown;
+    let activeEngine: CaptureEngine | undefined;
+    let activeContext: CaptureEngineContext | undefined;
 
     try {
-      await this.pages.prepare({
+      const preparation = await this.pages.prepare({
         tabId: job.tabId,
         preparationId: job.id,
         options: {
@@ -244,27 +258,71 @@ export class FullPageCaptureCoordinator {
       });
       prepared = true;
       cancellation.throwIfCancelled("prepare");
-      await this.engine.capture({
-        jobId: job.id,
-        tabId: job.tabId,
-        settings: job.settings,
-        cancellation,
-        onPlan: async (metrics, targetRect, tiles) => {
-          await this.jobs.transition(job.id, "capturing", {
-            activeEngine: this.engine.kind,
-            metrics,
-            targetRect,
-            tilePlan: tiles,
-            completedTiles: 0,
-            totalTiles: tiles.length,
+
+      const preferred =
+        job.preferredEngine === "scroll" && this.fallbackEngine !== undefined
+          ? this.fallbackEngine
+          : this.engine;
+      const fallback = preferred === this.engine ? this.fallbackEngine : undefined;
+      const engines = fallback === undefined ? [preferred] : [preferred, fallback];
+
+      for (let attempt = 0; attempt < engines.length; attempt += 1) {
+        const selected = engines[attempt] as CaptureEngine;
+        if (attempt > 0) {
+          cancellation.throwIfCancelled("capture");
+          await this.resetForFallback(job.id);
+          const current = await this.requireJob(job.id);
+          await this.publish({
+            jobId: job.id,
+            state: current.state,
+            stage: "fallback",
+            completed: 0,
+            total: 0,
           });
-        },
-        storeTile: (tile, blob) => this.storeTile(job.id, tile, blob),
-        reportProgress: (progress) => this.publish(progress),
-      });
-      cancellation.throwIfCancelled("capture");
+        }
+
+        const context: CaptureEngineContext = {
+          jobId: job.id,
+          tabId: job.tabId,
+          windowId: job.windowId,
+          settings: job.settings,
+          preparation,
+          cancellation,
+          onPlan: (metrics, targetRect, tiles) =>
+            this.recordPlan(job.id, selected, metrics, targetRect, tiles),
+          storeTile: (tile, blob) => this.storeTile(job.id, tile, blob),
+          reportProgress: (progress) => this.publish(progress),
+        };
+        activeEngine = selected;
+        activeContext = context;
+
+        try {
+          await selected.capture(context);
+          cancellation.throwIfCancelled("capture");
+          operationError = undefined;
+          break;
+        } catch (error) {
+          operationError = error;
+          const canFallback =
+            attempt === 0 &&
+            engines.length > 1 &&
+            !cancellation.cancelled &&
+            fallbackAllowed(error);
+          if (!canFallback) {
+            break;
+          }
+        }
+      }
     } catch (error) {
       operationError = error;
+    }
+
+    if (activeEngine?.cleanup !== undefined && activeContext !== undefined) {
+      try {
+        await activeEngine.cleanup(activeContext);
+      } catch (error) {
+        restoreError = error;
+      }
     }
 
     if (prepared) {
@@ -279,7 +337,7 @@ export class FullPageCaptureCoordinator {
       try {
         await this.pages.restore(job.tabId, job.id);
       } catch (error) {
-        restoreError = error;
+        restoreError ??= error;
       }
     }
 
@@ -328,6 +386,48 @@ export class FullPageCaptureCoordinator {
     } catch (error) {
       await this.settleFailure(job.id, cancellation, error, undefined);
     }
+  }
+
+  private async recordPlan(
+    jobId: string,
+    engine: CaptureEngine,
+    metrics: PageMetrics,
+    targetRect: Rect,
+    tiles: CaptureTile[],
+  ): Promise<void> {
+    const job = await this.requireJob(jobId);
+    const patch = {
+      activeEngine: engine.kind,
+      metrics,
+      targetRect,
+      tilePlan: tiles,
+      completedTiles: 0,
+      totalTiles: tiles.length,
+    };
+    if (job.state === "preparing") {
+      await this.jobs.transition(job.id, "capturing", patch);
+      return;
+    }
+    if (job.state === "capturing") {
+      await this.jobs.update(job.id, patch);
+      return;
+    }
+    throw createWebCapRuntimeError(
+      createWebCapError({
+        code: "E_PROTOCOL_MESSAGE",
+        stage: "protocol",
+        message: "A capture plan was produced in an invalid job state.",
+        userMessageKey: "errors.jobState",
+        retryable: true,
+        fallbackAllowed: false,
+        causeCode: "UnexpectedPlanState",
+        safeContext: { jobId, state: job.state, engine: engine.kind },
+      }),
+    );
+  }
+
+  private async resetForFallback(jobId: string): Promise<void> {
+    await this.tiles.deleteByJob(jobId);
   }
 
   private async storeTile(jobId: string, tile: CaptureTile, blob: Blob): Promise<void> {

@@ -1,9 +1,12 @@
 import { createChromeDebuggerAdapter } from "@background/chrome-debugger-adapter";
+import { createChromeTabsAdapter } from "@background/chrome-tabs-adapter";
 import { DebuggerClient } from "@background/debugger-client";
 import { FullPageCaptureCoordinator } from "@background/full-page-capture-coordinator";
 import { createChromePagePreparationAdapter } from "@background/page-preparation-adapter";
 import { PagePreparationService } from "@background/page-preparation-service";
+import { createChromeScrollCapturePageAdapter } from "@background/scroll-capture-page-adapter";
 import { CdpCaptureEngine } from "@capture/cdp-capture-engine";
+import { ScrollCaptureEngine } from "@capture/scroll-capture-engine";
 import { DEDUPE_RECORD_SCHEMA_VERSION, DEDUPE_TTL_MS } from "@shared/constants";
 import type { CaptureJob } from "@shared/contracts/domain";
 import type { StoredDedupeRecord } from "@shared/contracts/job";
@@ -60,6 +63,8 @@ function defaultDependencies(): PersistentJobRouterDependencies {
   const pages = new PagePreparationService({
     browser: createChromePagePreparationAdapter(),
   });
+  const scrollPages = createChromeScrollCapturePageAdapter();
+  const tabs = createChromeTabsAdapter();
   const jobs = new PersistentJobCoordinator({
     jobs: jobRepository,
     sessions,
@@ -67,8 +72,26 @@ function defaultDependencies(): PersistentJobRouterDependencies {
     artifacts: new IndexedDbJobArtifactCleanupRepository(),
     cleanup: {
       async cleanup(job) {
-        if (job.mode === "full-page") {
+        if (job.mode !== "full-page") {
+          return;
+        }
+        let scrollCleanupError: unknown;
+        try {
+          await scrollPages.cleanup(job.tabId, job.id, 0, 0);
+        } catch (error) {
+          scrollCleanupError = error;
+        }
+        let pageCleanupError: unknown;
+        try {
           await pages.restore(job.tabId, job.id);
+        } catch (error) {
+          pageCleanupError = error;
+        }
+        if (scrollCleanupError instanceof Error) {
+          throw scrollCleanupError;
+        }
+        if (pageCleanupError instanceof Error) {
+          throw pageCleanupError;
         }
       },
     },
@@ -78,6 +101,7 @@ function defaultDependencies(): PersistentJobRouterDependencies {
     pages,
     tiles,
     engine: new CdpCaptureEngine(new DebuggerClient(createChromeDebuggerAdapter())),
+    fallbackEngine: new ScrollCaptureEngine({ pages: scrollPages, tabs }),
   });
   const dedupe = new IndexedDbDedupeRepository();
   sharedDependencies = { jobs, captures, dedupe, now: () => new Date() };

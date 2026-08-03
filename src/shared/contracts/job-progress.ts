@@ -7,6 +7,8 @@ export const CAPTURE_PROGRESS_STAGES = [
   "preparing",
   "measuring",
   "planning",
+  "fallback",
+  "scrolling",
   "capturing",
   "storing",
   "restoring",
