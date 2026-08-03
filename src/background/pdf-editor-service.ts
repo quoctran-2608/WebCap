@@ -1,5 +1,4 @@
 import { planPdfDocument } from "@offscreen/pdf-layout";
-import type { ArtifactMetadata } from "@shared/contracts/artifact";
 import type { CaptureJob } from "@shared/contracts/domain";
 import {
   type PdfEditManifest,
@@ -8,28 +7,13 @@ import {
   type PdfEditorUpdateAction,
 } from "@shared/contracts/pdf-editor";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
-import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
 import type { PdfEditManifestRepositoryPort } from "@storage/pdf-edit-manifest-repository";
 
 import type { PersistentJobCoordinatorPort } from "./job-coordinator";
 
-export interface PdfThumbnailOffscreenPort {
-  renderPdfThumbnail(options: {
-    jobId: string;
-    outputArtifactId: string;
-    page: PdfEditorPage;
-    tiles: CaptureJob["tilePlan"];
-    filename: string;
-    createdAt: string;
-    expiresAt: string;
-  }): Promise<ArtifactMetadata>;
-}
-
 export interface PdfEditorServiceOptions {
   jobs: PersistentJobCoordinatorPort;
   manifests: PdfEditManifestRepositoryPort;
-  artifacts: ArtifactRepositoryPort;
-  offscreen: PdfThumbnailOffscreenPort;
   now?: () => Date;
 }
 
@@ -96,7 +80,11 @@ function assertEditableSource(job: CaptureJob | undefined, jobId: string): Captu
 function createPages(job: CaptureJob, settings: CaptureJob["settings"]["pdf"]): PdfEditorPage[] {
   const targetRect = job.targetRect;
   if (targetRect === undefined) {
-    throw editorError("The PDF editor target rectangle is unavailable.", "PdfEditorTargetMissing", job.id);
+    throw editorError(
+      "The PDF editor target rectangle is unavailable.",
+      "PdfEditorTargetMissing",
+      job.id,
+    );
   }
   return planPdfDocument(targetRect, settings).pages.map((page) => ({
     id: `page-${page.index + 1}`,
@@ -108,48 +96,15 @@ function createPages(job: CaptureJob, settings: CaptureJob["settings"]["pdf"]): 
   }));
 }
 
-function thumbnailId(jobId: string, revision: number, pageId: string): string {
-  let hash = 2166136261;
-  const input = `${jobId}:${revision}:${pageId}`;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `pdf-thumb-${(hash >>> 0).toString(16).padStart(8, "0")}`;
-}
-
-function artifactMetadata(record: Awaited<ReturnType<ArtifactRepositoryPort["get"]>>): ArtifactMetadata {
-  if (record === undefined) {
-    throw new Error("The thumbnail artifact is unavailable.");
-  }
-  return {
-    artifactId: record.artifactId,
-    sourceArtifactId: record.sourceArtifactId,
-    format: record.format,
-    mimeType: record.mimeType,
-    filename: record.filename,
-    byteLength: record.byteLength,
-    width: record.width,
-    height: record.height,
-    ...(record.pageCount === undefined ? {} : { pageCount: record.pageCount }),
-    createdAt: record.createdAt,
-    expiresAt: record.expiresAt,
-  };
-}
-
 export class PdfEditorService {
   private readonly jobs: PersistentJobCoordinatorPort;
   private readonly manifests: PdfEditManifestRepositoryPort;
-  private readonly artifacts: ArtifactRepositoryPort;
-  private readonly offscreen: PdfThumbnailOffscreenPort;
   private readonly now: () => Date;
   private readonly operations = new Map<string, Promise<PdfEditorSnapshot>>();
 
   constructor(options: PdfEditorServiceOptions) {
     this.jobs = options.jobs;
     this.manifests = options.manifests;
-    this.artifacts = options.artifacts;
-    this.offscreen = options.offscreen;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -229,41 +184,6 @@ export class PdfEditorService {
       });
     this.operations.set(jobId, operation);
     return operation;
-  }
-
-  async thumbnail(
-    jobId: string,
-    manifestRevision: number,
-    pageId: string,
-  ): Promise<ArtifactMetadata> {
-    const job = assertEditableSource(await this.jobs.get(jobId), jobId);
-    const manifest = await this.ensureManifest(job);
-    if (manifest.revision !== manifestRevision) {
-      throw editorError(
-        "The requested PDF thumbnail belongs to an outdated edit manifest.",
-        "PdfThumbnailRevisionStale",
-        jobId,
-        true,
-      );
-    }
-    const page = manifest.pages.find((candidate) => candidate.id === pageId);
-    if (page === undefined) {
-      throw editorError("The requested PDF page does not exist.", "PdfThumbnailPageMissing", jobId);
-    }
-    const artifactId = thumbnailId(job.id, manifest.revision, page.id);
-    const cached = await this.artifacts.get(artifactId);
-    if (cached !== undefined && cached.role === "thumbnail" && cached.blob.size > 0) {
-      return artifactMetadata(cached);
-    }
-    return this.offscreen.renderPdfThumbnail({
-      jobId: job.id,
-      outputArtifactId: artifactId,
-      page,
-      tiles: job.tilePlan,
-      filename: `${page.id}.jpg`,
-      createdAt: this.now().toISOString(),
-      expiresAt: job.expiresAt,
-    });
   }
 
   private async ensureManifest(job: CaptureJob): Promise<PdfEditManifest> {
