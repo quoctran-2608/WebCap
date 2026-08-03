@@ -42,11 +42,9 @@ export class IndexedDbTileRepository implements TileRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.tiles, "readonly");
-      const completed = transactionDone(transaction);
       const value = await requestResult<unknown>(
         transaction.objectStore(WEBCAP_STORES.tiles).get([jobId, index]),
       );
-      await completed;
       return value === undefined ? undefined : parseRecord(value);
     } catch (error) {
       throw storageError("read", error);
@@ -57,10 +55,8 @@ export class IndexedDbTileRepository implements TileRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.tiles, "readonly");
-      const completed = transactionDone(transaction);
       const store = transaction.objectStore(WEBCAP_STORES.tiles);
       const values = await requestResult<unknown[]>(store.index("byJobId").getAll(jobId));
-      await completed;
       return values.map(parseRecord).sort((left, right) => left.index - right.index);
     } catch (error) {
       throw storageError("read", error);
