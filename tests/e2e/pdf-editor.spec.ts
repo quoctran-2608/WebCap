@@ -39,9 +39,7 @@ async function readEditorState(editor: Page, jobId: string): Promise<EditorStora
     const tiles = (tileValues as Array<{ jobId: string; blob?: Blob }>).filter(
       (record) => record.jobId === id,
     );
-    const artifact = (
-      artifactValues as Array<{ artifactId: string; pageCount?: number }>
-    ).find(
+    const artifact = (artifactValues as Array<{ artifactId: string; pageCount?: number }>).find(
       (candidate) =>
         job.outputArtifactId !== undefined && candidate.artifactId === job.outputArtifactId,
     );
