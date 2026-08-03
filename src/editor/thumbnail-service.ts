@@ -100,27 +100,13 @@ function roundRange(
 
 const browserEnvironment: ThumbnailEnvironment = {
   async decode(blob) {
-    const url = URL.createObjectURL(blob);
-    const image = new Image();
-    try {
-      await new Promise<void>((resolve, reject) => {
-        image.onload = () => resolve();
-        image.onerror = () => reject(new Error("PDF thumbnail source image could not be decoded."));
-        image.src = url;
-      });
-      return {
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-        source: image,
-        close() {
-          image.src = "";
-          URL.revokeObjectURL(url);
-        },
-      };
-    } catch (error) {
-      URL.revokeObjectURL(url);
-      throw error;
-    }
+    const bitmap = await createImageBitmap(blob);
+    return {
+      width: bitmap.width,
+      height: bitmap.height,
+      source: bitmap,
+      close: () => bitmap.close(),
+    };
   },
   createCanvas(width, height) {
     const canvas = new OffscreenCanvas(width, height);
