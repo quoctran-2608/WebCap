@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebCap Region Selection Fixture</title>
+    <style>
+      :root {
+        font-family: system-ui, sans-serif;
+        color: #f8fafc;
+        background: #0f172a;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-width: 1,100px;
+      }
+
+      body {
+        min-height: 3,600px;
+      }
+
+      .focus-row {
+        position: relative;
+        z-index: 1;
+        height: 120px;
+        display: flex;
+        align-items: center;
+        padding: 24px 72px;
+        background: #0f172a;
+      }
+
+      #focus-target {
+        width: 260px;
+        padding: 12px 14px;
+        border: 2px solid #94a3b8;
+        border-radius: 8px;
+        background: #fff;
+        color: #0f172a;
+      }
+
+      .band {
+        height: 580px;
+        padding: 72px;
+        border-top: 8px solid rgba(255, 255, 255, 0.28);
+      }
+
+      .band h1,
+      .band h2 {
+        margin: 0 0 18px;
+        font-size: 44px;
+      }
+
+      .band p {
+        max-width: 640px;
+        margin: 0;
+        font-size: 22px;
+        line-height: 1.55;
+      }
+
+      .band--blue {
+        background: #2563eb;
+      }
+
+      .band--green {
+        background: #15803d;
+      }
+
+      .band--orange {
+        background: #c2410c;
+      }
+
+      .band--purple {
+        background: #7e22ce;
+      }
+
+      .band--teal {
+        background: #0f766e;
+      }
+
+      .band--rose {
+        background: #be123c;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="focus-row">
+      <label>
+        Focus restoration target
+        <input id="focus-target" value="region fixture" />
+      </label>
+    </div>
+    <section class="band band--blue" data-band="blue">
+      <h1>Region selection start</h1>
+      <p>Solid bands make overlay leakage and coordinate coverage deterministic.</p>
+    </section>
+    <section class="band band--green" data-band="green">
+      <h2>Auto-scroll continuation</h2>
+      <p>The selected rectangle can extend beyond the initial viewport.</p>
+    </section>
+    <section class="band band--orange" data-band="orange">
+      <h2>Document coordinates</h2>
+      <p>All target rectangles remain in CSS document space.</p>
+    </section>
+    <section class="band band--purple" data-band="purple">
+      <h2>Zoom and DPR</h2>
+      <p>Coordinate conversion is validated separately from device-pixel scale.</p>
+    </section>
+    <section class="band band--teal" data-band="teal">
+      <h2>Long target coverage</h2>
+      <p>The existing tiled engines capture the confirmed target only.</p>
+    </section>
+    <section class="band band--rose" data-band="rose">
+      <h2>Fixture end</h2>
+      <p>WebCap restores the original focus, scroll, and page styles.</p>
+    </section>
+  </body>
+</html>
