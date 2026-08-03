@@ -19,6 +19,7 @@ interface StoredFullPageState {
     completedTiles: number;
     totalTiles: number;
     errorCode?: string;
+    errorCause?: string;
     fallbackAllowed?: boolean;
     cleanupCompleted: boolean;
     tileStatuses: string[];
@@ -41,6 +42,19 @@ async function resolveFixtureTab(serviceWorker: Worker, page: Page): Promise<num
       throw new Error("The full-page fixture tab could not be resolved.");
     }
     return tab.id;
+  }, page.url());
+}
+
+async function activateFixtureTab(serviceWorker: Worker, page: Page): Promise<void> {
+  await page.bringToFront();
+  await serviceWorker.evaluate(async (url) => {
+    const tabs = await chrome.tabs.query({});
+    const tab = tabs.find((candidate) => candidate.url === url);
+    if (tab?.id === undefined || tab.windowId === undefined) {
+      throw new Error("The full-page fixture tab could not be activated.");
+    }
+    await chrome.tabs.update(tab.id, { active: true });
+    await chrome.windows.update(tab.windowId, { focused: true });
   }, page.url());
 }
 
@@ -81,7 +95,7 @@ async function readFullPageState(serviceWorker: Worker): Promise<StoredFullPageS
       totalTiles: number;
       updatedAt: string;
       cleanup: { completed: boolean };
-      error?: { code: string; fallbackAllowed: boolean };
+      error?: { code: string; causeCode?: string; fallbackAllowed: boolean };
       tilePlan: Array<{ status: string }>;
     }>;
     const job = jobs
@@ -125,6 +139,9 @@ async function readFullPageState(serviceWorker: Worker): Promise<StoredFullPageS
                 ? {}
                 : {
                     errorCode: job.error.code,
+                    ...(job.error.causeCode === undefined
+                      ? {}
+                      : { errorCause: job.error.causeCode }),
                     fallbackAllowed: job.error.fallbackAllowed,
                   }),
               cleanupCompleted: job.cleanup.completed,
@@ -234,9 +251,19 @@ test("@smoke falls back to scroll capture when the debugger is already occupied"
     const popup = await openPopup();
     await selectFullPage(popup);
     await popup.getByRole("button", { name: "Bắt đầu chụp toàn trang" }).click();
-    await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({
-      timeout: 45_000,
-    });
+    await activateFixtureTab(serviceWorker, targetPage);
+    await expect
+      .poll(
+        async () => {
+          const state = await readFullPageState(serviceWorker);
+          if (state.job?.state === "failed" || state.job?.state === "cancelled") {
+            return `${state.job.state}:${state.job.errorCode ?? "unknown"}:${state.job.errorCause ?? "unknown"}`;
+          }
+          return state.job?.state ?? "missing";
+        },
+        { timeout: 45_000 },
+      )
+      .toBe("ready");
 
     const state = await readFullPageState(serviceWorker);
     expect(state.job).toMatchObject({
@@ -248,6 +275,9 @@ test("@smoke falls back to scroll capture when the debugger is already occupied"
     expect(state.tiles.length).toBeGreaterThan(0);
     expect(state.tiles.every((tile) => tile.outputRect !== null && tile.blobSize > 0)).toBe(true);
     expect(await snapshotPage(targetPage)).toEqual(before);
+
+    await popup.bringToFront();
+    await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({ timeout: 5_000 });
   } finally {
     await serviceWorker
       .evaluate(async (id) => chrome.debugger.detach({ tabId: id }), tabId)
