@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Persistent capture-job state machine with guarded transitions, invariants, and optimistic `stateRevision` compare-and-set writes.
+- Versioned IndexedDB job, tile, artifact-cleanup, and request-dedupe repositories with normalized transaction failures.
+- Metadata-only job summaries and per-tab leases in `chrome.storage.session`, including service-worker restart recovery.
+- Idempotent `JOB_CREATE`, `JOB_GET`, and `JOB_CANCEL` contracts plus expiry cleanup that preserves actively leased jobs.
 - Popup preview cards with local Blob URLs, image metadata, explicit download/retry/cancel controls, and accessible live status.
 - Metadata-only visible session restoration through `chrome.storage.session` while binary artifacts remain in IndexedDB.
 - Playwright persistent-Chromium extension coverage for preview pixels, popup reopen recovery, PNG download integrity, DPR 2, and 125% zoom.

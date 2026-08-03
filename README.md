@@ -6,7 +6,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 ## Current status
 
-**S05 — The visible capture slice is complete.** WebCap now captures the active viewport, creates a local PNG/JPEG/WebP preview, restores that preview after the popup closes, and downloads the stored artifact without recapturing. Playwright validates the real unpacked extension at normal display settings and at DPR 2 with 125% zoom. The next session is S06 persistent capture jobs and repositories.
+**S06 — The persistent capture-job foundation is complete.** WebCap now stores full capture jobs and tile records in IndexedDB, keeps metadata-only recovery summaries and per-tab leases in `chrome.storage.session`, rejects stale state revisions, restores interrupted jobs after service-worker restart, and deduplicates persistent job commands by request ID. The next session is S07 debugger metrics and deterministic 2D tile planning.
 
 ## Requirements
 
@@ -57,7 +57,9 @@ assets/                 Internal build-time icon sources.
 src/background/         Manifest V3 service worker and message routing.
 src/popup/              React popup entry, shell, styles, and runtime client.
 src/shared/contracts/   Typed cross-context message envelopes.
+src/storage/            IndexedDB and chrome.storage repositories.
 tests/unit/             Fast deterministic contract and router tests.
+tests/e2e/              Playwright unpacked-extension integration tests.
 tests/smoke/            Real-Chrome unpacked-extension smoke tests.
 scripts/                Build verification and repository automation.
 ```

@@ -101,12 +101,21 @@ function requestIdFrom(value: unknown): string | undefined {
   return typeof requestId === "string" && requestId.length > 0 ? requestId : undefined;
 }
 
+function isPersistentJobMessageType(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || !("type" in value)) {
+    return false;
+  }
+  const type = (value as { type?: unknown }).type;
+  return type === "JOB_CREATE" || type === "JOB_GET" || type === "JOB_CANCEL";
+}
+
 function targetsBackground(value: unknown): boolean {
   return (
     typeof value === "object" &&
     value !== null &&
     "target" in value &&
-    (value as { target?: unknown }).target === "background"
+    (value as { target?: unknown }).target === "background" &&
+    !isPersistentJobMessageType(value)
   );
 }
 
