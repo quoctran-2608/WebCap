@@ -1,3 +1,5 @@
+import { describe, expect, it } from "vitest";
+
 import type { DebuggerSession } from "@background/debugger-client";
 import { normalizePageMetrics, readPageMetrics } from "@capture/page-metrics";
 import { WebCapRuntimeError } from "@shared/errors/error";
