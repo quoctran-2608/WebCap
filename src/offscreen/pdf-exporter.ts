@@ -1,0 +1,436 @@
+import { PDFDocument } from "pdf-lib";
+
+import type { ArtifactMetadata, ArtifactRecord } from "@shared/contracts/artifact";
+import type { CaptureSettings, CaptureTile, Rect } from "@shared/contracts/domain";
+import {
+  WebCapRuntimeError,
+  createWebCapError,
+  createWebCapRuntimeError,
+} from "@shared/errors/error";
+import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
+import type { TileRepositoryPort } from "@storage/tile-repository";
+
+import { createRunningPixelRanges, planPdfDocument } from "./pdf-layout";
+import { planPdfTileIntersections } from "./pdf-tile-intersections";
+
+export interface PdfExportPayload {
+  jobId: string;
+  outputArtifactId: string;
+  targetRect: Rect;
+  tiles: CaptureTile[];
+  settings: CaptureSettings["pdf"];
+  filename: string;
+  createdAt: string;
+  expiresAt: string;
+  sourceTitle?: string;
+  sourceDomain?: string;
+}
+
+export interface PdfExportProgress {
+  jobId: string;
+  completedPages: number;
+  totalPages: number;
+}
+
+export interface DecodedPdfTile {
+  width: number;
+  height: number;
+  source: CanvasImageSource;
+  close(): void;
+}
+
+export interface PdfPageCanvasContextPort {
+  fillWhite(width: number, height: number): void;
+  drawImage(
+    image: DecodedPdfTile,
+    sourceX: number,
+    sourceY: number,
+    sourceWidth: number,
+    sourceHeight: number,
+    destinationX: number,
+    destinationY: number,
+    destinationWidth: number,
+    destinationHeight: number,
+  ): void;
+}
+
+export interface PdfPageCanvasPort {
+  width: number;
+  height: number;
+  getContext(): PdfPageCanvasContextPort | null;
+  convertToJpeg(quality: number): Promise<Blob>;
+  release(): void;
+}
+
+export interface PdfDocumentPort {
+  addJpegPage(options: {
+    bytes: Uint8Array;
+    pageWidthPt: number;
+    pageHeightPt: number;
+    imageRectPt: Rect;
+  }): Promise<void>;
+  save(): Promise<Uint8Array>;
+}
+
+export interface PdfExportEnvironment {
+  decode(blob: Blob): Promise<DecodedPdfTile>;
+  createCanvas(width: number, height: number): PdfPageCanvasPort;
+  createDocument(): Promise<PdfDocumentPort>;
+}
+
+export interface PdfExporterOptions {
+  tiles: TileRepositoryPort;
+  artifacts: ArtifactRepositoryPort;
+  environment?: PdfExportEnvironment;
+}
+
+export interface PdfExportDiagnostics {
+  pageCount: number;
+  decodedTileCount: number;
+  maxDecodedTiles: number;
+  maxCanvasPixelArea: number;
+  releasedCanvasCount: number;
+}
+
+export interface PdfExportResult {
+  artifact: ArtifactMetadata;
+  diagnostics: PdfExportDiagnostics;
+}
+
+const defaultEnvironment: PdfExportEnvironment = {
+  async decode(blob) {
+    const bitmap = await createImageBitmap(blob);
+    return {
+      width: bitmap.width,
+      height: bitmap.height,
+      source: bitmap,
+      close: () => bitmap.close(),
+    };
+  },
+  createCanvas(width, height) {
+    const canvas = new OffscreenCanvas(width, height);
+    const context = canvas.getContext("2d");
+    return {
+      width,
+      height,
+      getContext: () =>
+        context === null
+          ? null
+          : {
+              fillWhite(canvasWidth, canvasHeight) {
+                context.save();
+                context.fillStyle = "#ffffff";
+                context.fillRect(0, 0, canvasWidth, canvasHeight);
+                context.restore();
+              },
+              drawImage(
+                image,
+                sourceX,
+                sourceY,
+                sourceWidth,
+                sourceHeight,
+                destinationX,
+                destinationY,
+                destinationWidth,
+                destinationHeight,
+              ) {
+                context.drawImage(
+                  image.source,
+                  sourceX,
+                  sourceY,
+                  sourceWidth,
+                  sourceHeight,
+                  destinationX,
+                  destinationY,
+                  destinationWidth,
+                  destinationHeight,
+                );
+              },
+            },
+      convertToJpeg: (quality) => canvas.convertToBlob({ type: "image/jpeg", quality }),
+      release() {
+        canvas.width = 1;
+        canvas.height = 1;
+      },
+    };
+  },
+  async createDocument() {
+    const document = await PDFDocument.create();
+    return {
+      async addJpegPage(options) {
+        const image = await document.embedJpg(options.bytes);
+        const page = document.addPage([options.pageWidthPt, options.pageHeightPt]);
+        page.drawImage(image, {
+          x: options.imageRectPt.x,
+          y: options.imageRectPt.y,
+          width: options.imageRectPt.width,
+          height: options.imageRectPt.height,
+        });
+      },
+      save: () => document.save(),
+    };
+  },
+};
+
+function exportError(message: string, causeCode?: string): Error {
+  return createWebCapRuntimeError(
+    createWebCapError({
+      code: "E_EXPORT_FAILED",
+      stage: "export",
+      message,
+      userMessageKey: "errors.exportFailed",
+      retryable: true,
+      fallbackAllowed: false,
+      ...(causeCode === undefined ? {} : { causeCode }),
+    }),
+  );
+}
+
+function storageReadError(message: string, safeContext: Record<string, string | number>): Error {
+  return createWebCapRuntimeError(
+    createWebCapError({
+      code: "E_STORAGE_READ",
+      stage: "storage",
+      message,
+      userMessageKey: "errors.storageRead",
+      retryable: true,
+      fallbackAllowed: false,
+      safeContext,
+    }),
+  );
+}
+
+function positiveScale(value: number, axis: "x" | "y"): number {
+  if (!Number.isFinite(value) || value <= 0 || value > 8) {
+    throw exportError(`The PDF ${axis}-axis tile scale is invalid.`, "InvalidPdfTileScale");
+  }
+  return value;
+}
+
+function roundRange(start: number, end: number, maximum: number): { start: number; length: number } {
+  const roundedStart = Math.max(0, Math.min(maximum, Math.round(start)));
+  const roundedEnd = Math.max(roundedStart, Math.min(maximum, Math.round(end)));
+  return { start: roundedStart, length: roundedEnd - roundedStart };
+}
+
+export class PdfExporter {
+  private readonly tiles: TileRepositoryPort;
+  private readonly artifacts: ArtifactRepositoryPort;
+  private readonly environment: PdfExportEnvironment;
+
+  constructor(options: PdfExporterOptions) {
+    this.tiles = options.tiles;
+    this.artifacts = options.artifacts;
+    this.environment = options.environment ?? defaultEnvironment;
+  }
+
+  async export(
+    payload: PdfExportPayload,
+    reportProgress: (progress: PdfExportProgress) => Promise<void> = () => Promise.resolve(),
+  ): Promise<PdfExportResult> {
+    const records = await this.tiles.listByJob(payload.jobId);
+    const recordByIndex = new Map(records.map((record) => [record.index, record]));
+    for (const tile of payload.tiles) {
+      const record = recordByIndex.get(tile.index);
+      if (record?.blob === undefined || record.tile.status !== "stored") {
+        throw storageReadError("A stored capture tile is unavailable for PDF export.", {
+          jobId: payload.jobId.slice(0, 24),
+          tileIndex: tile.index,
+        });
+      }
+    }
+
+    const firstTile = payload.tiles[0];
+    if (firstTile === undefined) {
+      throw exportError("PDF export requires at least one stored capture tile.", "PdfTilesMissing");
+    }
+    const renderScaleX = positiveScale(
+      firstTile.expectedPixelWidth / firstTile.sourceRectCss.width,
+      "x",
+    );
+    const renderScaleY = positiveScale(
+      firstTile.expectedPixelHeight / firstTile.sourceRectCss.height,
+      "y",
+    );
+    const documentPlan = planPdfDocument(payload.targetRect, payload.settings);
+    const totalPixelHeight = Math.max(1, Math.round(payload.targetRect.height * renderScaleY));
+    const pixelRanges = createRunningPixelRanges(
+      documentPlan.pages.map((page) => page.sourceRectCss.height),
+      renderScaleY,
+      totalPixelHeight,
+    );
+    const canvasWidth = Math.max(1, Math.round(payload.targetRect.width * renderScaleX));
+    const pdf = await this.environment.createDocument();
+
+    let activeDecodedTiles = 0;
+    let decodedTileCount = 0;
+    let maxDecodedTiles = 0;
+    let maxCanvasPixelArea = 0;
+    let releasedCanvasCount = 0;
+
+    try {
+      for (const page of documentPlan.pages) {
+        const pixelRange = pixelRanges[page.index];
+        if (pixelRange === undefined) {
+          throw exportError("PDF page pixel range is missing.", "PdfPagePixelRangeMissing");
+        }
+        const canvas = this.environment.createCanvas(canvasWidth, pixelRange.length);
+        maxCanvasPixelArea = Math.max(maxCanvasPixelArea, canvas.width * canvas.height);
+        try {
+          const context = canvas.getContext();
+          if (context === null) {
+            throw exportError("WebCap could not create a PDF page canvas context.", "PdfCanvasUnavailable");
+          }
+          context.fillWhite(canvas.width, canvas.height);
+          const intersections = planPdfTileIntersections(page.sourceRectCss, payload.tiles);
+          for (const intersection of intersections) {
+            const record = recordByIndex.get(intersection.tileIndex);
+            const tile = payload.tiles.find((candidate) => candidate.index === intersection.tileIndex);
+            if (record?.blob === undefined || tile === undefined) {
+              throw storageReadError("A PDF page tile disappeared during export.", {
+                jobId: payload.jobId.slice(0, 24),
+                tileIndex: intersection.tileIndex,
+              });
+            }
+
+            const decoded = await this.environment.decode(record.blob);
+            activeDecodedTiles += 1;
+            decodedTileCount += 1;
+            maxDecodedTiles = Math.max(maxDecodedTiles, activeDecodedTiles);
+            try {
+              const tileScaleX = positiveScale(decoded.width / tile.sourceRectCss.width, "x");
+              const tileScaleY = positiveScale(decoded.height / tile.sourceRectCss.height, "y");
+              const sourceX = roundRange(
+                intersection.sourceCropCss.x * tileScaleX,
+                (intersection.sourceCropCss.x + intersection.sourceCropCss.width) * tileScaleX,
+                decoded.width,
+              );
+              const sourceY = roundRange(
+                intersection.sourceCropCss.y * tileScaleY,
+                (intersection.sourceCropCss.y + intersection.sourceCropCss.height) * tileScaleY,
+                decoded.height,
+              );
+              const globalDestinationX = roundRange(
+                (intersection.logicalRectCss.x - payload.targetRect.x) * renderScaleX,
+                (intersection.logicalRectCss.x + intersection.logicalRectCss.width -
+                  payload.targetRect.x) *
+                  renderScaleX,
+                canvasWidth,
+              );
+              const globalDestinationY = roundRange(
+                (intersection.logicalRectCss.y - payload.targetRect.y) * renderScaleY,
+                (intersection.logicalRectCss.y + intersection.logicalRectCss.height -
+                  payload.targetRect.y) *
+                  renderScaleY,
+                totalPixelHeight,
+              );
+              const destinationY = globalDestinationY.start - pixelRange.start;
+              if (
+                sourceX.length <= 0 ||
+                sourceY.length <= 0 ||
+                globalDestinationX.length <= 0 ||
+                globalDestinationY.length <= 0 ||
+                destinationY < 0 ||
+                destinationY + globalDestinationY.length > canvas.height
+              ) {
+                throw exportError("PDF tile crop produced an empty or out-of-page rectangle.", "PdfTileCropInvalid");
+              }
+              context.drawImage(
+                decoded,
+                sourceX.start,
+                sourceY.start,
+                sourceX.length,
+                sourceY.length,
+                globalDestinationX.start,
+                destinationY,
+                globalDestinationX.length,
+                globalDestinationY.length,
+              );
+            } finally {
+              activeDecodedTiles -= 1;
+              decoded.close();
+            }
+          }
+
+          const jpegBlob = await canvas.convertToJpeg(payload.settings.jpegQuality);
+          if (jpegBlob.size <= 0) {
+            throw exportError("The encoded PDF page JPEG is empty.", "EmptyPdfPageJpeg");
+          }
+          await pdf.addJpegPage({
+            bytes: new Uint8Array(await jpegBlob.arrayBuffer()),
+            pageWidthPt: page.pageWidthPt,
+            pageHeightPt: page.pageHeightPt,
+            imageRectPt: page.imageRectPt,
+          });
+        } finally {
+          canvas.release();
+          releasedCanvasCount += 1;
+        }
+
+        await reportProgress({
+          jobId: payload.jobId,
+          completedPages: page.index + 1,
+          totalPages: documentPlan.pages.length,
+        });
+      }
+
+      const bytes = await pdf.save();
+      if (bytes.byteLength <= 0) {
+        throw exportError("The generated PDF artifact is empty.", "EmptyPdfArtifact");
+      }
+      const blob = new Blob([bytes], { type: "application/pdf" });
+      const record: ArtifactRecord = {
+        artifactId: payload.outputArtifactId,
+        sourceArtifactId: payload.jobId,
+        jobId: payload.jobId,
+        role: "output",
+        format: "pdf",
+        mimeType: "application/pdf",
+        filename: payload.filename,
+        byteLength: blob.size,
+        width: Math.max(1, Math.round(documentPlan.pageBox.widthPt)),
+        height: Math.max(1, Math.round(documentPlan.pageBox.heightPt)),
+        pageCount: documentPlan.pages.length,
+        createdAt: payload.createdAt,
+        expiresAt: payload.expiresAt,
+        blob,
+        ...(payload.sourceTitle === undefined ? {} : { sourceTitle: payload.sourceTitle }),
+        ...(payload.sourceDomain === undefined ? {} : { sourceDomain: payload.sourceDomain }),
+      };
+      await this.artifacts.put(record);
+      const artifact: ArtifactMetadata = {
+        artifactId: record.artifactId,
+        sourceArtifactId: record.sourceArtifactId,
+        format: record.format,
+        mimeType: record.mimeType,
+        filename: record.filename,
+        byteLength: record.byteLength,
+        width: record.width,
+        height: record.height,
+        pageCount: record.pageCount,
+        createdAt: record.createdAt,
+        expiresAt: record.expiresAt,
+      };
+      return {
+        artifact,
+        diagnostics: {
+          pageCount: documentPlan.pages.length,
+          decodedTileCount,
+          maxDecodedTiles,
+          maxCanvasPixelArea,
+          releasedCanvasCount,
+        },
+      };
+    } catch (error) {
+      if (error instanceof WebCapRuntimeError) {
+        throw error;
+      }
+      throw exportError(
+        error instanceof Error && error.message.length > 0
+          ? error.message
+          : "WebCap could not create the PDF artifact.",
+        error instanceof Error ? error.name : "PdfExportFailed",
+      );
+    }
+  }
+}
