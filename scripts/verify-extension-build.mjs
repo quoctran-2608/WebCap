@@ -18,6 +18,7 @@ const expectedOptionalHosts = ["file:///*", "http://*/*", "https://*/*"];
 const requiredFiles = [
   "manifest.json",
   "popup.html",
+  "editor.html",
   "offscreen.html",
   "service-worker.js",
   "content-script.js",
@@ -55,13 +56,14 @@ assertEqual(
   "optional_host_permissions",
 );
 
-const popupHtml = await readFile(resolve(distDirectory, "popup.html"), "utf8");
-if (!popupHtml.includes('type="module"')) {
-  throw new Error("popup.html does not contain a module entry script.");
-}
-
-if (/https?:\/\//u.test(popupHtml)) {
-  throw new Error("popup.html contains a remote URL.");
+for (const htmlName of ["popup.html", "editor.html"]) {
+  const html = await readFile(resolve(distDirectory, htmlName), "utf8");
+  if (!html.includes('type="module"')) {
+    throw new Error(`${htmlName} does not contain a module entry script.`);
+  }
+  if (/https?:\/\//u.test(html)) {
+    throw new Error(`${htmlName} contains a remote URL.`);
+  }
 }
 
 const offscreenHtml = await readFile(resolve(distDirectory, "offscreen.html"), "utf8");
