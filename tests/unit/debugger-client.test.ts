@@ -10,9 +10,9 @@ import { WebCapRuntimeError } from "@shared/errors/error";
 class FakeDebuggerAdapter implements ChromeDebuggerAdapter {
   readonly calls: string[] = [];
   readonly listeners = new Set<DebuggerDetachListener>();
-  attachError: unknown;
-  detachError: unknown;
-  commandError: unknown;
+  attachError: Error | undefined;
+  detachError: Error | undefined;
+  commandError: Error | undefined;
   commandResult: unknown = { ok: true };
 
   attach(target: DebuggerTarget, version: string): Promise<void> {
