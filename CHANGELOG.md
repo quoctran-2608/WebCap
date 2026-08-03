@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Element capture mode with an isolated Shadow DOM hover/highlight selector, sanitized tag/id/class labels, dimensions, click confirmation, Enter/Escape controls, and parent/previous-child keyboard navigation.
+- Recursive open-Shadow-DOM hit testing with `elementsFromPoint()`, `composedPath()` fallback, invalid-root/WebCap-root exclusion, and scrollable-candidate metadata.
+- Opaque element target descriptors backed by content-runtime node identity, CSS document bounds through the shared CoordinateSpace, and revalidation after preparation plus immediately before each capture-engine attempt.
+- Safe retryable `E_TARGET_STALE` handling that never substitutes a replacement node, preserves zero stored tiles on stale failure, restores the page, and exposes popup reselection.
+- Element selection protocol, background service/router integration, persistent popup recovery, CDP-first/scroll-fallback target capture, and 200-unit/18-E2E validation including normal, open-shadow, stale, and keyboard-cancel fixtures.
 - Region capture mode with a typed selection lifecycle that creates a persistent job before the popup closes and starts tiled capture only after the page confirms a target rectangle.
 - A pure CoordinateSpace module for client, visual viewport, CSS document, and device-pixel conversions with bounds normalization, movement, eight-direction resizing, and edge auto-scroll calculations.
 - An isolated Shadow DOM region overlay with drag, move, eight resize handles, dimensions, keyboard nudging, Enter confirmation, Escape cancellation, and two-frame removal before capture.
