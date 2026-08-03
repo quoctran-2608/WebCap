@@ -169,7 +169,7 @@ describe("PdfExportService editor lifecycle", () => {
     const tiles = storedTileRepository();
     let resolveExport: ((value: ArtifactMetadata) => void) | undefined;
     const exportPdf = vi.fn<(options: PdfExportPayload) => Promise<ArtifactMetadata>>(
-      (_options) =>
+      () =>
         new Promise<ArtifactMetadata>((resolve) => {
           resolveExport = resolve;
         }),
@@ -200,14 +200,12 @@ describe("PdfExportService editor lifecycle", () => {
     const state = harness();
     const tiles = storedTileRepository();
     let attempt = 0;
-    const exportPdf = vi.fn<(options: PdfExportPayload) => Promise<ArtifactMetadata>>(
-      (_options) => {
-        attempt += 1;
-        return attempt === 1
-          ? Promise.reject(new Error("first export failed"))
-          : Promise.resolve(artifact("pdf-2"));
-      },
-    );
+    const exportPdf = vi.fn<(options: PdfExportPayload) => Promise<ArtifactMetadata>>(() => {
+      attempt += 1;
+      return attempt === 1
+        ? Promise.reject(new Error("first export failed"))
+        : Promise.resolve(artifact("pdf-2"));
+    });
     const service = new PdfExportService({
       jobs: state.jobs,
       tiles,
