@@ -193,7 +193,15 @@ export class FullPageCaptureCoordinator {
       return this.jobs.cancel(jobId, reason);
     }
     run.cancellation.cancel(reason);
-    return this.requireJob(jobId);
+    const job = await this.requireJob(jobId);
+    if (job.state === "preparing") {
+      try {
+        await this.pages.cancel(job.tabId, job.id);
+      } catch {
+        // The in-memory token still cancels at the next coordinator checkpoint.
+      }
+    }
+    return job;
   }
 
   isRunning(jobId: string): boolean {
