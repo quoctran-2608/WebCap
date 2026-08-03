@@ -104,7 +104,7 @@ describe("job state machine", () => {
     });
   });
 
-  it("requires source artifact confirmation before exporting", () => {
+  it("requires source artifact confirmation and initialized page progress before exporting", () => {
     const current = {
       ...job("ready"),
       activeEngine: "cdp" as const,
@@ -112,8 +112,10 @@ describe("job state machine", () => {
       completedTiles: 1,
       totalTiles: 1,
     };
-    const missing = transitionJob(current, "exporting", updatedAt);
-    const present = transitionJob(
+    const missingSource = transitionJob(current, "exporting", updatedAt, {
+      exportProgress: { completedPages: 0, totalPages: 2 },
+    });
+    const missingProgress = transitionJob(
       current,
       "exporting",
       updatedAt,
@@ -122,11 +124,30 @@ describe("job state machine", () => {
         sourceArtifactExists: true,
       },
     );
-    expect(missing).toMatchObject({
+    const present = transitionJob(
+      current,
+      "exporting",
+      updatedAt,
+      { exportProgress: { completedPages: 0, totalPages: 2 } },
+      {
+        sourceArtifactExists: true,
+      },
+    );
+    expect(missingSource).toMatchObject({
       ok: false,
       error: { causeCode: "SourceArtifactMissing" },
     });
-    expect(present).toMatchObject({ ok: true, value: { state: "exporting" } });
+    expect(missingProgress).toMatchObject({
+      ok: false,
+      error: { causeCode: "PdfProgressMissing" },
+    });
+    expect(present).toMatchObject({
+      ok: true,
+      value: {
+        state: "exporting",
+        exportProgress: { completedPages: 0, totalPages: 2 },
+      },
+    });
   });
 
   it("requires normalized error and settled cleanup for failed jobs", () => {
