@@ -18,7 +18,47 @@ const record = {
   blob: new Blob([new Uint8Array([1])], { type: "image/png" }),
 };
 
+function createImmediateReadDatabase(value: unknown): IDBDatabase {
+  let transaction: IDBTransaction;
+  transaction = {
+    error: null,
+    oncomplete: null,
+    onabort: null,
+    onerror: null,
+    objectStore: () => ({
+      get: () => {
+        const request = {
+          result: value,
+          error: null,
+          onsuccess: null,
+          onerror: null,
+        } as unknown as IDBRequest;
+        queueMicrotask(() => {
+          request.onsuccess?.call(request, new Event("success"));
+          transaction.oncomplete?.call(transaction, new Event("complete"));
+        });
+        return request;
+      },
+    }),
+  } as unknown as IDBTransaction;
+  return {
+    transaction: () => transaction,
+  } as unknown as IDBDatabase;
+}
+
 describe("IndexedDbArtifactRepository", () => {
+  it(
+    "subscribes to transaction completion before a fast read request can finish",
+    async () => {
+      const repository = new IndexedDbArtifactRepository({
+        openDatabase: () => Promise.resolve(createImmediateReadDatabase(record)),
+      });
+
+      await expect(repository.get(record.artifactId)).resolves.toEqual(record);
+    },
+    1_000,
+  );
+
   it("normalizes quota failures with a user-safe code", async () => {
     const repository = new IndexedDbArtifactRepository({
       openDatabase: () => Promise.reject(new DOMException("quota", "QuotaExceededError")),
