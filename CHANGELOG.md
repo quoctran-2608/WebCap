@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Region capture mode with a typed selection lifecycle that creates a persistent job before the popup closes and starts tiled capture only after the page confirms a target rectangle.
+- A pure CoordinateSpace module for client, visual viewport, CSS document, and device-pixel conversions with bounds normalization, movement, eight-direction resizing, and edge auto-scroll calculations.
+- An isolated Shadow DOM region overlay with drag, move, eight resize handles, dimensions, keyboard nudging, Enter confirmation, Escape cancellation, and two-frame removal before capture.
+- Metadata-only active-job lookup so reopening the popup restores in-progress or ready full-page/region jobs without reading tile Blob payloads into session storage.
+- Region target capture through the existing CDP-first and scroll-fallback engines, including target-start preparation, durable per-tile storage, progress, cancellation, and exact restoration.
+- Region-selection fixtures and Playwright coverage for a target longer than the viewport, captured-pixel overlay exclusion, popup recovery, Escape cancellation, DPR 2, and 125% zoom.
 - Automatic full-page routing from eligible CDP failures to a rate-limited active-tab scroll capture engine without creating a second job.
 - Deterministic two-dimensional scroll tile planning with 64 CSS-pixel overlap, explicit logical output rectangles, edge crop metadata, and max-tile guardrails.
 - Preserve, remove, and smart fixed/sticky policies with namespaced inline markers, compare-before-restore cleanup, and service-worker restart recovery.

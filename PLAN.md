@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S11
+current_session: S12
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -109,8 +109,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | S08 | M2 | Page preparation, lazy settle và restoration | S07 | 20k–28k | DONE |
 | S09 | M2 | CDP tiled full-page capture, progress và cancel | S08 | 22k–30k | DONE |
 | S10 | M2 | Scroll fallback, fixed policy và long-page validation | S09 | 22k–30k | DONE |
-| S11 | M3 | CoordinateSpace và region selector | S10 | 18k–26k | NEXT |
-| S12 | M3 | Element selector và target capture | S11 | 18k–26k | READY |
+| S11 | M3 | CoordinateSpace và region selector | S10 | 18k–26k | DONE |
+| S12 | M3 | Element selector và target capture | S11 | 18k–26k | NEXT |
 | S13 | M4 | PDF page slicing và page-at-a-time exporter | S12 | 20k–28k | READY |
 | S14 | M4 | Editor, PDF options và export retry | S13 | 20k–28k | READY |
 | S15 | M4 | PDF benchmarks, integrity và memory guards | S14 | 18k–26k | READY |
@@ -482,6 +482,10 @@ pnpm build
 
 **Commit gợi ý:** `Implement region capture selector`.
 
+**Hoàn thành:** 2026-08-03 · PR #15 · validation head `798fd47` · CI run `30799895160`.
+
+**Ghi chú kỹ thuật:** `CoordinateSpace` chuẩn hóa client/visual viewport/document/device-pixel coordinates và cung cấp pure helpers cho normalize, clamp, move, tám resize directions và edge auto-scroll. Content runtime bundle IIFE mở overlay Shadow DOM cô lập, hỗ trợ drag/move/resize, keyboard nudge, Enter/Escape, khôi phục scroll/focus, tháo overlay rồi chờ hai RAF trước commit. Region job được tạo trước khi popup đóng, target rect lưu trong CSS document coordinates và chạy qua cùng CDP-first/scroll-fallback coordinator; `JOB_GET_ACTIVE` chỉ trả metadata để popup phục hồi. CI read-only pass format, lint, strict typecheck, 188 unit tests, build và 14 Playwright E2E, gồm vùng dài hơn viewport, pixel proof overlay không lọt output, popup reopen, cancel sạch và DPR 2/zoom 125%.
+
 ---
 
 ## S12 — Element selector và target capture
@@ -817,8 +821,8 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S08 | DONE | 2026-08-03 | PR #12 / b1f07eb | format, lint, typecheck, 150 unit, build, 5 Playwright E2E | Content preparation protocol, bounded lazy/layout settle, exact compare-before-restore và success/error/cancel cleanup đã được xác thực. |
 | S09 | DONE | 2026-08-03 | PR #13 / 547887d / CI 30787032374 | format, lint, typecheck, 160 unit, build, 8 Playwright E2E | CDP multi-tile capture, immediate IndexedDB tile persistence, progress/cancel, exact restore, debugger release và fallback prompt đã được xác thực. |
 | S10 | DONE | 2026-08-03 | PR #14 / 2d6f39c / CI 30791809060 | format, lint, typecheck, 174 unit, build, 11 Playwright E2E | Automatic CDP fallback, overlap/crop metadata, fixed policy, exact cleanup và 10k/30k/100k validation đã được xác thực. |
-| S11 | NEXT | — | — | — | Sẵn sàng triển khai CoordinateSpace và region selector. |
-| S12 | READY | — | — | — | — |
+| S11 | DONE | 2026-08-03 | PR #15 / 798fd47 / CI 30799895160 | format, lint, typecheck, 188 unit, build, 14 Playwright E2E | CoordinateSpace, overlay accessible, auto-scroll, persistent region job, target capture, exact restore và zoom/DPR đã được xác thực. |
+| S12 | NEXT | — | — | — | Sẵn sàng triển khai element selector và stale-target handling. |
 | S13 | READY | — | — | — | — |
 | S14 | READY | — | — | — | — |
 | S15 | READY | — | — | — | — |
@@ -830,12 +834,12 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S11 — CoordinateSpace và region selector**.
+Session kế tiếp là **S12 — Element selector và target capture**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S11.
-2. Đọc SPEC §18, coordinate contracts và UI M3.
-3. Kiểm tra repo/branch và kết quả CI S10.
-4. Chỉ triển khai S11.
-5. Kết thúc với CoordinateSpace pure module, overlay accessible, drag/resize/keyboard flow, auto-scroll, target rect document coordinates và E2E zoom/DPR.
+1. Đọc `PLAN.md` phần S12.
+2. Đọc SPEC §19 và phần scroll candidate §20.
+3. Kiểm tra repo/branch và kết quả CI S11.
+4. Chỉ triển khai S12.
+5. Kết thúc với hover/highlight, parent-child keyboard navigation, stable target descriptor, revalidation, `E_TARGET_STALE`, open Shadow DOM fixture và E2E normal/shadow/stale.
