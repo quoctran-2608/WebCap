@@ -127,8 +127,8 @@ test("@smoke exports a stored full-page tile set as a loadable paged PDF", async
   const jobId = ready.job?.id;
   if (jobId === undefined) throw new Error("The ready full-page job could not be resolved.");
 
-  const response = await popup.evaluate(async (id) => {
-    return chrome.runtime.sendMessage({
+  const response = await popup.evaluate(async (id): Promise<unknown> => {
+    const value: unknown = await chrome.runtime.sendMessage({
       protocolVersion: 1,
       requestId: crypto.randomUUID(),
       source: "popup",
@@ -145,6 +145,7 @@ test("@smoke exports a stored full-page tile set as a loadable paged PDF", async
       },
       sentAt: new Date().toISOString(),
     });
+    return value;
   }, jobId);
   expect(response).toMatchObject({
     type: "JOB_RESPONSE",
