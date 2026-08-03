@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Versioned background-to-content page-preparation protocol with on-demand script injection and single active preparation ownership per tab.
+- Self-contained classic `content-script.js` build verified without imports, remote URLs, new dependencies, permissions, or database migrations.
+- Bounded lazy-load pre-scroll and layout settling using animation frames, mutation/resize observation, image decode best effort, duration limits, height limits, and cancellation checkpoints.
+- Idempotent page restoration for scroll, focus, selection, injected freeze styles, and WebCap-owned inline mutations with compare-before-restore protection.
+- Cleanup reporting with `E_LAYOUT_UNSTABLE`, `E_CANCELLED`, and `E_CLEANUP_PARTIAL` behavior that preserves the primary operation error.
+- Playwright fixtures and coverage for lazy content, paused animation, layout shifts, fixed/sticky preservation, overlay cleanup, success, error, and cancellation paths.
 - Typed Chrome debugger adapter and owned-session client with attach/command timeouts, unexpected-detach handling, and deterministic cleanup.
 - CSS-first `Page.getLayoutMetrics` normalization with layout/visual viewports, device pixel ratio, zoom, and legacy-field fallback.
 - Deterministic row-major 2D tile planner with target clamping, edge remainders, pixel-area and tile-count guardrails, and dynamic rectangle splitting.
