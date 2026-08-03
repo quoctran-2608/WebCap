@@ -1,4 +1,10 @@
 import { createChromeDebuggerAdapter } from "@background/chrome-debugger-adapter";
+import {
+  ElementSelectionService,
+  createChromeElementSelectionBrowserAdapter,
+  type ElementSelectionPort,
+  type ElementTargetValidationPort,
+} from "@background/element-selection-service";
 import { createChromeTabsAdapter } from "@background/chrome-tabs-adapter";
 import { DebuggerClient } from "@background/debugger-client";
 import { FullPageCaptureCoordinator } from "@background/full-page-capture-coordinator";
@@ -26,6 +32,12 @@ import {
   type PersistentJobRequest,
 } from "@shared/contracts/job-messages";
 import {
+  createElementSelectionEventAckMessage,
+  isElementSelectionEventType,
+  parseElementSelectionEvent,
+  type ElementSelectionEventAckMessage,
+} from "@shared/contracts/element-selection";
+import {
   createRegionSelectionEventAckMessage,
   isRegionSelectionEventType,
   parseRegionSelectionEvent,
@@ -50,6 +62,7 @@ export type PersistentJobRouterResponse =
   JobResponseMessage | JobActiveResponseMessage | ErrorResponseMessage;
 
 export type RegionSelectionRouterResponse = RegionSelectionEventAckMessage | ErrorResponseMessage;
+export type ElementSelectionRouterResponse = ElementSelectionEventAckMessage | ErrorResponseMessage;
 
 export interface FullPageCapturePort {
   start(jobId: string): Promise<void>;
@@ -62,6 +75,7 @@ export interface PersistentJobRouterDependencies {
   now: () => Date;
   captures?: FullPageCapturePort;
   regions?: RegionSelectionPort;
+  elements?: ElementSelectionPort & ElementTargetValidationPort;
 }
 
 let sharedDependencies: PersistentJobRouterDependencies | undefined;
@@ -90,10 +104,10 @@ function defaultDependencies(): PersistentJobRouterDependencies {
     artifacts: new IndexedDbJobArtifactCleanupRepository(),
     cleanup: {
       async cleanup(job) {
-        if (job.mode !== "full-page" && job.mode !== "region") {
+        if (job.mode !== "full-page" && job.mode !== "region" && job.mode !== "element") {
           return;
         }
-        if (job.mode === "region" && job.targetRect === undefined) {
+        if ((job.mode === "region" || job.mode === "element") && job.targetRect === undefined) {
           return;
         }
         let scrollCleanupError: unknown;
@@ -117,16 +131,18 @@ function defaultDependencies(): PersistentJobRouterDependencies {
       },
     },
   });
+  const elements = new ElementSelectionService(createChromeElementSelectionBrowserAdapter());
   const captures = new FullPageCaptureCoordinator({
     jobs,
     pages,
     tiles,
     engine: new CdpCaptureEngine(new DebuggerClient(createChromeDebuggerAdapter())),
     fallbackEngine: new ScrollCaptureEngine({ pages: scrollPages, tabs }),
+    targetValidator: elements,
   });
   const regions = new RegionSelectionService(createChromeRegionSelectionBrowserAdapter());
   const dedupe = new IndexedDbDedupeRepository();
-  sharedDependencies = { jobs, captures, regions, dedupe, now: () => new Date() };
+  sharedDependencies = { jobs, captures, regions, elements, dedupe, now: () => new Date() };
   const nowIso = new Date().toISOString();
   void Promise.allSettled([jobs.initialize(), dedupe.deleteExpired(nowIso)]);
   return sharedDependencies;
@@ -261,6 +277,13 @@ async function executeJobRequest(
           await dependencies.jobs.cancel(job.id, "region selector failed to open");
           throw error;
         }
+      } else if (job.mode === "element" && dependencies.elements !== undefined) {
+        try {
+          await dependencies.elements.start(job.tabId, job.id);
+        } catch (error) {
+          await dependencies.jobs.cancel(job.id, "element selector failed to open");
+          throw error;
+        }
       }
       return { kind: "job", job };
     }
@@ -283,7 +306,7 @@ async function executeJobRequest(
         throw jobNotFound(request.payload.jobId);
       }
       if (
-        (job.mode === "full-page" || job.mode === "region") &&
+        (job.mode === "full-page" || job.mode === "region" || job.mode === "element") &&
         dependencies.captures !== undefined
       ) {
         return {
@@ -464,6 +487,100 @@ export async function routeRegionSelectionMessage(
   }
 }
 
+export async function routeElementSelectionMessage(
+  message: unknown,
+  sender: chrome.runtime.MessageSender,
+  dependencies: PersistentJobRouterDependencies,
+): Promise<ElementSelectionRouterResponse | undefined> {
+  if (!isElementSelectionEventType(message)) {
+    return undefined;
+  }
+  const parsed = parseElementSelectionEvent(message);
+  if (!parsed.ok) {
+    const requestId = requestIdFrom(message);
+    return requestId === undefined
+      ? undefined
+      : createErrorResponseMessage({
+          requestId,
+          error: parsed.error,
+          sentAt: dependencies.now().toISOString(),
+        });
+  }
+
+  try {
+    const job = await dependencies.jobs.get(parsed.value.payload.jobId);
+    const tabId = senderTabId(sender);
+    if (
+      job === undefined ||
+      job.mode !== "element" ||
+      job.state !== "created" ||
+      tabId === undefined ||
+      tabId !== job.tabId
+    ) {
+      throw createWebCapRuntimeError(
+        createWebCapError({
+          code: "E_PROTOCOL_MESSAGE",
+          stage: "protocol",
+          message: "Element selection event does not match an active element job.",
+          userMessageKey: "errors.elementSelection",
+          retryable: false,
+          fallbackAllowed: false,
+          causeCode: "ElementSelectionJobMismatch",
+          safeContext: {
+            jobId: parsed.value.payload.jobId,
+            ...(tabId === undefined ? {} : { tabId }),
+          },
+        }),
+      );
+    }
+
+    if (parsed.value.type === "ELEMENT_SELECTION_CANCEL") {
+      await dependencies.jobs.cancel(
+        job.id,
+        parsed.value.payload.reason ?? "element selection cancelled",
+      );
+    } else {
+      await dependencies.jobs.update(job.id, {
+        targetRect: parsed.value.payload.rect,
+        targetDescriptor: parsed.value.payload.descriptor,
+      });
+      if (dependencies.captures === undefined) {
+        throw createWebCapRuntimeError(
+          createWebCapError({
+            code: "E_PROTOCOL_MESSAGE",
+            stage: "protocol",
+            message: "The element capture coordinator is unavailable.",
+            userMessageKey: "errors.elementSelection",
+            retryable: true,
+            fallbackAllowed: false,
+            causeCode: "ElementCaptureCoordinatorMissing",
+            safeContext: { jobId: job.id },
+          }),
+        );
+      }
+      void dependencies.captures.start(job.id).catch(() => undefined);
+    }
+
+    return createElementSelectionEventAckMessage({
+      requestId: parsed.value.requestId,
+      jobId: job.id,
+      accepted: true,
+      sentAt: dependencies.now().toISOString(),
+    });
+  } catch (error) {
+    return createErrorResponseMessage({
+      requestId: parsed.value.requestId,
+      error: normalizeError(error, {
+        stage: parsed.value.type === "ELEMENT_SELECTION_CANCEL" ? "cleanup" : "capture",
+        userMessageKey: "errors.elementSelection",
+        retryable: true,
+        fallbackAllowed: false,
+      }),
+      sentAt: dependencies.now().toISOString(),
+    });
+  }
+}
+
 export function registerPersistentJobRouter(): void {
   const dependencies = defaultDependencies();
   chrome.runtime.onMessage.addListener(
@@ -472,6 +589,14 @@ export function registerPersistentJobRouter(): void {
       sender: chrome.runtime.MessageSender,
       sendResponse: (response?: unknown) => void,
     ) => {
+      if (isElementSelectionEventType(message)) {
+        void routeElementSelectionMessage(message, sender, dependencies).then((response) => {
+          if (response !== undefined) {
+            sendResponse(response);
+          }
+        });
+        return true;
+      }
       if (isRegionSelectionEventType(message)) {
         void routeRegionSelectionMessage(message, sender, dependencies).then((response) => {
           if (response !== undefined) {

@@ -1,4 +1,11 @@
+import {
+  openElementSelector,
+  readElementDocumentRect,
+  type ElementSelection,
+  type ElementSelectorController,
+} from "./element-selector";
 import { openRegionSelector, type RegionSelectorController } from "./region-selector";
+import type { ElementTargetDescriptor } from "@shared/contracts/domain";
 
 export const PAGE_PREPARATION_PROTOCOL_VERSION = 1 as const;
 export const PAGE_PREPARATION_SNAPSHOT_VERSION = 1 as const;
@@ -1088,6 +1095,262 @@ function installRuntime(): { installed: boolean; reused: boolean; protocolVersio
   return { installed: true, reused: false, protocolVersion: state.version };
 }
 
+const ELEMENT_SELECTION_GLOBAL_KEY = "__webcapElementSelectionV1__" as const;
+
+interface ElementSelectionOpenRequest {
+  protocolVersion: 1;
+  requestId: string;
+  source: "background";
+  target: "content";
+  type: "ELEMENT_SELECTION_OPEN";
+  payload: { jobId: string };
+  sentAt: string;
+}
+
+interface ElementTargetRevalidateRequest {
+  protocolVersion: 1;
+  requestId: string;
+  source: "background";
+  target: "content";
+  type: "ELEMENT_TARGET_REVALIDATE";
+  payload: { jobId: string; descriptor: ElementTargetDescriptor };
+  sentAt: string;
+}
+
+type ElementSelectionRequest = ElementSelectionOpenRequest | ElementTargetRevalidateRequest;
+
+interface StoredElementTarget {
+  jobId: string;
+  element: Element;
+  descriptor: ElementTargetDescriptor;
+}
+
+interface ElementSelectionRuntimeState {
+  version: 1;
+  controller?: ElementSelectorController;
+  targets: Map<string, StoredElementTarget>;
+  listener: (
+    message: unknown,
+    sender: chrome.runtime.MessageSender,
+    sendResponse: (response: unknown) => void,
+  ) => boolean | void;
+  pageHideListener: () => void;
+}
+
+interface ElementSelectionStateCarrier {
+  [ELEMENT_SELECTION_GLOBAL_KEY]?: ElementSelectionRuntimeState;
+}
+
+function isElementTargetDescriptor(value: unknown): value is ElementTargetDescriptor {
+  return (
+    isRecord(value) &&
+    value.schemaVersion === 1 &&
+    hasString(value, "selectionId") &&
+    hasString(value, "tagName") &&
+    Array.isArray(value.classNames) &&
+    value.classNames.every((item) => typeof item === "string") &&
+    typeof value.scrollable === "boolean" &&
+    value.captureKind === "visible-bounds"
+  );
+}
+
+function isElementSelectionRequest(value: unknown): value is ElementSelectionRequest {
+  if (
+    !isRecord(value) ||
+    value.protocolVersion !== PAGE_PREPARATION_PROTOCOL_VERSION ||
+    value.source !== "background" ||
+    value.target !== "content" ||
+    !hasString(value, "requestId") ||
+    !hasString(value, "sentAt") ||
+    !isRecord(value.payload) ||
+    !hasString(value.payload, "jobId")
+  ) {
+    return false;
+  }
+  return (
+    value.type === "ELEMENT_SELECTION_OPEN" ||
+    (value.type === "ELEMENT_TARGET_REVALIDATE" &&
+      isElementTargetDescriptor(value.payload.descriptor))
+  );
+}
+
+function elementSelectionResponse(
+  request: ElementSelectionRequest,
+  type: "ELEMENT_SELECTION_OPENED" | "ELEMENT_TARGET_VALIDATED" | "ELEMENT_SELECTION_ERROR",
+  payload: unknown,
+): Record<string, unknown> {
+  return {
+    protocolVersion: PAGE_PREPARATION_PROTOCOL_VERSION,
+    requestId: request.requestId,
+    source: "content",
+    target: "background",
+    type,
+    payload,
+    sentAt: new Date().toISOString(),
+  };
+}
+
+function elementSelectionFailure(
+  request: ElementSelectionRequest,
+  options: { code?: "E_PROTOCOL_MESSAGE" | "E_TARGET_STALE"; message: string; causeCode: string },
+): Record<string, unknown> {
+  return elementSelectionResponse(request, "ELEMENT_SELECTION_ERROR", {
+    code: options.code ?? "E_PROTOCOL_MESSAGE",
+    stage: options.code === "E_TARGET_STALE" ? "capture" : "protocol",
+    message: options.message,
+    userMessageKey:
+      options.code === "E_TARGET_STALE" ? "errors.targetStale" : "errors.elementSelection",
+    retryable: options.code === "E_TARGET_STALE",
+    fallbackAllowed: false,
+    causeCode: options.causeCode,
+    safeContext: { jobId: request.payload.jobId },
+  });
+}
+
+async function sendElementSelectionEvent(
+  type: "ELEMENT_SELECTION_COMMIT" | "ELEMENT_SELECTION_CANCEL",
+  jobId: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  await chrome.runtime.sendMessage({
+    protocolVersion: PAGE_PREPARATION_PROTOCOL_VERSION,
+    requestId: crypto.randomUUID(),
+    source: "content",
+    target: "background",
+    type,
+    payload: { jobId, ...payload },
+    sentAt: new Date().toISOString(),
+  });
+}
+
+function installElementSelectionRuntime(): { installed: boolean; reused: boolean } {
+  const carrier = globalThis as typeof globalThis & ElementSelectionStateCarrier;
+  const existing = carrier[ELEMENT_SELECTION_GLOBAL_KEY];
+  if (existing?.version === PAGE_PREPARATION_PROTOCOL_VERSION) {
+    return { installed: true, reused: true };
+  }
+
+  const state: ElementSelectionRuntimeState = {
+    version: PAGE_PREPARATION_PROTOCOL_VERSION,
+    targets: new Map(),
+    listener: () => false,
+    pageHideListener: () => undefined,
+  };
+
+  state.listener = (message, sender, sendResponse) => {
+    if (!isElementSelectionRequest(message) || sender.id !== chrome.runtime.id) {
+      return false;
+    }
+
+    if (message.type === "ELEMENT_TARGET_REVALIDATE") {
+      const stored = state.targets.get(message.payload.descriptor.selectionId);
+      if (
+        stored === undefined ||
+        stored.jobId !== message.payload.jobId ||
+        stored.descriptor.selectionId !== message.payload.descriptor.selectionId ||
+        !stored.element.isConnected
+      ) {
+        sendResponse(
+          elementSelectionFailure(message, {
+            code: "E_TARGET_STALE",
+            message: "The selected element no longer exists on the page.",
+            causeCode: "ElementTargetDisconnected",
+          }),
+        );
+        return false;
+      }
+      const rect = readElementDocumentRect(stored.element);
+      if (rect.width < 1 || rect.height < 1) {
+        sendResponse(
+          elementSelectionFailure(message, {
+            code: "E_TARGET_STALE",
+            message: "The selected element no longer has capturable bounds.",
+            causeCode: "ElementTargetBoundsEmpty",
+          }),
+        );
+        return false;
+      }
+      sendResponse(
+        elementSelectionResponse(message, "ELEMENT_TARGET_VALIDATED", {
+          jobId: stored.jobId,
+          descriptor: stored.descriptor,
+          rect,
+        }),
+      );
+      return false;
+    }
+
+    const current = state.controller;
+    if (current?.jobId === message.payload.jobId) {
+      sendResponse(
+        elementSelectionResponse(message, "ELEMENT_SELECTION_OPENED", {
+          jobId: message.payload.jobId,
+          reused: true,
+        }),
+      );
+      return false;
+    }
+    if (current !== undefined) {
+      sendResponse(
+        elementSelectionFailure(message, {
+          message: "This page already has an active WebCap element selector.",
+          causeCode: "ActiveElementSelectionConflict",
+        }),
+      );
+      return false;
+    }
+
+    try {
+      state.controller = openElementSelector({
+        jobId: message.payload.jobId,
+        onCommit: async (selection: ElementSelection) => {
+          delete state.controller;
+          state.targets.set(selection.descriptor.selectionId, {
+            jobId: message.payload.jobId,
+            element: selection.element,
+            descriptor: selection.descriptor,
+          });
+          await sendElementSelectionEvent("ELEMENT_SELECTION_COMMIT", message.payload.jobId, {
+            rect: selection.rect,
+            descriptor: selection.descriptor,
+          });
+        },
+        onCancel: async (reason) => {
+          delete state.controller;
+          await sendElementSelectionEvent("ELEMENT_SELECTION_CANCEL", message.payload.jobId, {
+            reason,
+          });
+        },
+      });
+      sendResponse(
+        elementSelectionResponse(message, "ELEMENT_SELECTION_OPENED", {
+          jobId: message.payload.jobId,
+          reused: false,
+        }),
+      );
+    } catch (error) {
+      sendResponse(
+        elementSelectionFailure(message, {
+          message:
+            error instanceof Error ? error.message : "Element selector could not be created.",
+          causeCode: error instanceof Error ? error.name : "ElementSelectionOpenFailure",
+        }),
+      );
+    }
+    return false;
+  };
+
+  state.pageHideListener = () => {
+    state.controller?.dispose();
+    delete state.controller;
+    state.targets.clear();
+  };
+  chrome.runtime.onMessage.addListener(state.listener);
+  window.addEventListener("pagehide", state.pageHideListener, { once: true });
+  carrier[ELEMENT_SELECTION_GLOBAL_KEY] = state;
+  return { installed: true, reused: false };
+}
+
 export function registerPagePreparationContentScript(): {
   installed: boolean;
   reused: boolean;
@@ -1098,4 +1361,5 @@ export function registerPagePreparationContentScript(): {
 
 if (typeof chrome !== "undefined" && typeof document !== "undefined") {
   registerPagePreparationContentScript();
+  installElementSelectionRuntime();
 }

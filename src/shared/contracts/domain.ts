@@ -42,6 +42,18 @@ export const RectSchema = z
   })
   .strict();
 
+export const ElementTargetDescriptorSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    selectionId: z.string().min(1).max(160),
+    tagName: z.string().min(1).max(40),
+    id: z.string().min(1).max(60).optional(),
+    classNames: z.array(z.string().min(1).max(40)).max(3),
+    scrollable: z.boolean(),
+    captureKind: z.literal("visible-bounds"),
+  })
+  .strict();
+
 export const PageMetricsSchema = z
   .object({
     document: RectSchema,
@@ -140,6 +152,7 @@ export const CaptureJobSchema = z
     stateRevision: NonNegativeIntegerSchema,
     metrics: PageMetricsSchema.optional(),
     targetRect: RectSchema.optional(),
+    targetDescriptor: ElementTargetDescriptorSchema.optional(),
     tilePlan: z.array(CaptureTileSchema),
     completedTiles: NonNegativeIntegerSchema,
     totalTiles: NonNegativeIntegerSchema,
@@ -159,6 +172,7 @@ export type FixedElementMode = z.infer<typeof FixedElementModeSchema>;
 export type ImageFormat = z.infer<typeof ImageFormatSchema>;
 export type OutputFormat = z.infer<typeof OutputFormatSchema>;
 export type Rect = z.infer<typeof RectSchema>;
+export type ElementTargetDescriptor = z.infer<typeof ElementTargetDescriptorSchema>;
 export type PageMetrics = z.infer<typeof PageMetricsSchema>;
 export type CaptureTile = z.infer<typeof CaptureTileSchema>;
 export type CaptureSettings = z.infer<typeof CaptureSettingsSchema>;

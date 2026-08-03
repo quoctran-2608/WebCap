@@ -111,9 +111,7 @@ export type ElementSelectionOpenedMessage = z.infer<typeof ElementSelectionOpene
 export type ElementSelectionCommitMessage = z.infer<typeof ElementSelectionCommitMessageSchema>;
 export type ElementSelectionCancelMessage = z.infer<typeof ElementSelectionCancelMessageSchema>;
 export type ElementSelectionEvent = z.infer<typeof ElementSelectionEventSchema>;
-export type ElementSelectionEventAckMessage = z.infer<
-  typeof ElementSelectionEventAckMessageSchema
->;
+export type ElementSelectionEventAckMessage = z.infer<typeof ElementSelectionEventAckMessageSchema>;
 export type ElementTargetRevalidateMessage = z.infer<typeof ElementTargetRevalidateMessageSchema>;
 export type ElementTargetValidatedMessage = z.infer<typeof ElementTargetValidatedMessageSchema>;
 

@@ -4,7 +4,16 @@ import { CoordinateSpace } from "./coordinate-space";
 
 export const ELEMENT_SELECTOR_ROOT_ATTRIBUTE = "data-webcap-element-selector" as const;
 
-const INVALID_TAGS = new Set(["HTML", "BODY", "HEAD", "SCRIPT", "STYLE", "LINK", "META", "NOSCRIPT"]);
+const INVALID_TAGS = new Set([
+  "HTML",
+  "BODY",
+  "HEAD",
+  "SCRIPT",
+  "STYLE",
+  "LINK",
+  "META",
+  "NOSCRIPT",
+]);
 
 export interface ElementSelection {
   element: Element;
@@ -34,7 +43,10 @@ async function waitForFrames(count: number): Promise<void> {
 }
 
 function clampText(value: string, maxLength: number): string {
-  return value.replace(/[\u0000-\u001f\u007f]/gu, "").trim().slice(0, maxLength);
+  return value
+    .replace(/[\u0000-\u001f\u007f]/gu, "")
+    .trim()
+    .slice(0, maxLength);
 }
 
 export function summarizeElementDescriptor(options: {
@@ -88,7 +100,8 @@ export function isSelectableElement(element: Element): boolean {
 
 function candidateFromComposedPath(path: readonly EventTarget[]): Element | undefined {
   return path.find(
-    (candidate): candidate is Element => candidate instanceof Element && isSelectableElement(candidate),
+    (candidate): candidate is Element =>
+      candidate instanceof Element && isSelectableElement(candidate),
   );
 }
 
@@ -111,7 +124,7 @@ function parentCandidate(element: Element): Element | undefined {
   return candidate ?? undefined;
 }
 
-function elementRect(element: Element): Rect {
+export function readElementDocumentRect(element: Element): Rect {
   const clientRect = element.getBoundingClientRect();
   return CoordinateSpace.fromWindow().clampRect({
     x: clientRect.left + window.scrollX,
@@ -142,7 +155,9 @@ function px(value: number): string {
   return `${Math.round(value * 100) / 100}px`;
 }
 
-export function openElementSelector(options: OpenElementSelectorOptions): ElementSelectorController {
+export function openElementSelector(
+  options: OpenElementSelectorOptions,
+): ElementSelectorController {
   document.querySelector<HTMLElement>(`[${ELEMENT_SELECTOR_ROOT_ATTRIBUTE}]`)?.remove();
 
   const originalScroll = { x: window.scrollX, y: window.scrollY };
@@ -327,7 +342,7 @@ export function openElementSelector(options: OpenElementSelectorOptions): Elemen
         ? undefined
         : {
             element: target,
-            rect: elementRect(target),
+            rect: readElementDocumentRect(target),
             descriptor: descriptorFor(target),
           };
     disposeInternal();
@@ -348,7 +363,8 @@ export function openElementSelector(options: OpenElementSelectorOptions): Elemen
       return;
     }
     const candidate =
-      candidateFromComposedPath(event.composedPath()) ?? candidateFromPoint(event.clientX, event.clientY);
+      candidateFromComposedPath(event.composedPath()) ??
+      candidateFromPoint(event.clientX, event.clientY);
     if (selected === undefined && candidate !== hovered) {
       hovered = candidate;
       render();
@@ -360,7 +376,8 @@ export function openElementSelector(options: OpenElementSelectorOptions): Elemen
       return;
     }
     const candidate =
-      candidateFromComposedPath(event.composedPath()) ?? candidateFromPoint(event.clientX, event.clientY);
+      candidateFromComposedPath(event.composedPath()) ??
+      candidateFromPoint(event.clientX, event.clientY);
     if (candidate === undefined) {
       return;
     }

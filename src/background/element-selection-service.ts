@@ -33,9 +33,7 @@ export function createChromeElementSelectionBrowserAdapter(): ElementSelectionBr
   };
 }
 
-export class ElementSelectionService
-  implements ElementSelectionPort, ElementTargetValidationPort
-{
+export class ElementSelectionService implements ElementSelectionPort, ElementTargetValidationPort {
   constructor(
     private readonly browser: ElementSelectionBrowserAdapter,
     private readonly now: () => Date = () => new Date(),
