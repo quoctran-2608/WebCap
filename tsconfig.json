@@ -27,6 +27,7 @@
       "@background/*": ["./src/background/*"],
       "@capture/*": ["./src/capture/*"],
       "@content/*": ["./src/content/*"],
+      "@editor/*": ["./src/editor/*"],
       "@popup/*": ["./src/popup/*"],
       "@offscreen/*": ["./src/offscreen/*"],
       "@shared/*": ["./src/shared/*"],
