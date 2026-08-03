@@ -16,9 +16,14 @@ class FakeDebuggerAdapter implements ChromeDebuggerAdapter {
   detachError: Error | undefined;
   commandError: Error | undefined;
   commandResult: unknown = { ok: true };
+  hangAttach = false;
+  hangCommand = false;
 
   attach(target: DebuggerTarget, version: string): Promise<void> {
     this.calls.push(`attach:${target.tabId}:${version}`);
+    if (this.hangAttach) {
+      return new Promise<never>(() => undefined);
+    }
     return this.attachError === undefined ? Promise.resolve() : Promise.reject(this.attachError);
   }
 
@@ -34,6 +39,9 @@ class FakeDebuggerAdapter implements ChromeDebuggerAdapter {
   ): Promise<unknown> {
     void commandParams;
     this.calls.push(`command:${target.tabId}:${method}`);
+    if (this.hangCommand) {
+      return new Promise<never>(() => undefined);
+    }
     return this.commandError === undefined
       ? Promise.resolve(this.commandResult)
       : Promise.reject(this.commandError);
@@ -95,6 +103,39 @@ describe("DebuggerClient", () => {
 
     expectRuntimeError(error, "E_DEBUGGER_ATTACH");
     expect(adapter.calls).toEqual(["attach:7:0.1"]);
+  });
+
+  it("times out an attach that never settles", async () => {
+    const adapter = new FakeDebuggerAdapter();
+    adapter.hangAttach = true;
+    const client = new DebuggerClient(adapter, { attachTimeoutMs: 5 });
+
+    const error = await client
+      .withSession(13, () => Promise.resolve(undefined))
+      .catch((value: unknown) => value);
+
+    const runtimeError = expectRuntimeError(error, "E_DEBUGGER_ATTACH");
+    expect(runtimeError.data.causeCode).toBe("TimeoutError");
+    expect(adapter.calls).toEqual(["attach:13:0.1"]);
+    expect(adapter.listeners.size).toBe(0);
+  });
+
+  it("times out a CDP command and still detaches", async () => {
+    const adapter = new FakeDebuggerAdapter();
+    adapter.hangCommand = true;
+    const client = new DebuggerClient(adapter, { commandTimeoutMs: 5 });
+
+    const error = await client
+      .withSession(15, (session) => session.sendCommand("Page.getLayoutMetrics"))
+      .catch((value: unknown) => value);
+
+    const runtimeError = expectRuntimeError(error, "E_CDP_COMMAND");
+    expect(runtimeError.data.causeCode).toBe("TimeoutError");
+    expect(adapter.calls).toEqual([
+      "attach:15:0.1",
+      "command:15:Page.getLayoutMetrics",
+      "detach:15",
+    ]);
   });
 
   it("rejects when Chrome unexpectedly detaches the owned session", async () => {
