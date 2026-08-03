@@ -1,3 +1,5 @@
+import { describe, expect, it, vi } from "vitest";
+
 import type { DebuggerClient, DebuggerSession } from "@background/debugger-client";
 import { CdpMeasurementService } from "@capture/cdp-measurement-service";
 
