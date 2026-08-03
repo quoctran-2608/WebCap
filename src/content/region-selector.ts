@@ -347,7 +347,9 @@ export function openRegionSelector(options: OpenRegionSelectorOptions): RegionSe
     }
     const handleElement = elementFromPath(path, (element) => element.hasAttribute("data-handle"));
     const space = CoordinateSpace.fromWindow();
-    const point = space.clampPoint(space.clientPointToDocument({ x: event.clientX, y: event.clientY }));
+    const point = space.clampPoint(
+      space.clientPointToDocument({ x: event.clientX, y: event.clientY }),
+    );
     const handle = handleElement?.dataset.handle;
     if (rect !== undefined && isResizeHandle(handle)) {
       gesture = { kind: "resize", pointerId: event.pointerId, handle, initial: rect };
@@ -402,7 +404,10 @@ export function openRegionSelector(options: OpenRegionSelectorOptions): RegionSe
       void finish("commit");
       return;
     }
-    if (rect === undefined || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+    if (
+      rect === undefined ||
+      !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+    ) {
       return;
     }
     const step = event.shiftKey ? 10 : 1;

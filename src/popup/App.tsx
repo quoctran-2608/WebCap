@@ -391,12 +391,8 @@ export function App(): React.JSX.Element {
     if (!canCapture) {
       return;
     }
-    if (selectedMode === "full-page" || selectedMode === "region") {
-      if (selectedMode === "region") {
-        await handleRegionCapture();
-      } else {
-        await handleFullPageCapture();
-      }
+    if (selectedMode === "full-page") {
+      await handleFullPageCapture();
       return;
     }
     if (selectedMode === "region") {
@@ -407,7 +403,7 @@ export function App(): React.JSX.Element {
   }, [canCapture, handleFullPageCapture, handleRegionCapture, handleVisibleCapture, selectedMode]);
 
   const handleCancel = useCallback(async (): Promise<void> => {
-    if (selectedMode === "full-page") {
+    if (selectedMode === "full-page" || selectedMode === "region") {
       if (fullPageJob === undefined) {
         return;
       }
@@ -449,7 +445,11 @@ export function App(): React.JSX.Element {
       if (fullPageJob !== undefined && fullPageJob.state !== "cancelled") {
         await cancelFullPageCapture(fullPageJob.id).catch(() => undefined);
       }
-      await handleFullPageCapture();
+      if (selectedMode === "region") {
+        await handleRegionCapture();
+      } else {
+        await handleFullPageCapture();
+      }
       return;
     }
     if (session?.source !== undefined) {
@@ -624,7 +624,9 @@ export function App(): React.JSX.Element {
               <progress
                 value={fullPageJob.completedTiles}
                 max={Math.max(1, fullPageJob.totalTiles)}
-                aria-label="Tiến độ chụp toàn trang"
+                aria-label={
+                  selectedMode === "region" ? "Tiến độ chụp vùng chọn" : "Tiến độ chụp toàn trang"
+                }
               />
             </div>
           </section>
@@ -721,39 +723,46 @@ export function App(): React.JSX.Element {
         )}
 
         <div className="capture-feedback" aria-live="polite">
-          {selectedMode === "full-page" && fullPageJob?.state === "ready" && (
+          {tiledMode && fullPageJob?.state === "ready" && (
             <div className="feedback feedback--success">
               <h3 ref={feedbackHeadingRef} tabIndex={-1}>
-                Đã lưu đầy đủ tile
+                {selectedMode === "region" ? "Đã lưu tile vùng chọn" : "Đã lưu đầy đủ tile"}
               </h3>
               <p>
                 {fullPageJob.completedTiles} tile PNG đang được giữ cục bộ trong IndexedDB. Ghép ảnh
-                toàn trang và export cuối thuộc milestone S10/S13.
+                và export cuối thuộc milestone xuất kết quả sau S12.
               </p>
               <button className="text-action" type="button" onClick={() => void handleCancel()}>
                 Kết thúc phiên tile
               </button>
             </div>
           )}
-          {selectedMode === "full-page" && fullPageJob?.state === "cancelled" && (
+          {tiledMode && fullPageJob?.state === "cancelled" && (
             <div className="feedback feedback--neutral">
-              <p>{FULL_PAGE_STATUS_COPY.cancelled}</p>
+              <p>{tiledStatusCopy(fullPageJob)}</p>
               <button className="text-action" type="button" onClick={() => void handleRetry()}>
                 Thử lại
               </button>
             </div>
           )}
-          {selectedMode === "full-page" && fullPageJob?.state === "failed" && (
+          {tiledMode && fullPageJob?.state === "failed" && (
             <div className="feedback feedback--error" role="alert">
               <h3 ref={feedbackHeadingRef} tabIndex={-1}>
-                Không thể hoàn tất chụp toàn trang
+                {selectedMode === "region"
+                  ? "Không thể hoàn tất chụp vùng chọn"
+                  : "Không thể hoàn tất chụp toàn trang"}
               </h3>
-              <p>{fullPageJob.error?.message ?? "Không thể chụp toàn bộ trang."}</p>
+              <p>
+                {fullPageJob.error?.message ??
+                  (selectedMode === "region"
+                    ? "Không thể chụp vùng đã chọn."
+                    : "Không thể chụp toàn bộ trang.")}
+              </p>
               {fullPageJob.activeEngine === "scroll" && (
                 <p>Scroll fallback đã dừng an toàn và trang đã được phục hồi.</p>
               )}
               <button className="text-action" type="button" onClick={() => void handleRetry()}>
-                Thử lại chụp toàn trang
+                {selectedMode === "region" ? "Chọn lại vùng" : "Thử lại chụp toàn trang"}
               </button>
             </div>
           )}

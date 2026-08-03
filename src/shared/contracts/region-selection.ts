@@ -2,7 +2,11 @@ import { z } from "zod";
 
 import { PROTOCOL_VERSION } from "@shared/constants";
 import { RectSchema, type Rect } from "@shared/contracts/domain";
-import { WebCapErrorDataSchema, createWebCapError, type WebCapErrorData } from "@shared/errors/error";
+import {
+  WebCapErrorDataSchema,
+  createWebCapError,
+  type WebCapErrorData,
+} from "@shared/errors/error";
 import { err, ok, type Result } from "@shared/result";
 
 const IdentifierSchema = z.string().min(1).max(160);

@@ -194,27 +194,15 @@ export class CoordinateSpace {
 
   clientPointToDocument(point: Point): Point {
     return {
-      x:
-        finite(point.x) +
-        this.snapshot.scrollX +
-        this.snapshot.visualViewportOffsetLeft,
-      y:
-        finite(point.y) +
-        this.snapshot.scrollY +
-        this.snapshot.visualViewportOffsetTop,
+      x: finite(point.x) + this.snapshot.scrollX + this.snapshot.visualViewportOffsetLeft,
+      y: finite(point.y) + this.snapshot.scrollY + this.snapshot.visualViewportOffsetTop,
     };
   }
 
   documentPointToClient(point: Point): Point {
     return {
-      x:
-        finite(point.x) -
-        this.snapshot.scrollX -
-        this.snapshot.visualViewportOffsetLeft,
-      y:
-        finite(point.y) -
-        this.snapshot.scrollY -
-        this.snapshot.visualViewportOffsetTop,
+      x: finite(point.x) - this.snapshot.scrollX - this.snapshot.visualViewportOffsetLeft,
+      y: finite(point.y) - this.snapshot.scrollY - this.snapshot.visualViewportOffsetTop,
     };
   }
 
