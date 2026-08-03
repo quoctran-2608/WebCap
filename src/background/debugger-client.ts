@@ -96,6 +96,21 @@ function isNotAttachedError(value: unknown): boolean {
   return value instanceof Error && value.message.toLowerCase().includes("not attached");
 }
 
+function errorFromUnknown(value: unknown): Error {
+  if (value instanceof Error) {
+    return value;
+  }
+
+  return createWebCapRuntimeError(
+    normalizeError(value, {
+      stage: "measure",
+      userMessageKey: "errors.debugger.unknown",
+      retryable: false,
+      fallbackAllowed: false,
+    }),
+  );
+}
+
 export class DebuggerClient {
   private readonly ownedTabs = new Set<number>();
   private readonly attachTimeoutMs: number;
@@ -231,10 +246,10 @@ export class DebuggerClient {
     this.ownedTabs.delete(tabId);
 
     if (primaryError !== undefined) {
-      throw primaryError;
+      throw errorFromUnknown(primaryError);
     }
     if (cleanupError !== undefined) {
-      throw cleanupError;
+      throw errorFromUnknown(cleanupError);
     }
 
     return result as T;
