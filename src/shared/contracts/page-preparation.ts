@@ -35,7 +35,13 @@ export const PagePreparationOptionsSchema = z
           .max(60_000)
           .default(DEFAULT_LAZY_LOAD_MAX_DURATION_MS),
       })
-      .strict(),
+      .strict()
+      .default({
+        enabled: true,
+        stepRatio: DEFAULT_LAZY_LOAD_STEP_RATIO,
+        settleMs: DEFAULT_LAZY_LOAD_SETTLE_MS,
+        maxDurationMs: DEFAULT_LAZY_LOAD_MAX_DURATION_MS,
+      }),
   })
   .strict();
 
