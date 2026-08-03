@@ -1,3 +1,9 @@
+import { createChromeDebuggerAdapter } from "@background/chrome-debugger-adapter";
+import { DebuggerClient } from "@background/debugger-client";
+import { FullPageCaptureCoordinator } from "@background/full-page-capture-coordinator";
+import { createChromePagePreparationAdapter } from "@background/page-preparation-adapter";
+import { PagePreparationService } from "@background/page-preparation-service";
+import { CdpCaptureEngine } from "@capture/cdp-capture-engine";
 import { DEDUPE_RECORD_SCHEMA_VERSION, DEDUPE_TTL_MS } from "@shared/constants";
 import type { CaptureJob } from "@shared/contracts/domain";
 import type { StoredDedupeRecord } from "@shared/contracts/job";
@@ -25,10 +31,16 @@ import { PersistentJobCoordinator, type PersistentJobCoordinatorPort } from "./j
 
 export type PersistentJobRouterResponse = JobResponseMessage | ErrorResponseMessage;
 
+export interface FullPageCapturePort {
+  start(jobId: string): Promise<void>;
+  cancel(jobId: string, reason?: string): Promise<CaptureJob>;
+}
+
 export interface PersistentJobRouterDependencies {
   jobs: PersistentJobCoordinatorPort;
   dedupe: DedupeRepositoryPort;
   now: () => Date;
+  captures?: FullPageCapturePort;
 }
 
 let sharedDependencies: PersistentJobRouterDependencies | undefined;
@@ -42,14 +54,26 @@ function defaultDependencies(): PersistentJobRouterDependencies {
     return sharedDependencies;
   }
 
+  const jobRepository = new IndexedDbJobRepository();
+  const sessions = new JobSessionRepository();
+  const tiles = new IndexedDbTileRepository();
   const jobs = new PersistentJobCoordinator({
-    jobs: new IndexedDbJobRepository(),
-    sessions: new JobSessionRepository(),
-    tiles: new IndexedDbTileRepository(),
+    jobs: jobRepository,
+    sessions,
+    tiles,
     artifacts: new IndexedDbJobArtifactCleanupRepository(),
   });
+  const pages = new PagePreparationService({
+    browser: createChromePagePreparationAdapter(),
+  });
+  const captures = new FullPageCaptureCoordinator({
+    jobs,
+    pages,
+    tiles,
+    engine: new CdpCaptureEngine(new DebuggerClient(createChromeDebuggerAdapter())),
+  });
   const dedupe = new IndexedDbDedupeRepository();
-  sharedDependencies = { jobs, dedupe, now: () => new Date() };
+  sharedDependencies = { jobs, captures, dedupe, now: () => new Date() };
   const nowIso = new Date().toISOString();
   void Promise.allSettled([jobs.initialize(), dedupe.deleteExpired(nowIso)]);
   return sharedDependencies;
@@ -141,8 +165,8 @@ async function executeJobRequest(
   dependencies: PersistentJobRouterDependencies,
 ): Promise<CaptureJob> {
   switch (request.type) {
-    case "JOB_CREATE":
-      return dependencies.jobs.create({
+    case "JOB_CREATE": {
+      const job = await dependencies.jobs.create({
         tabId: request.payload.tabId,
         windowId: request.payload.windowId,
         mode: request.payload.mode,
@@ -163,6 +187,11 @@ async function executeJobRequest(
               },
             }),
       });
+      if (job.mode === "full-page" && dependencies.captures !== undefined) {
+        void dependencies.captures.start(job.id).catch(() => undefined);
+      }
+      return job;
+    }
     case "JOB_GET": {
       const job = await dependencies.jobs.get(request.payload.jobId);
       if (job === undefined) {
@@ -170,8 +199,16 @@ async function executeJobRequest(
       }
       return job;
     }
-    case "JOB_CANCEL":
-      return dependencies.jobs.cancel(request.payload.jobId, request.payload.reason);
+    case "JOB_CANCEL": {
+      const job = await dependencies.jobs.get(request.payload.jobId);
+      if (job === undefined) {
+        throw jobNotFound(request.payload.jobId);
+      }
+      if (job.mode === "full-page" && dependencies.captures !== undefined) {
+        return dependencies.captures.cancel(job.id, request.payload.reason);
+      }
+      return dependencies.jobs.cancel(job.id, request.payload.reason);
+    }
   }
 }
 
@@ -213,7 +250,8 @@ export async function routePersistentJobMessage(
   } catch (error) {
     const normalized = normalizeError(error, {
       stage: parsed.value.type === "JOB_CANCEL" ? "cleanup" : "storage",
-      userMessageKey: parsed.value.type === "JOB_CANCEL" ? "errors.jobCancel" : "errors.jobCommand",
+      userMessageKey:
+        parsed.value.type === "JOB_CANCEL" ? "errors.jobCancel" : "errors.jobCommand",
       retryable: true,
       fallbackAllowed: false,
     });
