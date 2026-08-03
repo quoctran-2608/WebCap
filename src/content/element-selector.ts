@@ -1,6 +1,6 @@
 import type { ElementTargetDescriptor, Rect } from "@shared/contracts/domain";
 
-import { CoordinateSpace } from "./coordinate-space";
+import { CoordinateSpace, clampRectToBounds } from "./coordinate-space";
 
 export const ELEMENT_SELECTOR_ROOT_ATTRIBUTE = "data-webcap-element-selector" as const;
 
@@ -126,12 +126,16 @@ function parentCandidate(element: Element): Element | undefined {
 
 export function readElementDocumentRect(element: Element): Rect {
   const clientRect = element.getBoundingClientRect();
-  return CoordinateSpace.fromWindow().clampRect({
-    x: clientRect.left + window.scrollX,
-    y: clientRect.top + window.scrollY,
-    width: clientRect.width,
-    height: clientRect.height,
-  });
+  const space = CoordinateSpace.fromWindow();
+  return clampRectToBounds(
+    space.clientRectToDocument({
+      x: clientRect.left,
+      y: clientRect.top,
+      width: clientRect.width,
+      height: clientRect.height,
+    }),
+    space.documentBounds,
+  );
 }
 
 function descriptorFor(element: Element): ElementTargetDescriptor {
@@ -271,6 +275,7 @@ export function openElementSelector(
 
   let hovered: Element | undefined;
   let selected: Element | undefined;
+  let selectedRect: Rect | undefined;
   let disposed = false;
   let finishing = false;
   const rememberedChildren = new Map<Element, Element>();
@@ -342,7 +347,7 @@ export function openElementSelector(
         ? undefined
         : {
             element: target,
-            rect: readElementDocumentRect(target),
+            rect: selectedRect ?? readElementDocumentRect(target),
             descriptor: descriptorFor(target),
           };
     disposeInternal();
@@ -382,6 +387,7 @@ export function openElementSelector(
       return;
     }
     selected = candidate;
+    selectedRect = readElementDocumentRect(candidate);
     hovered = candidate;
     render();
     event.preventDefault();
@@ -410,6 +416,7 @@ export function openElementSelector(
       if (current !== undefined && parent !== undefined) {
         rememberedChildren.set(parent, current);
         selected = parent;
+        selectedRect = readElementDocumentRect(parent);
         hovered = parent;
         render();
       }
@@ -422,6 +429,7 @@ export function openElementSelector(
       const child = current === undefined ? undefined : rememberedChildren.get(current);
       if (child?.isConnected && isSelectableElement(child)) {
         selected = child;
+        selectedRect = readElementDocumentRect(child);
         hovered = child;
         render();
       }

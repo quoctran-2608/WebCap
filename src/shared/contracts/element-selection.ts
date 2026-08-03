@@ -5,7 +5,6 @@ import {
   ElementTargetDescriptorSchema,
   RectSchema,
   type ElementTargetDescriptor,
-  type Rect,
 } from "@shared/contracts/domain";
 import {
   WebCapErrorDataSchema,
