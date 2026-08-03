@@ -24,9 +24,12 @@ describe("CoordinateSpace", () => {
   it("converts client, document, and device-pixel coordinates consistently", () => {
     expect(space.clientPointToDocument({ x: 30, y: 50 })).toEqual({ x: 157, y: 401 });
     expect(space.documentPointToClient({ x: 157, y: 401 })).toEqual({ x: 30, y: 50 });
-    expect(
-      space.clientRectToDocument({ x: 30, y: 50, width: 200, height: 100 }),
-    ).toEqual({ x: 157, y: 401, width: 200, height: 100 });
+    expect(space.clientRectToDocument({ x: 30, y: 50, width: 200, height: 100 })).toEqual({
+      x: 157,
+      y: 401,
+      width: 200,
+      height: 100,
+    });
     expect(space.cssRectToDevice({ x: 10, y: 20, width: 30, height: 40 })).toEqual({
       x: 25,
       y: 50,
