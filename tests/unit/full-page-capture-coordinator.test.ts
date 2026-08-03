@@ -175,17 +175,27 @@ class MemoryTiles implements TileRepositoryPort {
   }
 }
 
-function pageHarness(options: { restoreError?: Error } = {}) {
+interface PageHarnessOptions {
+  restoreError?: Error;
+  restore?: () => Promise<unknown>;
+}
+
+function pageHarness(options: PageHarnessOptions = {}) {
   const prepare = vi.fn(() => Promise.resolve({ preparationId: "job-full" }));
-  const restore = vi.fn(() =>
-    options.restoreError === undefined
+  const restore = vi.fn(() => {
+    if (options.restore !== undefined) {
+      return options.restore();
+    }
+    return options.restoreError === undefined
       ? Promise.resolve({ preparationId: "job-full", completed: true })
-      : Promise.reject(options.restoreError),
-  );
+      : Promise.reject(options.restoreError);
+  });
+  const cancel = vi.fn(() => Promise.resolve(true));
   return {
-    service: { prepare, restore } as unknown as PagePreparationService,
+    service: { prepare, restore, cancel } as unknown as PagePreparationService,
     prepare,
     restore,
+    cancel,
   };
 }
 
@@ -286,6 +296,36 @@ describe("FullPageCaptureCoordinator", () => {
     expect(jobs.job.error?.code).toBe("E_CANCELLED");
     expect(jobs.job.cleanup).toEqual({ attempted: true, completed: true });
     expect(tiles.records).toHaveLength(1);
+    expect(page.restore).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets cancellation win while page restoration is finishing", async () => {
+    let releaseRestore!: () => void;
+    let signalRestoreStarted!: () => void;
+    const restoreStarted = new Promise<void>((resolve) => {
+      signalRestoreStarted = resolve;
+    });
+    const restoreGate = new Promise<void>((resolve) => {
+      releaseRestore = resolve;
+    });
+    const page = pageHarness({
+      async restore() {
+        signalRestoreStarted();
+        await restoreGate;
+        return { preparationId: "job-full", completed: true };
+      },
+    });
+    const { coordinator, jobs } = setup(successfulEngine(), page);
+
+    const running = coordinator.start("job-full");
+    await restoreStarted;
+    await coordinator.cancel("job-full", "cancel during restore");
+    releaseRestore();
+    await running;
+
+    expect(jobs.job.state).toBe("cancelled");
+    expect(jobs.job.error?.code).toBe("E_CANCELLED");
+    expect(jobs.job.cleanup).toEqual({ attempted: true, completed: true });
     expect(page.restore).toHaveBeenCalledTimes(1);
   });
 
