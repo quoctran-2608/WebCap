@@ -34,7 +34,6 @@ function createImmediateReadDatabase(value: unknown): IDBDatabase {
         } as unknown as IDBRequest;
         queueMicrotask(() => {
           request.onsuccess?.call(request, new Event("success"));
-          transaction.oncomplete?.call(transaction, new Event("complete"));
         });
         return request;
       },
@@ -46,7 +45,7 @@ function createImmediateReadDatabase(value: unknown): IDBDatabase {
 }
 
 describe("IndexedDbArtifactRepository", () => {
-  it("subscribes to transaction completion before a fast read request can finish", async () => {
+  it("resolves a readonly request without waiting for transaction completion", async () => {
     const repository = new IndexedDbArtifactRepository({
       openDatabase: () => Promise.resolve(createImmediateReadDatabase(record)),
     });
