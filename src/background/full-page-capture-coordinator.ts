@@ -198,11 +198,7 @@ export class FullPageCaptureCoordinator {
       return this.jobs.cancel(jobId, reason);
     }
     run.cancellation.cancel(reason);
-    const job = await this.jobs.get(jobId);
-    if (job === undefined) {
-      throw missingJobError(jobId);
-    }
-    return job;
+    return this.requireJob(jobId);
   }
 
   isRunning(jobId: string): boolean {
@@ -210,10 +206,7 @@ export class FullPageCaptureCoordinator {
   }
 
   private async run(jobId: string, cancellation: MutableCaptureCancellation): Promise<void> {
-    let job = await this.jobs.get(jobId);
-    if (job === undefined) {
-      throw missingJobError(jobId);
-    }
+    let job = await this.requireJob(jobId);
     if (job.mode !== "full-page") {
       throw invalidModeError(job);
     }
@@ -263,17 +256,19 @@ export class FullPageCaptureCoordinator {
         storeTile: (tile, blob) => this.storeTile(job.id, tile, blob),
         reportProgress: (progress) => this.publish(progress),
       });
+      cancellation.throwIfCancelled("capture");
     } catch (error) {
       operationError = error;
     }
 
     if (prepared) {
+      const current = await this.requireJob(job.id);
       await this.publish({
         jobId: job.id,
-        state: (await this.jobs.get(job.id))?.state ?? "preparing",
+        state: current.state,
         stage: "restoring",
-        completed: (await this.jobs.get(job.id))?.completedTiles ?? 0,
-        total: (await this.jobs.get(job.id))?.totalTiles ?? 0,
+        completed: current.completedTiles,
+        total: current.totalTiles,
       });
       try {
         await this.pages.restore(job.tabId, job.id);
@@ -287,31 +282,35 @@ export class FullPageCaptureCoordinator {
       return;
     }
 
-    const cleanup = cleanupState(undefined);
-    job = await this.requireJob(job.id);
-    if (job.state !== "capturing") {
-      throw createWebCapRuntimeError(
-        createWebCapError({
-          code: "E_PROTOCOL_MESSAGE",
-          stage: "protocol",
-          message: "The full-page job left the capturing state unexpectedly.",
-          userMessageKey: "errors.jobState",
-          retryable: true,
-          fallbackAllowed: false,
-          causeCode: "UnexpectedCaptureState",
-          safeContext: { jobId: job.id, state: job.state },
-        }),
-      );
+    try {
+      const cleanup = cleanupState(undefined);
+      job = await this.requireJob(job.id);
+      if (job.state !== "capturing") {
+        throw createWebCapRuntimeError(
+          createWebCapError({
+            code: "E_PROTOCOL_MESSAGE",
+            stage: "protocol",
+            message: "The full-page job left the capturing state unexpectedly.",
+            userMessageKey: "errors.jobState",
+            retryable: true,
+            fallbackAllowed: false,
+            causeCode: "UnexpectedCaptureState",
+            safeContext: { jobId: job.id, state: job.state },
+          }),
+        );
+      }
+      job = await this.jobs.transition(job.id, "processing", { cleanup });
+      job = await this.jobs.transition(job.id, "ready", { cleanup });
+      await this.publish({
+        jobId: job.id,
+        state: job.state,
+        stage: "ready",
+        completed: job.completedTiles,
+        total: job.totalTiles,
+      });
+    } catch (error) {
+      await this.settleFailure(job.id, cancellation, error, undefined);
     }
-    job = await this.jobs.transition(job.id, "processing", { cleanup });
-    job = await this.jobs.transition(job.id, "ready", { cleanup });
-    await this.publish({
-      jobId: job.id,
-      state: job.state,
-      stage: "ready",
-      completed: job.completedTiles,
-      total: job.totalTiles,
-    });
   }
 
   private async storeTile(jobId: string, tile: CaptureTile, blob: Blob): Promise<void> {
@@ -350,7 +349,9 @@ export class FullPageCaptureCoordinator {
     restoreError: unknown,
   ): Promise<void> {
     const primary =
-      operationError === undefined ? normalizedOperationError(restoreError) : normalizedOperationError(operationError);
+      operationError === undefined
+        ? normalizedOperationError(restoreError)
+        : normalizedOperationError(operationError);
     const cleanup = cleanupState(restoreError);
     let job = await this.requireJob(jobId);
     const cancelled = cancellation.cancelled || primary.code === "E_CANCELLED";
@@ -401,6 +402,10 @@ export class FullPageCaptureCoordinator {
       return;
     }
     this.lastProgressAt.set(progress.jobId, now);
-    await this.progress.publish(progress);
+    try {
+      await this.progress.publish(progress);
+    } catch {
+      // Progress delivery is best-effort; persistent job state is authoritative.
+    }
   }
 }
