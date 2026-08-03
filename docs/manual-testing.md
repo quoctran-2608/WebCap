@@ -46,7 +46,7 @@ The deterministic S06 behavior is covered by `pnpm test:unit`; existing `pnpm te
 
 S07 remains an infrastructure milestone and does not expose a full-page capture button yet. Use the unit suite as the deterministic gate, and inspect a development invocation of `CdpMeasurementService` only on a disposable web tab:
 
-1. Confirm WebCap attaches with protocol version `0.1`, enables the Page domain, reads `Page.getLayoutMetrics`, evaluates `window.devicePixelRatio`, and detaches immediately after measurement/planning.
+1. Confirm WebCap attaches with stable protocol version `1.3`, enables the Page domain, reads `Page.getLayoutMetrics`, evaluates `window.devicePixelRatio`, and detaches immediately after measurement/planning.
 2. Open Chrome DevTools or another debugger before measurement; WebCap must return a normalized retryable `E_DEBUGGER_ATTACH` instead of stealing or hiding the existing debugger session.
 3. Close or cancel the debugger while the task is active; WebCap must surface `E_DEBUGGER_DETACHED` and release its per-tab ownership.
 4. Inspect normalized metrics: CSS content size is preferred, layout/visual viewport scroll offsets are retained, DPR and zoom are finite positive values, and no page URL/content is logged.
@@ -57,7 +57,7 @@ Run `pnpm test:unit` for debugger/metrics/planner behavior and `pnpm test:e2e` t
 
 ## S08 page preparation and restoration inspection
 
-S08 is also an infrastructure milestone; the popup still keeps full-page capture disabled. Exercise `PagePreparationService` or the versioned content protocol only on disposable fixture tabs:
+S08 was an infrastructure milestone before full-page controls were enabled. Exercise `PagePreparationService` or the versioned content protocol only on disposable fixture tabs:
 
 1. Run `pnpm build` and confirm `dist/content-script.js` exists, contains no module imports or remote URLs, and is injected only through `chrome.scripting.executeScript()` when preparation starts.
 2. On `tests/fixtures/animated-page.html`, prepare the page and confirm animations are paused, the caret is transparent, and smooth scrolling is disabled while the preparation is active.
@@ -71,3 +71,18 @@ S08 is also an infrastructure milestone; the popup still keeps full-page capture
 10. Re-run the completed visible-capture flow to confirm S08 does not change existing popup behavior, manifest permissions, IndexedDB schema, or image export.
 
 Automated coverage is included in `pnpm test:unit` and `pnpm test:e2e`. The Playwright suite covers lazy content, animation freeze, fixed/sticky preservation, exact inline-style restoration, unstable layout cleanup, cancellation, and the two existing visible-capture regressions.
+
+## S09 CDP tiled full-page capture inspection
+
+1. Build and load the extension, serve `tests/fixtures/full-page-long.html`, open WebCap, choose **Toàn bộ trang**, and start capture.
+2. Confirm the popup moves through preparation and tile progress, then reports a ready tile set rather than offering a final composed image; composition remains outside S09.
+3. Inspect IndexedDB `webcap-db`: the full-page job should be `ready`, `completedTiles` should equal `totalTiles`, every planned tile should be `stored`, and each `tiles` record should contain a non-empty PNG `Blob` whose size matches the tile metadata.
+4. Confirm the 9,600 CSS-pixel fixture produces two row-major tiles with indexes `0` and `1`; no base64 payload may remain in persistent job/session metadata.
+5. Compare scroll position, focused element, document/body inline styles, and preparation-style count before and after capture; they must match exactly.
+6. Inspect `chrome.debugger.getTargets()` or reattach with protocol `1.3` after the job reaches `ready`; WebCap must no longer own the debugger session.
+7. Start capture on `tests/fixtures/lazy-images.html` and cancel while preparation is active; cancellation should reach the content runtime promptly, restore the page, and settle the job as `cancelled` with `E_CANCELLED`.
+8. Attach another debugger to a disposable tab before starting WebCap. The job must fail with retryable, fallback-eligible `E_DEBUGGER_ATTACH`, the popup must explain that scroll fallback will become available in S10, and the page must still be restored.
+9. Exercise a synthetic transient `Page.captureScreenshot` failure in unit tests and confirm one initial attempt plus at most two retries with bounded delays; permanent errors must stop retrying.
+10. Verify progress increments only after each tile Blob is stored and that cancellation between tiles does not capture or persist the next tile.
+
+Run `pnpm test:unit` and `pnpm test:e2e`. S09 automated coverage includes CDP clips, retry bounds, immediate Blob storage, progress, success, preparation cancellation, occupied-debugger failure, page restoration, debugger release, all S08 preparation tests, and both visible-capture regressions.

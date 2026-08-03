@@ -6,7 +6,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 ## Current status
 
-**S08 — The page-preparation and restoration foundation is complete.** WebCap can inject a versioned content runtime on demand, pause unstable visual state, pre-scroll lazy content with bounded layout settling, cancel safely, and restore scroll, focus, selection, injected styles, and WebCap-owned inline mutations with compare-before-restore semantics. The next session is S09 CDP tiled full-page capture, progress, and cancellation.
+**S09 — The primary CDP tiled full-page capture engine is complete.** WebCap can prepare a page, measure and plan it in CSS coordinates, capture PNG tiles beyond the viewport through a single short-lived Chrome debugger session, persist every tile immediately in IndexedDB, publish progress, cancel safely, restore the page, and surface a scroll-fallback prompt when CDP cannot attach. The popup now exposes the full-page mode and its tile progress. Final long-image composition, scroll fallback, overlap handling, and the completed fixed/sticky policy remain in S10.
 
 ## Requirements
 
@@ -54,13 +54,13 @@ The `dist/` output contains `manifest.json`, `popup.html`, `service-worker.js`, 
 ```text
 public/                 Manifest and static extension assets copied as-is.
 assets/                 Internal build-time icon sources.
-src/background/         Manifest V3 service worker and message routing.
-src/capture/            Page measurement and deterministic capture planning.
+src/background/         Manifest V3 service worker, job routing, capture coordination, and Chrome adapters.
+src/capture/            Page measurement, deterministic tile planning, and capture engines.
 src/content/            On-demand page preparation, lazy settle, and restoration runtime.
-src/popup/              React popup entry, shell, styles, and runtime client.
+src/popup/              React popup entry, capture controls, progress UI, and runtime clients.
 src/shared/contracts/   Typed cross-context message envelopes.
 src/storage/            IndexedDB and chrome.storage repositories.
-tests/unit/             Fast deterministic contract and router tests.
+tests/unit/             Fast deterministic contract, engine, coordinator, and router tests.
 tests/e2e/              Playwright unpacked-extension integration tests.
 tests/smoke/            Real-Chrome unpacked-extension smoke tests.
 scripts/                Build verification and repository automation.

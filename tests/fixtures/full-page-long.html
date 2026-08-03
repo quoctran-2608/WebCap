@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebCap Full Page Long Fixture</title>
+    <style>
+      :root {
+        color: #173a2d;
+        background: #f4f7f1;
+        font-family: system-ui, sans-serif;
+        scroll-behavior: smooth;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        width: 900px;
+        margin: 0;
+      }
+
+      header {
+        display: grid;
+        height: 600px;
+        place-items: center;
+        padding: 48px;
+        background: #e5efe7;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 54px;
+      }
+
+      button {
+        min-width: 180px;
+        min-height: 48px;
+      }
+
+      main {
+        display: grid;
+      }
+
+      section {
+        display: grid;
+        height: 2100px;
+        place-items: center;
+        border-top: 8px solid rgb(23 58 45 / 14%);
+        padding: 64px;
+        font-size: 64px;
+        font-weight: 800;
+      }
+
+      section:nth-child(odd) {
+        background: #f6efe0;
+      }
+
+      section:nth-child(even) {
+        background: #e7f0eb;
+      }
+
+      footer {
+        display: grid;
+        height: 600px;
+        place-items: center;
+        background: #173a2d;
+        color: white;
+        font-size: 36px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>WebCap CDP Fixture</h1>
+      <button id="focus-target" type="button">Focus target</button>
+    </header>
+    <main>
+      <section data-tile-marker="1">Section 01</section>
+      <section data-tile-marker="2">Section 02</section>
+      <section data-tile-marker="3">Section 03</section>
+      <section data-tile-marker="4">Section 04</section>
+    </main>
+    <footer>End of deterministic fixture</footer>
+  </body>
+</html>

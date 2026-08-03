@@ -15,7 +15,7 @@ export type CaptureCapabilities = z.infer<typeof CaptureCapabilitiesSchema>;
 export const FOUNDATION_CAPABILITIES: CaptureCapabilities = Object.freeze({
   modes: Object.freeze({
     visible: true,
-    "full-page": false,
+    "full-page": true,
     region: false,
     element: false,
     "scroll-area": false,

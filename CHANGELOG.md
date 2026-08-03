@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Primary CDP full-page capture engine using one short-lived stable-protocol debugger session and `Page.captureScreenshot` clips beyond the viewport.
+- Immediate PNG tile persistence in IndexedDB with row-major ordering, stored-status metadata, bounded retry backoff, and progress only after durable storage.
+- Persistent full-page job execution from prepare through measure, plan, capture, restore, processing, and ready, including cancellation checkpoints and primary-error preservation.
+- Typed `JOB_PROGRESS` events plus popup full-page controls, tile progress, cancellation, retry, and future scroll-fallback guidance for eligible CDP failures.
+- Deterministic 9,600 CSS-pixel full-page fixture and Playwright coverage for two-tile capture, Blob integrity, exact page restoration, debugger release, preparation cancellation, and occupied-debugger failure.
+- Stable Chrome DevTools Protocol 1.3 attachment across the debugger client and extension integration tests.
 - Versioned background-to-content page-preparation protocol with on-demand script injection and single active preparation ownership per tab.
 - Self-contained classic `content-script.js` build verified without imports, remote URLs, new dependencies, permissions, or database migrations.
 - Bounded lazy-load pre-scroll and layout settling using animation frames, mutation/resize observation, image decode best effort, duration limits, height limits, and cancellation checkpoints.

@@ -170,6 +170,44 @@ export function validateJobInvariants(
   return ok(undefined);
 }
 
+function buildMutation(
+  job: CaptureJob,
+  updatedAt: string,
+  patch: JobTransitionPatch,
+  state: JobState,
+): Result<CaptureJob, WebCapErrorData> {
+  const candidate = CaptureJobSchema.safeParse({
+    ...job,
+    ...patch,
+    state,
+    stateRevision: job.stateRevision + 1,
+    updatedAt,
+  });
+  if (!candidate.success) {
+    return err(
+      stateError("Capture job mutation does not match the domain schema.", "InvalidJobMutation", {
+        from: job.state,
+        to: state,
+      }),
+    );
+  }
+  return ok(candidate.data);
+}
+
+export function updateJob(
+  job: CaptureJob,
+  updatedAt: string,
+  patch: JobTransitionPatch,
+  context: JobInvariantContext = {},
+): Result<CaptureJob, WebCapErrorData> {
+  const candidate = buildMutation(job, updatedAt, patch, job.state);
+  if (!candidate.ok) {
+    return candidate;
+  }
+  const invariant = validateJobInvariants(candidate.value, context);
+  return invariant.ok ? candidate : invariant;
+}
+
 export function transitionJob(
   job: CaptureJob,
   nextState: JobState,
@@ -186,22 +224,10 @@ export function transitionJob(
     );
   }
 
-  const candidate = CaptureJobSchema.safeParse({
-    ...job,
-    ...patch,
-    state: nextState,
-    stateRevision: job.stateRevision + 1,
-    updatedAt,
-  });
-  if (!candidate.success) {
-    return err(
-      stateError("Capture job mutation does not match the domain schema.", "InvalidJobMutation", {
-        from: job.state,
-        to: nextState,
-      }),
-    );
+  const candidate = buildMutation(job, updatedAt, patch, nextState);
+  if (!candidate.ok) {
+    return candidate;
   }
-
-  const invariant = validateJobInvariants(candidate.data, context);
-  return invariant.ok ? ok(candidate.data) : invariant;
+  const invariant = validateJobInvariants(candidate.value, context);
+  return invariant.ok ? candidate : invariant;
 }

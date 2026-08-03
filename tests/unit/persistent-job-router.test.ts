@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   routePersistentJobMessage,
@@ -7,7 +7,11 @@ import {
 import type { JobCleanupReport, PersistentJobCoordinatorPort } from "@background/job-coordinator";
 import type { CaptureJob } from "@shared/contracts/domain";
 import type { StoredDedupeRecord } from "@shared/contracts/job";
-import { createJobCreateMessage, createJobGetMessage } from "@shared/contracts/job-messages";
+import {
+  createJobCancelMessage,
+  createJobCreateMessage,
+  createJobGetMessage,
+} from "@shared/contracts/job-messages";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 import type { DedupeRepositoryPort } from "@storage/dedupe-repository";
 
@@ -71,6 +75,10 @@ class FakeCoordinator implements PersistentJobCoordinatorPort {
     return Promise.resolve(this.current);
   }
 
+  update(): Promise<CaptureJob> {
+    return Promise.resolve(job());
+  }
+
   transition(): Promise<CaptureJob> {
     return Promise.resolve(job());
   }
@@ -81,6 +89,14 @@ class FakeCoordinator implements PersistentJobCoordinatorPort {
       state: "cancelled",
       stateRevision: 3,
       cleanup: { attempted: true, completed: true },
+      error: {
+        code: "E_CANCELLED",
+        stage: "cleanup",
+        message: "cancelled",
+        userMessageKey: "errors.cancelled",
+        retryable: true,
+        fallbackAllowed: false,
+      },
     });
   }
 
@@ -98,8 +114,9 @@ class FakeCoordinator implements PersistentJobCoordinatorPort {
 function dependencies(
   jobs: FakeCoordinator,
   dedupe: MemoryDedupe,
+  captures?: PersistentJobRouterDependencies["captures"],
 ): PersistentJobRouterDependencies {
-  return { jobs, dedupe, now: () => now };
+  return { jobs, dedupe, now: () => now, ...(captures === undefined ? {} : { captures }) };
 }
 
 describe("persistent job router", () => {
@@ -122,6 +139,57 @@ describe("persistent job router", () => {
     expect(first).toEqual(second);
     expect(jobs.createCalls).toBe(1);
     expect(dedupe.records.get("request-1")).toMatchObject({ requestType: "JOB_CREATE" });
+  });
+
+  it("starts a full-page execution once after creating its persistent job", async () => {
+    const jobs = new FakeCoordinator();
+    const dedupe = new MemoryDedupe();
+    const start = vi.fn(() => Promise.resolve());
+    const cancel = vi.fn(() => Promise.resolve(job()));
+    const message = createJobCreateMessage({
+      requestId: "request-start",
+      sentAt: now.toISOString(),
+      tabId: 7,
+      windowId: 2,
+      mode: "full-page",
+      settings: DEFAULT_CAPTURE_SETTINGS,
+    });
+
+    const response = await routePersistentJobMessage(
+      message,
+      dependencies(jobs, dedupe, { start, cancel }),
+    );
+    await Promise.resolve();
+
+    expect(response).toMatchObject({ type: "JOB_RESPONSE", payload: { job: { id: "job-1" } } });
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledWith("job-1");
+  });
+
+  it("routes active full-page cancellation through the execution coordinator", async () => {
+    const jobs = new FakeCoordinator();
+    const dedupe = new MemoryDedupe();
+    const cancelled = { ...job(), state: "capturing" as const, stateRevision: 2 };
+    jobs.current = cancelled;
+    const start = vi.fn(() => Promise.resolve());
+    const cancel = vi.fn(() => Promise.resolve(cancelled));
+    const message = createJobCancelMessage({
+      requestId: "request-cancel",
+      sentAt: now.toISOString(),
+      jobId: cancelled.id,
+      reason: "test",
+    });
+
+    const response = await routePersistentJobMessage(
+      message,
+      dependencies(jobs, dedupe, { start, cancel }),
+    );
+
+    expect(cancel).toHaveBeenCalledWith(cancelled.id, "test");
+    expect(response).toMatchObject({
+      type: "JOB_RESPONSE",
+      payload: { job: { state: "capturing" } },
+    });
   });
 
   it("caches normalized errors for duplicate missing-job reads", async () => {
