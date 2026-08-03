@@ -19,6 +19,8 @@ interface FallbackState {
     completedTiles: number;
     totalTiles: number;
     cleanupCompleted: boolean;
+    errorCode?: string;
+    errorCause?: string;
   } | null;
   tiles: Array<{
     index: number;
@@ -43,6 +45,19 @@ async function resolveFixtureTab(serviceWorker: Worker, page: Page): Promise<num
       throw new Error("The fallback fixture tab could not be resolved.");
     }
     return tab.id;
+  }, page.url());
+}
+
+async function activateFixtureTab(serviceWorker: Worker, page: Page): Promise<void> {
+  await page.bringToFront();
+  await serviceWorker.evaluate(async (url) => {
+    const tabs = await chrome.tabs.query({});
+    const tab = tabs.find((candidate) => candidate.url === url);
+    if (tab?.id === undefined || tab.windowId === undefined) {
+      throw new Error("The fallback fixture tab could not be activated.");
+    }
+    await chrome.tabs.update(tab.id, { active: true });
+    await chrome.windows.update(tab.windowId, { focused: true });
   }, page.url());
 }
 
@@ -94,6 +109,7 @@ async function readFallbackState(serviceWorker: Worker): Promise<FallbackState> 
       totalTiles: number;
       updatedAt: string;
       cleanup: { completed: boolean };
+      error?: { code: string; causeCode?: string };
     }>;
     const job = jobs
       .filter((candidate) => candidate.mode === "full-page")
@@ -139,18 +155,43 @@ async function readFallbackState(serviceWorker: Worker): Promise<FallbackState> 
               completedTiles: job.completedTiles,
               totalTiles: job.totalTiles,
               cleanupCompleted: job.cleanup.completed,
+              ...(job.error === undefined
+                ? {}
+                : {
+                    errorCode: job.error.code,
+                    ...(job.error.causeCode === undefined
+                      ? {}
+                      : { errorCause: job.error.causeCode }),
+                  }),
             },
       tiles,
     };
   });
 }
 
-async function startFullPageFallback(popup: Page): Promise<void> {
+async function startFullPageFallback(
+  popup: Page,
+  targetPage: Page,
+  serviceWorker: Worker,
+): Promise<void> {
   await popup.getByRole("button", { name: /^Toàn bộ trang/ }).click();
   await popup.getByRole("button", { name: "Bắt đầu chụp toàn trang" }).click();
-  await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({
-    timeout: 60_000,
-  });
+  await activateFixtureTab(serviceWorker, targetPage);
+  await expect
+    .poll(
+      async () => {
+        const state = await readFallbackState(serviceWorker);
+        if (state.job?.state === "failed" || state.job?.state === "cancelled") {
+          return `${state.job.state}:${state.job.errorCode ?? "unknown"}:${state.job.errorCause ?? "unknown"}`;
+        }
+        return state.job?.state ?? "missing";
+      },
+      { timeout: 60_000 },
+    )
+    .toBe("ready");
+  await popup.bringToFront();
+  await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({ timeout: 5_000 });
+  await activateFixtureTab(serviceWorker, targetPage);
 }
 
 function expectContinuousRows(tiles: FallbackState["tiles"]): void {
@@ -182,7 +223,7 @@ test("@smoke uses smart fixed policy and restores the page after scroll fallback
 
   try {
     const popup = await openPopup();
-    await startFullPageFallback(popup);
+    await startFullPageFallback(popup, targetPage, serviceWorker);
 
     const state = await readFallbackState(serviceWorker);
     expect(state.job).toMatchObject({
@@ -216,7 +257,7 @@ test("@smoke covers a wide table with a two-dimensional fallback grid", async ({
 
   try {
     const popup = await openPopup();
-    await startFullPageFallback(popup);
+    await startFullPageFallback(popup, targetPage, serviceWorker);
 
     const state = await readFallbackState(serviceWorker);
     expect(state.job).toMatchObject({
