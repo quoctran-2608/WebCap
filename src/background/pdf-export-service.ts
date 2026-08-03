@@ -125,6 +125,8 @@ export class PdfExportService {
       jobId,
       "exporting",
       {
+        error: undefined,
+        outputArtifactId: undefined,
         exportProgress: {
           completedPages: 0,
           totalPages,
