@@ -39,17 +39,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Apply S12 core integration
+      - name: Apply S12 static fixes
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/s12-element-selector'
         run: |
-          node scripts/apply-s12-core.mjs
+          node scripts/fix-s12-static.mjs
           pnpm format
-          rm scripts/apply-s12-core.mjs
+          rm scripts/fix-s12-static.mjs
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add -A
-            git commit -m "Integrate element selector capture"
+            git commit -m "Fix element selector static checks"
             git push origin HEAD:${GITHUB_HEAD_REF}
           fi
 
