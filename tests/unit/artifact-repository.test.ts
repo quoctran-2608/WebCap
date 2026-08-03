@@ -19,8 +19,7 @@ const record = {
 };
 
 function createImmediateReadDatabase(value: unknown): IDBDatabase {
-  let transaction: IDBTransaction;
-  transaction = {
+  const transaction = {
     error: null,
     oncomplete: null,
     onabort: null,
