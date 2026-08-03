@@ -42,8 +42,10 @@ export type OffscreenExportEditedPdfMessage = z.infer<
 >;
 
 export function createOffscreenExportEditedPdfMessage(
-  options: Omit<OffscreenExportEditedPdfMessage, "protocolVersion" | "source" | "target" | "type" | "payload"> &
-    OffscreenExportEditedPdfMessage["payload"],
+  options: {
+    requestId: string;
+    sentAt: string;
+  } & OffscreenExportEditedPdfMessage["payload"],
 ): OffscreenExportEditedPdfMessage {
   return OffscreenExportEditedPdfMessageSchema.parse({
     protocolVersion: PROTOCOL_VERSION,
