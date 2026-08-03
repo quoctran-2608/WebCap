@@ -48,15 +48,19 @@ function initialJob(): CaptureJob {
 
 class Jobs implements PersistentJobCoordinatorPort {
   job = initialJob();
+
   initialize(): Promise<void> {
     return Promise.resolve();
   }
+
   create(): Promise<CaptureJob> {
     return Promise.resolve(structuredClone(this.job));
   }
+
   get(jobId: string): Promise<CaptureJob | undefined> {
     return Promise.resolve(jobId === this.job.id ? structuredClone(this.job) : undefined);
   }
+
   update(jobId: string, patch: JobTransitionPatch): Promise<CaptureJob> {
     if (jobId !== this.job.id) return Promise.reject(new Error("missing job"));
     const result = updateJob(this.job, NOW, patch);
@@ -64,6 +68,7 @@ class Jobs implements PersistentJobCoordinatorPort {
     this.job = result.value;
     return Promise.resolve(structuredClone(this.job));
   }
+
   transition(jobId: string, state: JobState, patch: JobTransitionPatch = {}): Promise<CaptureJob> {
     if (jobId !== this.job.id) return Promise.reject(new Error("missing job"));
     const result = transitionJob(this.job, state, NOW, patch);
@@ -71,9 +76,11 @@ class Jobs implements PersistentJobCoordinatorPort {
     this.job = result.value;
     return Promise.resolve(structuredClone(this.job));
   }
+
   cancel(): Promise<CaptureJob> {
     return Promise.resolve(this.job);
   }
+
   cleanupExpired(): Promise<JobCleanupReport> {
     return Promise.resolve({
       deletedJobs: 0,
@@ -87,16 +94,20 @@ class Jobs implements PersistentJobCoordinatorPort {
 
 class Tiles implements TileRepositoryPort {
   readonly records: StoredTileRecord[] = [];
+
   put(record: StoredTileRecord): Promise<void> {
     this.records.push(record);
     return Promise.resolve();
   }
+
   get(): Promise<StoredTileRecord | undefined> {
     return Promise.resolve(undefined);
   }
+
   listByJob(): Promise<StoredTileRecord[]> {
     return Promise.resolve(this.records);
   }
+
   deleteByJob(): Promise<number> {
     return Promise.resolve(0);
   }
@@ -112,12 +123,19 @@ const metrics: PageMetrics = {
   scrollY: 0,
 };
 
-function pageService() {
+function pageHarness(): {
+  service: PagePreparationService;
+  restore: ReturnType<typeof vi.fn>;
+} {
+  const prepare = vi.fn(() => Promise.resolve({ preparationId: "element-job" }));
+  const restore = vi.fn(() =>
+    Promise.resolve({ preparationId: "element-job", completed: true }),
+  );
+  const cancel = vi.fn(() => Promise.resolve(true));
   return {
-    prepare: vi.fn(() => Promise.resolve({ preparationId: "element-job" })),
-    restore: vi.fn(() => Promise.resolve({ preparationId: "element-job", completed: true })),
-    cancel: vi.fn(() => Promise.resolve(true)),
-  } as unknown as PagePreparationService;
+    service: { prepare, restore, cancel } as unknown as PagePreparationService,
+    restore,
+  };
 }
 
 function tile(rect: { x: number; y: number; width: number; height: number }): CaptureTile {
@@ -141,11 +159,11 @@ describe("element target capture coordination", () => {
   it("fails with E_TARGET_STALE before the engine can capture another node", async () => {
     const jobs = new Jobs();
     const tiles = new Tiles();
-    const pages = pageService();
+    const page = pageHarness();
     const capture = vi.fn<CaptureEngine["capture"]>();
     const coordinator = new FullPageCaptureCoordinator({
       jobs,
-      pages,
+      pages: page.service,
       tiles,
       engine: { kind: "cdp", capture },
       targetValidator: {
@@ -175,13 +193,13 @@ describe("element target capture coordination", () => {
       causeCode: "ElementTargetDisconnected",
     });
     expect(jobs.job.cleanup).toEqual({ attempted: true, completed: true });
-    expect(pages.restore).toHaveBeenCalledOnce();
+    expect(page.restore).toHaveBeenCalledOnce();
   });
 
   it("updates moved bounds before planning and again before the engine attempt", async () => {
     const jobs = new Jobs();
     const tiles = new Tiles();
-    const pages = pageService();
+    const page = pageHarness();
     const revalidate = vi
       .fn()
       .mockResolvedValueOnce({ x: 80, y: 100, width: 320, height: 160 })
@@ -206,7 +224,7 @@ describe("element target capture coordination", () => {
     };
     const coordinator = new FullPageCaptureCoordinator({
       jobs,
-      pages,
+      pages: page.service,
       tiles,
       engine,
       targetValidator: { revalidate },
