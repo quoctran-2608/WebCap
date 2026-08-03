@@ -101,3 +101,18 @@ Run `pnpm test:unit` and `pnpm test:e2e`. S09 automated coverage includes CDP cl
 10. Run `pnpm test:unit` for deterministic 10k/30k/100k planning and `pnpm test:e2e` for CDP success, automatic fallback, smart fixed policy, 2D wide-table coverage, 10k capture, page restoration, cancellation, and visible-capture regressions.
 
 Reference validation on Chrome for Testing 151: smart fixed fixture about 9.2 seconds, wide-table 2D fixture about 11.2 seconds, and 10k fallback fixture about 25.4 seconds. The 30k and 100k cases remain deterministic planner/guardrail benchmarks because a full rate-limited browser capture would intentionally lengthen CI; their planned tile counts are 56 and 187 respectively.
+
+## S11 CoordinateSpace and region selector inspection
+
+1. Build and load the extension, serve `tests/fixtures/region-selection.html`, open WebCap, select **Vùng tự chọn**, and click **Bắt đầu chọn vùng**.
+2. Confirm a single `data-webcap-region-selector` root is injected. Its controls and styles must live inside an isolated Shadow DOM; the page must not receive global selector classes or styles.
+3. Drag from an empty page point to create a selection, drag the selection body to move it, and use all eight handles to resize it. The displayed dimensions must track the CSS document rectangle.
+4. Use arrow keys to nudge by one CSS pixel and Shift+arrow to nudge by ten. Press Enter to confirm or Escape to cancel; keyboard focus must remain visible on actionable controls.
+5. Drag near the bottom or side of the viewport. The page should auto-scroll while the stored target continues growing in document coordinates and can extend beyond the initial viewport.
+6. Confirming must remove the overlay before page preparation/capture begins and wait at least two animation frames. The captured PNG tile must contain page pixels at the selection origin, not the yellow selector border or dimming mask.
+7. Inspect the region job in IndexedDB: `mode` is `region`, `targetRect` is the confirmed CSS document rectangle, the job progresses through the existing tiled coordinator, and every stored tile is a non-empty Blob. Session storage remains metadata-only.
+8. Close or reopen the popup after selection/capture. With the source tab active, WebCap should recover the latest active/ready region job through `JOB_GET_ACTIVE` and show its correct progress or ready state.
+9. Press Escape before confirming. The selector root must disappear, no tiles should be stored, the job must settle as `cancelled` with `E_CANCELLED`, cleanup must be complete, and scroll/focus/document/body styles must match the pre-selection snapshot.
+10. Repeat at DPR 2 and Chrome zoom 125%. The confirmed `targetRect` must remain stable in CSS document coordinates while the capture engine handles screenshot pixel scale separately.
+
+Run `pnpm test:unit` for the coordinate matrix, protocol, selector service, router, active-job lookup, and cancellation semantics. Run `pnpm test:e2e` for region auto-scroll capture, overlay pixel exclusion, popup recovery, Escape cancellation, zoom/DPR, and all existing visible/full-page regressions. Reference CI run `30799895160` passed 188 unit tests across 49 files and 14 Playwright tests on Chrome for Testing 151.

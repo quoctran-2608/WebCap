@@ -12,7 +12,13 @@ import type {
 
 import { createArtifactPreview } from "./artifact-preview";
 import { estimateOutputBytes, formatBytes } from "./formatting";
-import { cancelFullPageCapture, getCaptureJob, startFullPageCapture } from "./full-page-client";
+import {
+  cancelFullPageCapture,
+  getActiveCaptureJob,
+  getCaptureJob,
+  startFullPageCapture,
+  startRegionCapture,
+} from "./full-page-client";
 import {
   cancelVisibleCapture,
   downloadArtifact,
@@ -68,7 +74,7 @@ const CAPTURE_STATUS_COPY: Record<Exclude<UiStatus, "idle">, string> = {
   error: "Không thể hoàn tất thao tác.",
 };
 
-const FULL_PAGE_STATUS_COPY: Record<CaptureJob["state"], string> = {
+const TILED_STATUS_COPY: Record<CaptureJob["state"], string> = {
   created: "Đang khởi tạo phiên chụp…",
   preparing: "Đang chuẩn bị và làm ổn định trang…",
   capturing: "Đang chụp các tile; WebCap tự chuyển sang scroll fallback khi cần…",
@@ -85,6 +91,16 @@ function errorMessage(error: unknown): string {
   return error instanceof Error && error.message.length > 0
     ? error.message
     : "WebCap không thể hoàn tất thao tác.";
+}
+
+function tiledStatusCopy(job: CaptureJob): string {
+  if (job.mode === "region") {
+    if (job.state === "created") return "Chọn vùng trực tiếp trên trang…";
+    if (job.state === "ready") return "Tile set vùng chọn đã sẵn sàng.";
+    if (job.state === "failed") return "Không thể hoàn tất chụp vùng chọn.";
+    if (job.state === "cancelled") return "Đã hủy chọn vùng.";
+  }
+  return TILED_STATUS_COPY[job.state];
 }
 
 function isFullPageBusy(job: CaptureJob | undefined): boolean {
@@ -148,11 +164,23 @@ export function App(): React.JSX.Element {
         setWorkerStatus("connected");
 
         try {
-          const currentSession = await getVisibleSession();
+          const [currentSession, activeJob] = await Promise.all([
+            getVisibleSession(),
+            currentTabCapability.tabId === undefined
+              ? Promise.resolve(undefined)
+              : getActiveCaptureJob(currentTabCapability.tabId),
+          ]);
           if (active) {
             setSession(currentSession);
             if (currentSession !== undefined) {
               setSelectedFormat(currentSession.format);
+            }
+            if (
+              activeJob !== undefined &&
+              (activeJob.mode === "full-page" || activeJob.mode === "region")
+            ) {
+              setFullPageJob(activeJob);
+              setSelectedMode(activeJob.mode);
             }
           }
         } catch (error) {
@@ -175,11 +203,11 @@ export function App(): React.JSX.Element {
   const status: UiStatus = localStatus === "idle" ? (session?.status ?? "idle") : localStatus;
   const visibleBusy = status === "capturing" || status === "processing" || status === "downloading";
   const fullPageBusy = isFullPageBusy(fullPageJob);
-  const busy = selectedMode === "full-page" ? fullPageBusy : visibleBusy;
-  const terminal =
-    selectedMode === "full-page"
-      ? fullPageJob !== undefined && ["ready", "failed", "cancelled"].includes(fullPageJob.state)
-      : status === "ready" || status === "completed" || status === "error";
+  const tiledMode = selectedMode === "full-page" || selectedMode === "region";
+  const busy = tiledMode ? fullPageBusy : visibleBusy;
+  const terminal = tiledMode
+    ? fullPageJob !== undefined && ["ready", "failed", "cancelled"].includes(fullPageJob.state)
+    : status === "ready" || status === "completed" || status === "error";
   const availableFormats = OUTPUT_FORMATS.filter(
     (format): format is { id: ImageFormat; label: string } =>
       format.id !== "pdf" && capabilities.outputFormats[format.id],
@@ -340,6 +368,25 @@ export function App(): React.JSX.Element {
     }
   }, [selectedFormat, syncFullPageJob, tabCapability.tabId, tabCapability.windowId]);
 
+  const handleRegionCapture = useCallback(async (): Promise<void> => {
+    if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
+      setUiError("Không xác định được tab đang hoạt động.");
+      return;
+    }
+    setFullPageJob(undefined);
+    setUiError(undefined);
+    try {
+      const job = await startRegionCapture({
+        tabId: tabCapability.tabId,
+        windowId: tabCapability.windowId,
+        outputFormat: selectedFormat,
+      });
+      setFullPageJob(job);
+    } catch (error) {
+      setUiError(errorMessage(error));
+    }
+  }, [selectedFormat, tabCapability.tabId, tabCapability.windowId]);
+
   const handleCapture = useCallback(async (): Promise<void> => {
     if (!canCapture) {
       return;
@@ -348,11 +395,15 @@ export function App(): React.JSX.Element {
       await handleFullPageCapture();
       return;
     }
+    if (selectedMode === "region") {
+      await handleRegionCapture();
+      return;
+    }
     await handleVisibleCapture();
-  }, [canCapture, handleFullPageCapture, handleVisibleCapture, selectedMode]);
+  }, [canCapture, handleFullPageCapture, handleRegionCapture, handleVisibleCapture, selectedMode]);
 
   const handleCancel = useCallback(async (): Promise<void> => {
-    if (selectedMode === "full-page") {
+    if (selectedMode === "full-page" || selectedMode === "region") {
       if (fullPageJob === undefined) {
         return;
       }
@@ -390,11 +441,15 @@ export function App(): React.JSX.Element {
   ]);
 
   const handleRetry = useCallback(async (): Promise<void> => {
-    if (selectedMode === "full-page") {
+    if (selectedMode === "full-page" || selectedMode === "region") {
       if (fullPageJob !== undefined && fullPageJob.state !== "cancelled") {
         await cancelFullPageCapture(fullPageJob.id).catch(() => undefined);
       }
-      await handleFullPageCapture();
+      if (selectedMode === "region") {
+        await handleRegionCapture();
+      } else {
+        await handleFullPageCapture();
+      }
       return;
     }
     if (session?.source !== undefined) {
@@ -405,6 +460,7 @@ export function App(): React.JSX.Element {
   }, [
     fullPageJob,
     handleFullPageCapture,
+    handleRegionCapture,
     handleVisibleCapture,
     runExport,
     selectedFormat,
@@ -486,10 +542,14 @@ export function App(): React.JSX.Element {
           <div>
             <p className="section-heading__eyebrow">CHẾ ĐỘ CHỤP</p>
             <h2 id="capture-title">
-              {selectedMode === "full-page" ? "Chụp toàn bộ trang" : "Chụp vùng đang xem"}
+              {selectedMode === "full-page"
+                ? "Chụp toàn bộ trang"
+                : selectedMode === "region"
+                  ? "Chụp vùng tự chọn"
+                  : "Chụp vùng đang xem"}
             </h2>
           </div>
-          <span className="planned-badge">S09</span>
+          <span className="planned-badge">{selectedMode === "region" ? "S11" : "S10"}</span>
         </div>
 
         <div className="mode-grid" aria-label="Các chế độ chụp">
@@ -544,15 +604,19 @@ export function App(): React.JSX.Element {
             disabled={!canCapture || fullPageJob?.state === "ready"}
             onClick={() => void handleCapture()}
           >
-            {selectedMode === "full-page" ? "Bắt đầu chụp toàn trang" : "Tạo bản xem trước"}
+            {selectedMode === "full-page"
+              ? "Bắt đầu chụp toàn trang"
+              : selectedMode === "region"
+                ? "Bắt đầu chọn vùng"
+                : "Tạo bản xem trước"}
           </button>
         )}
 
-        {selectedMode === "full-page" && fullPageJob !== undefined && (
+        {tiledMode && fullPageJob !== undefined && (
           <section className="progress-card" aria-live="polite" data-testid="full-page-progress">
             {fullPageBusy && <span className="progress-card__spinner" aria-hidden="true" />}
             <div>
-              <strong>{FULL_PAGE_STATUS_COPY[fullPageJob.state]}</strong>
+              <strong>{tiledStatusCopy(fullPageJob)}</strong>
               <small>
                 {fullPageJob.completedTiles}/{fullPageJob.totalTiles || "?"} tile ·{" "}
                 {fullPageProgress}%
@@ -560,7 +624,9 @@ export function App(): React.JSX.Element {
               <progress
                 value={fullPageJob.completedTiles}
                 max={Math.max(1, fullPageJob.totalTiles)}
-                aria-label="Tiến độ chụp toàn trang"
+                aria-label={
+                  selectedMode === "region" ? "Tiến độ chụp vùng chọn" : "Tiến độ chụp toàn trang"
+                }
               />
             </div>
           </section>
@@ -657,39 +723,46 @@ export function App(): React.JSX.Element {
         )}
 
         <div className="capture-feedback" aria-live="polite">
-          {selectedMode === "full-page" && fullPageJob?.state === "ready" && (
+          {tiledMode && fullPageJob?.state === "ready" && (
             <div className="feedback feedback--success">
               <h3 ref={feedbackHeadingRef} tabIndex={-1}>
-                Đã lưu đầy đủ tile
+                {selectedMode === "region" ? "Đã lưu tile vùng chọn" : "Đã lưu đầy đủ tile"}
               </h3>
               <p>
                 {fullPageJob.completedTiles} tile PNG đang được giữ cục bộ trong IndexedDB. Ghép ảnh
-                toàn trang và export cuối thuộc milestone S10/S13.
+                và export cuối thuộc milestone xuất kết quả sau S12.
               </p>
               <button className="text-action" type="button" onClick={() => void handleCancel()}>
                 Kết thúc phiên tile
               </button>
             </div>
           )}
-          {selectedMode === "full-page" && fullPageJob?.state === "cancelled" && (
+          {tiledMode && fullPageJob?.state === "cancelled" && (
             <div className="feedback feedback--neutral">
-              <p>{FULL_PAGE_STATUS_COPY.cancelled}</p>
+              <p>{tiledStatusCopy(fullPageJob)}</p>
               <button className="text-action" type="button" onClick={() => void handleRetry()}>
                 Thử lại
               </button>
             </div>
           )}
-          {selectedMode === "full-page" && fullPageJob?.state === "failed" && (
+          {tiledMode && fullPageJob?.state === "failed" && (
             <div className="feedback feedback--error" role="alert">
               <h3 ref={feedbackHeadingRef} tabIndex={-1}>
-                Không thể hoàn tất chụp toàn trang
+                {selectedMode === "region"
+                  ? "Không thể hoàn tất chụp vùng chọn"
+                  : "Không thể hoàn tất chụp toàn trang"}
               </h3>
-              <p>{fullPageJob.error?.message ?? "Không thể chụp toàn bộ trang."}</p>
+              <p>
+                {fullPageJob.error?.message ??
+                  (selectedMode === "region"
+                    ? "Không thể chụp vùng đã chọn."
+                    : "Không thể chụp toàn bộ trang.")}
+              </p>
               {fullPageJob.activeEngine === "scroll" && (
                 <p>Scroll fallback đã dừng an toàn và trang đã được phục hồi.</p>
               )}
               <button className="text-action" type="button" onClick={() => void handleRetry()}>
-                Thử lại chụp toàn trang
+                {selectedMode === "region" ? "Chọn lại vùng" : "Thử lại chụp toàn trang"}
               </button>
             </div>
           )}

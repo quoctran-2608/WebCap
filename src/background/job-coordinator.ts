@@ -54,6 +54,7 @@ export interface PersistentJobCoordinatorPort {
   initialize(): Promise<void>;
   create(options: CreatePersistentJobOptions): Promise<CaptureJob>;
   get(jobId: string): Promise<CaptureJob | undefined>;
+  getActiveForTab?(tabId: number): Promise<CaptureJob | undefined>;
   update(
     jobId: string,
     patch: JobTransitionPatch,
@@ -235,6 +236,14 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
   async get(jobId: string): Promise<CaptureJob | undefined> {
     await this.initialize();
     return this.jobs.get(jobId);
+  }
+
+  async getActiveForTab(tabId: number): Promise<CaptureJob | undefined> {
+    await this.initialize();
+    const active = await this.jobs.listActive();
+    return active
+      .filter((job) => job.tabId === tabId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
   }
 
   async update(

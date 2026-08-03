@@ -6,7 +6,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 ## Current status
 
-**S10 — The full-page M2 capture foundation is complete.** WebCap first uses the CDP tiled engine and automatically switches to an active-tab scroll fallback for eligible debugger failures. The fallback plans deterministic two-dimensional viewport tiles, records overlap/crop metadata, rate-limits visible captures, supports preserve/remove/smart fixed-element policies, validates stable screenshot scale, stores each PNG Blob immediately in IndexedDB, and restores scroll, focus, styles, and WebCap-owned markers on every exit path. Automated coverage includes fixed headers/footers, a wide table, and a 10,000 CSS-pixel page. Final long-image composition remains deferred to the later export milestones; region selection is next in S11.
+**S11 — Region capture selection is complete.** WebCap now exposes the region mode, opens an isolated Shadow DOM overlay on the source page, supports drag creation, moving, eight resize handles, arrow-key nudging, Enter/Escape, and edge auto-scroll, then confirms a target in CSS document coordinates. The overlay restores the original scroll and focus, removes itself, waits two animation frames, and routes the same persistent job through the existing CDP/scroll tiled engines. Popup recovery uses a metadata-only active-job lookup, and automated coverage validates a region longer than the viewport, overlay exclusion from captured pixels, clean cancellation, exact page restoration, DPR 2, and 125% zoom. Element selection is next in S12; final image composition remains in later export milestones.
 
 ## Requirements
 

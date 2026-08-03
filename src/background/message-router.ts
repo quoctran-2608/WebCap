@@ -18,6 +18,7 @@ import type {
   VisibleSessionStatus,
   VisibleSourceMetadata,
 } from "@shared/contracts/visible-session";
+import { isRegionSelectionEventType } from "@shared/contracts/region-selection";
 import type { WebCapErrorData } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
 import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
@@ -106,7 +107,12 @@ function isPersistentJobMessageType(value: unknown): boolean {
     return false;
   }
   const type = (value as { type?: unknown }).type;
-  return type === "JOB_CREATE" || type === "JOB_GET" || type === "JOB_CANCEL";
+  return (
+    type === "JOB_CREATE" ||
+    type === "JOB_GET" ||
+    type === "JOB_GET_ACTIVE" ||
+    type === "JOB_CANCEL"
+  );
 }
 
 function targetsBackground(value: unknown): boolean {
@@ -115,7 +121,8 @@ function targetsBackground(value: unknown): boolean {
     value !== null &&
     "target" in value &&
     (value as { target?: unknown }).target === "background" &&
-    !isPersistentJobMessageType(value)
+    !isPersistentJobMessageType(value) &&
+    !isRegionSelectionEventType(value)
   );
 }
 
