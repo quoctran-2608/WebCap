@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebCap Element Selection Fixture</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; }
+      body {
+        min-height: 2400px;
+        padding: 110px 80px 900px;
+        background: #f8fafc;
+        color: #0f172a;
+        font-family: Arial, sans-serif;
+      }
+      #focus-target { position: absolute; top: 20px; left: 24px; }
+      .grid { display: grid; grid-template-columns: 520px 360px; gap: 56px; align-items: start; }
+      #target-card {
+        width: 520px;
+        min-height: 280px;
+        padding: 38px;
+        border-radius: 22px;
+        background: #e0e7ff;
+        border: 4px solid #312e81;
+      }
+      #target-child {
+        display: block;
+        width: 320px;
+        height: 150px;
+        padding: 28px;
+        border-radius: 16px;
+        background: #7c3aed;
+        color: #fff;
+        font-size: 22px;
+        font-weight: 700;
+      }
+      #stale-target {
+        width: 360px;
+        height: 170px;
+        padding: 28px;
+        border-radius: 18px;
+        background: #0f766e;
+        color: #fff;
+        font-size: 20px;
+      }
+      #scrollable-target {
+        width: 360px;
+        height: 140px;
+        margin-top: 48px;
+        overflow: auto;
+        border: 3px solid #be123c;
+        background: #fff1f2;
+      }
+      #scrollable-target > div { width: 720px; height: 320px; padding: 22px; }
+      open-shadow-card {
+        display: block;
+        width: 440px;
+        height: 220px;
+        margin-top: 160px;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="focus-target" type="button">Focus trước selector</button>
+    <main class="grid">
+      <article id="target-card" class="capture-card outer-card">
+        <h1>Card cha</h1>
+        <span id="target-child" class="capture-child violet-panel">Phần tử con cần chụp</span>
+      </article>
+      <section>
+        <div id="stale-target" class="stale-card">Phần tử sẽ bị xóa sau khi chọn</div>
+        <div id="scrollable-target" class="scroll-box"><div>Scrollable candidate</div></div>
+      </section>
+    </main>
+    <open-shadow-card id="shadow-host"></open-shadow-card>
+    <script>
+      customElements.define(
+        "open-shadow-card",
+        class extends HTMLElement {
+          connectedCallback() {
+            if (this.shadowRoot) return;
+            const shadow = this.attachShadow({ mode: "open" });
+            shadow.innerHTML = `
+              <style>
+                :host { display: block; padding: 28px; border-radius: 20px; background: #dbeafe; }
+                #shadow-action {
+                  display: block;
+                  width: 300px;
+                  height: 120px;
+                  border: 0;
+                  border-radius: 14px;
+                  background: #2563eb;
+                  color: white;
+                  font: 700 20px Arial, sans-serif;
+                }
+              </style>
+              <button id="shadow-action" class="shadow-button" type="button">Open shadow target</button>
+            `;
+          }
+        },
+      );
+    </script>
+  </body>
+</html>
