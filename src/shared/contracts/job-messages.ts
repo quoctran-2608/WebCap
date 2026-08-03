@@ -52,6 +52,11 @@ export const JobGetMessageSchema = EnvelopeBaseSchema.extend({
   payload: z.object({ jobId: IdentifierSchema }).strict(),
 }).strict();
 
+export const JobGetActiveMessageSchema = EnvelopeBaseSchema.extend({
+  type: z.literal("JOB_GET_ACTIVE"),
+  payload: z.object({ tabId: NonNegativeIntegerSchema }).strict(),
+}).strict();
+
 export const JobCancelMessageSchema = EnvelopeBaseSchema.extend({
   type: z.literal("JOB_CANCEL"),
   payload: z
@@ -74,16 +79,31 @@ export const JobResponseMessageSchema = z
   })
   .strict();
 
+export const JobActiveResponseMessageSchema = z
+  .object({
+    protocolVersion: z.literal(PROTOCOL_VERSION),
+    requestId: IdentifierSchema,
+    source: z.literal("background"),
+    target: z.literal("popup"),
+    type: z.literal("JOB_ACTIVE_RESPONSE"),
+    payload: z.object({ job: CaptureJobSchema.nullable() }).strict(),
+    sentAt: IsoDateTimeSchema,
+  })
+  .strict();
+
 export const PersistentJobRequestSchema = z.discriminatedUnion("type", [
   JobCreateMessageSchema,
   JobGetMessageSchema,
+  JobGetActiveMessageSchema,
   JobCancelMessageSchema,
 ]);
 
 export type JobCreateMessage = z.infer<typeof JobCreateMessageSchema>;
 export type JobGetMessage = z.infer<typeof JobGetMessageSchema>;
+export type JobGetActiveMessage = z.infer<typeof JobGetActiveMessageSchema>;
 export type JobCancelMessage = z.infer<typeof JobCancelMessageSchema>;
 export type JobResponseMessage = z.infer<typeof JobResponseMessageSchema>;
+export type JobActiveResponseMessage = z.infer<typeof JobActiveResponseMessageSchema>;
 export type PersistentJobRequest = z.infer<typeof PersistentJobRequestSchema>;
 
 export interface JobMessageCreationOptions {
@@ -135,6 +155,20 @@ export function createJobGetMessage(
   });
 }
 
+export function createJobGetActiveMessage(
+  options: JobMessageCreationOptions & { tabId: number },
+): JobGetActiveMessage {
+  return JobGetActiveMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "popup",
+    target: "background",
+    type: "JOB_GET_ACTIVE",
+    payload: { tabId: options.tabId },
+    sentAt: options.sentAt,
+  });
+}
+
 export function createJobCancelMessage(
   options: JobMessageCreationOptions & { jobId: string; reason?: string },
 ): JobCancelMessage {
@@ -161,6 +195,20 @@ export function createJobResponseMessage(
     source: "background",
     target: "popup",
     type: "JOB_RESPONSE",
+    payload: { job: options.job },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createJobActiveResponseMessage(
+  options: JobMessageCreationOptions & { job: CaptureJob | null },
+): JobActiveResponseMessage {
+  return JobActiveResponseMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "popup",
+    type: "JOB_ACTIVE_RESPONSE",
     payload: { job: options.job },
     sentAt: options.sentAt,
   });
@@ -200,4 +248,8 @@ export function isPersistentJobRequest(value: unknown): value is PersistentJobRe
 
 export function isJobResponseMessage(value: unknown): value is JobResponseMessage {
   return JobResponseMessageSchema.safeParse(value).success;
+}
+
+export function isJobActiveResponseMessage(value: unknown): value is JobActiveResponseMessage {
+  return JobActiveResponseMessageSchema.safeParse(value).success;
 }
