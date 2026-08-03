@@ -164,9 +164,7 @@ const browserEnvironment: ThumbnailEnvironment = {
   },
 };
 
-async function renderPdfPageThumbnail(
-  options: PdfThumbnailOptions,
-): Promise<ArtifactMetadata> {
+async function renderPdfPageThumbnail(options: PdfThumbnailOptions): Promise<ArtifactMetadata> {
   const artifacts = options.artifacts ?? new IndexedDbArtifactRepository();
   const tiles = options.tileRepository ?? new IndexedDbTileRepository();
   const environment = options.environment ?? browserEnvironment;
@@ -267,8 +265,6 @@ async function renderPdfPageThumbnail(
   }
 }
 
-export function createPdfPageThumbnail(
-  options: PdfThumbnailOptions,
-): Promise<ArtifactMetadata> {
+export function createPdfPageThumbnail(options: PdfThumbnailOptions): Promise<ArtifactMetadata> {
   return scheduleRender(() => renderPdfPageThumbnail(options));
 }

@@ -80,7 +80,7 @@ const TILED_STATUS_COPY: Record<CaptureJob["state"], string> = {
   preparing: "Đang chuẩn bị và làm ổn định trang…",
   capturing: "Đang chụp các tile; WebCap tự chuyển sang scroll fallback khi cần…",
   processing: "Đang xác nhận tile set…",
-  ready: "Tile set đã sẵn sàng để biên tập PDF.",
+  ready: "Tile set toàn trang đã sẵn sàng.",
   exporting: "Đang tạo PDF từng trang…",
   completed: "PDF đã sẵn sàng để tải xuống.",
   failed: "Không thể hoàn tất chụp toàn trang.",

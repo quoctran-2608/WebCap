@@ -101,7 +101,7 @@ test("@smoke edits, restores, exports, and downloads PDF without recapture", asy
   const popup = await openPopup();
   await popup.getByRole("button", { name: /^Toàn bộ trang/ }).click();
   await popup.getByRole("button", { name: "Bắt đầu chụp toàn trang" }).click();
-  await expect(popup.getByText("Tile set đã sẵn sàng để biên tập PDF.")).toBeVisible({
+  await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({
     timeout: 45_000,
   });
 
