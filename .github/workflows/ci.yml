@@ -39,17 +39,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Apply S11 UI fixes
+      - name: Apply S11 type fixes
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/s11-region-selector'
         run: |
-          node scripts/fix-s11-ui.mjs
+          node scripts/fix-s11-types.mjs
           pnpm format
-          rm scripts/fix-s11-ui.mjs
+          rm scripts/fix-s11-types.mjs
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add -A
-            git commit -m "Fix region capture UI flow"
+            git commit -m "Fix region capture type boundaries"
             git push origin HEAD:${GITHUB_HEAD_REF}
           fi
 
