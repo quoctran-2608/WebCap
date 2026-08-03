@@ -18,18 +18,18 @@ describe("CdpMeasurementService", () => {
   it("measures and plans inside one owned debugger session", async () => {
     const session: DebuggerSession = {
       tabId: 4,
-      async sendCommand<T>(method: string): Promise<T> {
+      sendCommand<T>(method: string): Promise<T> {
         if (method === "Page.getLayoutMetrics") {
-          return layoutMetrics as T;
+          return Promise.resolve(layoutMetrics as T);
         }
         if (method === "Runtime.evaluate") {
-          return { result: { value: 2 } } as T;
+          return Promise.resolve({ result: { value: 2 } } as T);
         }
-        return undefined as T;
+        return Promise.resolve(undefined as T);
       },
     };
     const withSession = vi.fn(
-      async (_tabId: number, task: (value: DebuggerSession) => Promise<unknown>) => task(session),
+      (_tabId: number, task: (value: DebuggerSession) => Promise<unknown>) => task(session),
     );
     const debuggerClient = { withSession } as unknown as DebuggerClient;
     const service = new CdpMeasurementService(debuggerClient);
