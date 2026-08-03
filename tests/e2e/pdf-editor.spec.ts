@@ -36,9 +36,9 @@ async function readEditorState(editor: Page, jobId: string): Promise<EditorStora
       state: string;
       outputArtifactId?: string;
     };
-    const tiles = (
-      tileValues as Array<{ jobId: string; blob?: Blob }>
-    ).filter((record) => record.jobId === id);
+    const tiles = (tileValues as Array<{ jobId: string; blob?: Blob }>).filter(
+      (record) => record.jobId === id,
+    );
     const artifact = (
       artifactValues as Array<{ artifactId: string; pageCount?: number }>
     ).find(
@@ -66,10 +66,11 @@ async function waitForPdfDownload(
   serviceWorker: Worker,
   previousIds: number[],
 ): Promise<{ id: number; filename: string }> {
-  const id = await expect
+  let downloadId: number | undefined;
+  await expect
     .poll(
-      () =>
-        serviceWorker.evaluate(async (known) => {
+      async () => {
+        downloadId = await serviceWorker.evaluate(async (known) => {
           const items = await chrome.downloads.search({ orderBy: ["-startTime"], limit: 20 });
           return items.find(
             (item) =>
@@ -77,11 +78,13 @@ async function waitForPdfDownload(
               item.filename.toLowerCase().endsWith(".pdf") &&
               item.state === "complete",
           )?.id;
-        }, previousIds),
+        }, previousIds);
+        return downloadId;
+      },
       { timeout: 30_000 },
     )
     .not.toBeUndefined();
-  const downloadId = Number(id);
+  if (downloadId === undefined) throw new Error("PDF download did not complete.");
   return serviceWorker.evaluate(async (resolvedId) => {
     const [item] = await chrome.downloads.search({ id: resolvedId });
     if (item === undefined) throw new Error("PDF download was not found.");
