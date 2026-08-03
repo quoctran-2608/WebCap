@@ -65,8 +65,9 @@ export class IndexedDbArtifactRepository implements ArtifactRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.artifacts, "readwrite");
+      const completed = transactionDone(transaction);
       transaction.objectStore(WEBCAP_STORES.artifacts).put(record);
-      await transactionDone(transaction);
+      await completed;
     } catch (error) {
       throw storageError("write", error);
     }
@@ -76,10 +77,11 @@ export class IndexedDbArtifactRepository implements ArtifactRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.artifacts, "readonly");
+      const completed = transactionDone(transaction);
       const result = (await requestResult(
         transaction.objectStore(WEBCAP_STORES.artifacts).get(artifactId),
       )) as ArtifactRecord | undefined;
-      await transactionDone(transaction);
+      await completed;
       return result;
     } catch (error) {
       throw storageError("read", error);
@@ -95,8 +97,9 @@ export class IndexedDbArtifactRepository implements ArtifactRepositoryPort {
 
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.artifacts, "readwrite");
+      const completed = transactionDone(transaction);
       transaction.objectStore(WEBCAP_STORES.artifacts).delete(artifactId);
-      await transactionDone(transaction);
+      await completed;
       return true;
     } catch (error) {
       throw storageError("write", error);
@@ -107,6 +110,7 @@ export class IndexedDbArtifactRepository implements ArtifactRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.artifacts, "readwrite");
+      const completed = transactionDone(transaction);
       const store = transaction.objectStore(WEBCAP_STORES.artifacts);
       const records = (await requestResult(store.getAll())) as ArtifactRecord[];
       let deleted = 0;
@@ -118,7 +122,7 @@ export class IndexedDbArtifactRepository implements ArtifactRepositoryPort {
         }
       }
 
-      await transactionDone(transaction);
+      await completed;
       return deleted;
     } catch (error) {
       throw storageError("write", error);
