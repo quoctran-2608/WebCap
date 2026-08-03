@@ -21,6 +21,7 @@ import type { TileRepositoryPort } from "@storage/tile-repository";
 import {
   isTerminalJobState,
   transitionJob,
+  updateJob,
   type JobInvariantContext,
   type JobTransitionPatch,
 } from "./job-state-machine";
@@ -53,6 +54,11 @@ export interface PersistentJobCoordinatorPort {
   initialize(): Promise<void>;
   create(options: CreatePersistentJobOptions): Promise<CaptureJob>;
   get(jobId: string): Promise<CaptureJob | undefined>;
+  update(
+    jobId: string,
+    patch: JobTransitionPatch,
+    context?: JobInvariantContext,
+  ): Promise<CaptureJob>;
   transition(
     jobId: string,
     nextState: JobState,
@@ -229,6 +235,34 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
   async get(jobId: string): Promise<CaptureJob | undefined> {
     await this.initialize();
     return this.jobs.get(jobId);
+  }
+
+  async update(
+    jobId: string,
+    patch: JobTransitionPatch,
+    context: JobInvariantContext = {},
+  ): Promise<CaptureJob> {
+    await this.initialize();
+    const job = await this.jobs.get(jobId);
+    if (job === undefined) {
+      throw jobNotFound(jobId);
+    }
+    const now = this.now();
+    const result = updateJob(
+      job,
+      now.toISOString(),
+      {
+        ...patch,
+        expiresAt: patch.expiresAt ?? addMilliseconds(now, JOB_ABANDONED_TTL_MS),
+      },
+      context,
+    );
+    if (!result.ok) {
+      throw createWebCapRuntimeError(result.error);
+    }
+    await this.jobs.save(result.value, job.stateRevision);
+    await this.syncSession(result.value);
+    return result.value;
   }
 
   async transition(
