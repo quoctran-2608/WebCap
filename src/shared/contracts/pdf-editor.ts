@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import { PROTOCOL_VERSION } from "@shared/constants";
-import { ArtifactMetadataSchema } from "@shared/contracts/artifact";
 import {
   CaptureJobSchema,
   CaptureSettingsSchema,
@@ -9,7 +8,11 @@ import {
   type CaptureJob,
   type CaptureSettings,
 } from "@shared/contracts/domain";
-import { createWebCapError, type WebCapErrorData } from "@shared/errors/error";
+import {
+  WebCapErrorDataSchema,
+  createWebCapError,
+  type WebCapErrorData,
+} from "@shared/errors/error";
 import { err, ok, type Result } from "@shared/result";
 
 const IdentifierSchema = z.string().min(1).max(160);
@@ -62,7 +65,7 @@ const EnvelopeBaseSchema = z
     protocolVersion: z.literal(PROTOCOL_VERSION),
     requestId: IdentifierSchema,
     source: z.literal("editor"),
-    target: z.literal("background"),
+    target: z.literal("pdf-editor-background"),
     sentAt: IsoDateTimeSchema,
   })
   .strict();
@@ -98,17 +101,6 @@ export const PdfEditorUpdateMessageSchema = EnvelopeBaseSchema.extend({
     .strict(),
 }).strict();
 
-export const PdfThumbnailGetMessageSchema = EnvelopeBaseSchema.extend({
-  type: z.literal("PDF_THUMBNAIL_GET"),
-  payload: z
-    .object({
-      jobId: IdentifierSchema,
-      manifestRevision: NonNegativeIntegerSchema,
-      pageId: IdentifierSchema,
-    })
-    .strict(),
-}).strict();
-
 export const PdfExportCancelMessageSchema = EnvelopeBaseSchema.extend({
   type: z.literal("PDF_EXPORT_CANCEL"),
   payload: z.object({ jobId: IdentifierSchema }).strict(),
@@ -126,14 +118,14 @@ export const PdfEditorResponseMessageSchema = z
   })
   .strict();
 
-export const PdfThumbnailResponseMessageSchema = z
+export const PdfEditorErrorMessageSchema = z
   .object({
     protocolVersion: z.literal(PROTOCOL_VERSION),
     requestId: IdentifierSchema,
     source: z.literal("background"),
     target: z.literal("editor"),
-    type: z.literal("PDF_THUMBNAIL_RESPONSE"),
-    payload: ArtifactMetadataSchema,
+    type: z.literal("PDF_EDITOR_ERROR"),
+    payload: WebCapErrorDataSchema,
     sentAt: IsoDateTimeSchema,
   })
   .strict();
@@ -141,7 +133,6 @@ export const PdfThumbnailResponseMessageSchema = z
 export const PdfEditorRequestSchema = z.discriminatedUnion("type", [
   PdfEditorGetMessageSchema,
   PdfEditorUpdateMessageSchema,
-  PdfThumbnailGetMessageSchema,
   PdfExportCancelMessageSchema,
 ]);
 
@@ -152,10 +143,9 @@ export type PdfEditorSnapshot = z.infer<typeof PdfEditorSnapshotSchema>;
 export type PdfEditorUpdateAction = z.infer<typeof PdfEditorUpdateActionSchema>;
 export type PdfEditorGetMessage = z.infer<typeof PdfEditorGetMessageSchema>;
 export type PdfEditorUpdateMessage = z.infer<typeof PdfEditorUpdateMessageSchema>;
-export type PdfThumbnailGetMessage = z.infer<typeof PdfThumbnailGetMessageSchema>;
 export type PdfExportCancelMessage = z.infer<typeof PdfExportCancelMessageSchema>;
 export type PdfEditorResponseMessage = z.infer<typeof PdfEditorResponseMessageSchema>;
-export type PdfThumbnailResponseMessage = z.infer<typeof PdfThumbnailResponseMessageSchema>;
+export type PdfEditorErrorMessage = z.infer<typeof PdfEditorErrorMessageSchema>;
 export type PdfEditorRequest = z.infer<typeof PdfEditorRequestSchema>;
 
 interface MessageOptions {
@@ -170,7 +160,7 @@ export function createPdfEditorGetMessage(
     protocolVersion: PROTOCOL_VERSION,
     requestId: options.requestId,
     source: "editor",
-    target: "background",
+    target: "pdf-editor-background",
     type: "PDF_EDITOR_GET",
     payload: { jobId: options.jobId },
     sentAt: options.sentAt,
@@ -188,30 +178,12 @@ export function createPdfEditorUpdateMessage(
     protocolVersion: PROTOCOL_VERSION,
     requestId: options.requestId,
     source: "editor",
-    target: "background",
+    target: "pdf-editor-background",
     type: "PDF_EDITOR_UPDATE",
     payload: {
       jobId: options.jobId,
       expectedRevision: options.expectedRevision,
       action: options.action,
-    },
-    sentAt: options.sentAt,
-  });
-}
-
-export function createPdfThumbnailGetMessage(
-  options: MessageOptions & { jobId: string; manifestRevision: number; pageId: string },
-): PdfThumbnailGetMessage {
-  return PdfThumbnailGetMessageSchema.parse({
-    protocolVersion: PROTOCOL_VERSION,
-    requestId: options.requestId,
-    source: "editor",
-    target: "background",
-    type: "PDF_THUMBNAIL_GET",
-    payload: {
-      jobId: options.jobId,
-      manifestRevision: options.manifestRevision,
-      pageId: options.pageId,
     },
     sentAt: options.sentAt,
   });
@@ -224,7 +196,7 @@ export function createPdfExportCancelMessage(
     protocolVersion: PROTOCOL_VERSION,
     requestId: options.requestId,
     source: "editor",
-    target: "background",
+    target: "pdf-editor-background",
     type: "PDF_EXPORT_CANCEL",
     payload: { jobId: options.jobId },
     sentAt: options.sentAt,
@@ -245,16 +217,16 @@ export function createPdfEditorResponseMessage(
   });
 }
 
-export function createPdfThumbnailResponseMessage(
-  options: MessageOptions & { artifact: z.infer<typeof ArtifactMetadataSchema> },
-): PdfThumbnailResponseMessage {
-  return PdfThumbnailResponseMessageSchema.parse({
+export function createPdfEditorErrorMessage(
+  options: MessageOptions & { error: WebCapErrorData },
+): PdfEditorErrorMessage {
+  return PdfEditorErrorMessageSchema.parse({
     protocolVersion: PROTOCOL_VERSION,
     requestId: options.requestId,
     source: "background",
     target: "editor",
-    type: "PDF_THUMBNAIL_RESPONSE",
-    payload: options.artifact,
+    type: "PDF_EDITOR_ERROR",
+    payload: options.error,
     sentAt: options.sentAt,
   });
 }
@@ -285,7 +257,6 @@ export function isPdfEditorMessageType(value: unknown): boolean {
   return (
     type === "PDF_EDITOR_GET" ||
     type === "PDF_EDITOR_UPDATE" ||
-    type === "PDF_THUMBNAIL_GET" ||
     type === "PDF_EXPORT_CANCEL"
   );
 }
@@ -294,10 +265,8 @@ export function isPdfEditorResponseMessage(value: unknown): value is PdfEditorRe
   return PdfEditorResponseMessageSchema.safeParse(value).success;
 }
 
-export function isPdfThumbnailResponseMessage(
-  value: unknown,
-): value is PdfThumbnailResponseMessage {
-  return PdfThumbnailResponseMessageSchema.safeParse(value).success;
+export function isPdfEditorErrorMessage(value: unknown): value is PdfEditorErrorMessage {
+  return PdfEditorErrorMessageSchema.safeParse(value).success;
 }
 
 export type PdfEditorJob = CaptureJob;
