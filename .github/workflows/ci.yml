@@ -46,69 +46,89 @@ jobs:
           from pathlib import Path
 
           replacements = {
-              "src/content/entry.ts": [(
-                  'function hasString(value: Record<string, unknown>, key: string): boolean {\n  return typeof value[key] === "string" && (value[key] as string).length > 0;\n}',
-                  'function hasString(value: Record<string, unknown>, key: string): boolean {\n  const candidate = value[key];\n  return typeof candidate === "string" && candidate.length > 0;\n}',
-              )],
               "src/background/page-preparation-service.ts": [(
-                  '    if (!operationSucceeded) {\n      throw operationError;\n    }',
-                  '    if (!operationSucceeded) {\n      if (operationError instanceof Error) {\n        throw operationError;\n      }\n      throw createWebCapRuntimeError(\n        normalizeError(operationError, {\n          stage: "capture",\n          userMessageKey: "errors.captureFailed",\n          retryable: true,\n          fallbackAllowed: false,\n        }),\n      );\n    }',
+                  '    if (cleanupError !== undefined) {\n      throw cleanupError;\n    }',
+                  '    if (cleanupError !== undefined) {\n      if (cleanupError instanceof Error) {\n        throw cleanupError;\n      }\n      throw createWebCapRuntimeError(\n        normalizeError(cleanupError, {\n          code: "E_CLEANUP_PARTIAL",\n          stage: "cleanup",\n          userMessageKey: "errors.cleanupPartial",\n          retryable: true,\n          fallbackAllowed: false,\n        }),\n      );\n    }',
               )],
               "tests/e2e/page-preparation.spec.ts": [
                   (
-                      '(await chrome.tabs.sendMessage(id, payload)) as Record<string, unknown>',
-                      'await chrome.tabs.sendMessage<Record<string, unknown>>(id, payload)',
+                      '''async function sendContentMessage(
+  serviceWorker: Worker,
+  tabId: number,
+  message: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return serviceWorker.evaluate(
+    async ({ id, payload }) => await chrome.tabs.sendMessage<Record<string, unknown>>(id, payload),
+    { id: tabId, payload: message },
+  );
+}''',
+                      '''async function sendContentMessage(
+  serviceWorker: Worker,
+  tabId: number,
+  message: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return serviceWorker.evaluate(
+    async ({ id, payload }) => {
+      const response: unknown = await chrome.tabs.sendMessage(id, payload);
+      if (typeof response !== "object" || response === null) {
+        throw new TypeError("The content script returned a non-object response.");
+      }
+      return response as Record<string, unknown>;
+    },
+    { id: tabId, payload: message },
+  );
+}''',
                   ),
                   (
-                      'const pending = chrome.tabs.sendMessage(id, prepare) as Promise<Record<string, unknown>>;',
-                      'const pending = chrome.tabs.sendMessage<Record<string, unknown>>(id, prepare);',
-                  ),
-                  (
-                      'const cancelResponse = (await chrome.tabs.sendMessage(id, cancel)) as Record<string, unknown>;',
-                      'const cancelResponse = await chrome.tabs.sendMessage<Record<string, unknown>>(id, cancel);',
+                      '''    async ({ id, prepare, cancel }) => {
+      const pending = chrome.tabs.sendMessage<Record<string, unknown>>(id, prepare);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      const cancelResponse = await chrome.tabs.sendMessage<Record<string, unknown>>(id, cancel);
+      const prepareResponse = await pending;
+      return { cancelResponse, prepareResponse };
+    },''',
+                      '''    async ({ id, prepare, cancel }) => {
+      const pending: Promise<unknown> = chrome.tabs.sendMessage(id, prepare);
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      const cancelResponse: unknown = await chrome.tabs.sendMessage(id, cancel);
+      const prepareResponse: unknown = await pending;
+      if (
+        typeof cancelResponse !== "object" ||
+        cancelResponse === null ||
+        typeof prepareResponse !== "object" ||
+        prepareResponse === null
+      ) {
+        throw new TypeError("The content script returned a non-object response.");
+      }
+      return {
+        cancelResponse: cancelResponse as Record<string, unknown>,
+        prepareResponse: prepareResponse as Record<string, unknown>,
+      };
+    },''',
                   ),
               ],
-              "tests/unit/page-preparation-service.test.ts": [(
-                  'const operation = vi.fn(async () => "captured");',
-                  'const operation = vi.fn(() => Promise.resolve("captured"));',
-              )],
           }
 
           for file_name, pairs in replacements.items():
               path = Path(file_name)
               text = path.read_text()
               for before, after in pairs:
-                  if before not in text:
+                  if before in text:
+                      text = text.replace(before, after)
+                  elif after not in text:
                       raise SystemExit(f"Expected lint pattern not found in {file_name}: {before[:80]}")
-                  text = text.replace(before, after)
               path.write_text(text)
           PY
           pnpm exec prettier --write \
-            src/content/entry.ts \
             src/background/page-preparation-service.ts \
-            src/shared/contracts/page-preparation.ts \
-            tests/e2e/page-preparation.spec.ts \
-            tests/fixtures/animated-page.html \
-            tests/fixtures/fixed-sticky.html \
-            tests/fixtures/layout-shift.html \
-            tests/fixtures/lazy-images.html \
-            tests/unit/page-preparation-content.test.ts \
-            tests/unit/page-preparation-service.test.ts
+            tests/e2e/page-preparation.spec.ts
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add \
-              src/content/entry.ts \
               src/background/page-preparation-service.ts \
-              src/shared/contracts/page-preparation.ts \
-              tests/e2e/page-preparation.spec.ts \
-              tests/fixtures/animated-page.html \
-              tests/fixtures/fixed-sticky.html \
-              tests/fixtures/layout-shift.html \
-              tests/fixtures/lazy-images.html \
-              tests/unit/page-preparation-content.test.ts \
-              tests/unit/page-preparation-service.test.ts
-            git commit -m "Fix and format page preparation files"
+              tests/e2e/page-preparation.spec.ts
+            git commit -m "Harden page preparation error boundaries"
             git push origin HEAD:${GITHUB_HEAD_REF}
           fi
 
