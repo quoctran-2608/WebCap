@@ -21,6 +21,11 @@ export interface ScrollCaptureEngineOptions {
   overlapCss?: number;
 }
 
+interface CapturePixelScale {
+  x: number;
+  y: number;
+}
+
 function captureError(options: {
   code: "E_PROTOCOL_MESSAGE" | "E_TAB_NOT_ACTIVE" | "E_LAYOUT_UNSTABLE" | "E_CAPTURE_EMPTY";
   message: string;
@@ -104,31 +109,30 @@ function validatePixelDimensions(
   page: { viewportWidth: number; viewportHeight: number; devicePixelRatio: number },
   actual: { width: number; height: number },
   tileIndex: number,
-  expectedScale: number | undefined,
-): number {
+  expectedScale: CapturePixelScale | undefined,
+): CapturePixelScale {
   const scaleX = actual.width / page.viewportWidth;
   const scaleY = actual.height / page.viewportHeight;
-  const calibratedScale = (scaleX + scaleY) / 2;
-  const axisTolerance = 0.02;
   const minimumScale = 0.25;
   const maximumScale = 8;
-  const dimensionsAreCoherent =
+  const dimensionsArePlausible =
     Number.isFinite(scaleX) &&
     Number.isFinite(scaleY) &&
-    calibratedScale >= minimumScale &&
-    calibratedScale <= maximumScale &&
-    Math.abs(scaleX - scaleY) <= axisTolerance;
+    scaleX >= minimumScale &&
+    scaleX <= maximumScale &&
+    scaleY >= minimumScale &&
+    scaleY <= maximumScale;
 
-  if (dimensionsAreCoherent && expectedScale === undefined) {
-    return calibratedScale;
+  if (dimensionsArePlausible && expectedScale === undefined) {
+    return { x: scaleX, y: scaleY };
   }
 
-  const stableScale = expectedScale ?? calibratedScale;
-  const expectedWidth = Math.max(1, Math.round(page.viewportWidth * stableScale));
-  const expectedHeight = Math.max(1, Math.round(page.viewportHeight * stableScale));
+  const stableScale = expectedScale ?? { x: scaleX, y: scaleY };
+  const expectedWidth = Math.max(1, Math.round(page.viewportWidth * stableScale.x));
+  const expectedHeight = Math.max(1, Math.round(page.viewportHeight * stableScale.y));
   const pixelTolerance = 2;
   if (
-    dimensionsAreCoherent &&
+    dimensionsArePlausible &&
     Math.abs(actual.width - expectedWidth) <= pixelTolerance &&
     Math.abs(actual.height - expectedHeight) <= pixelTolerance
   ) {
@@ -137,7 +141,7 @@ function validatePixelDimensions(
 
   throw captureError({
     code: "E_LAYOUT_UNSTABLE",
-    message: "The visible screenshot pixel scale changed or did not match the viewport axes.",
+    message: "The visible screenshot pixel scale changed during fallback capture.",
     userMessageKey: "errors.pixelScaleMismatch",
     causeCode: "FallbackPixelScaleMismatch",
     safeContext: {
@@ -148,7 +152,8 @@ function validatePixelDimensions(
       actualHeight: actual.height,
       scaleX,
       scaleY,
-      expectedScale: stableScale,
+      expectedScaleX: stableScale.x,
+      expectedScaleY: stableScale.y,
       devicePixelRatio: page.devicePixelRatio,
     },
   });
@@ -226,7 +231,7 @@ export class ScrollCaptureEngine implements CaptureEngine {
     await context.onPlan(metrics, plan.targetRect, plan.tiles);
 
     const storedTiles: CaptureTile[] = [];
-    let captureScale: number | undefined;
+    let captureScale: CapturePixelScale | undefined;
     for (const planned of plan.tiles) {
       context.cancellation.throwIfCancelled("capture");
       await this.ensureActiveTab(context.tabId, windowId);
