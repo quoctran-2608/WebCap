@@ -1,8 +1,17 @@
 import { z } from "zod";
 
-import { CAPTURE_PROGRESS_STAGES } from "@capture/capture-engine";
 import { PROTOCOL_VERSION } from "@shared/constants";
 import { JobStateSchema } from "@shared/contracts/domain";
+
+export const CAPTURE_PROGRESS_STAGES = [
+  "preparing",
+  "measuring",
+  "planning",
+  "capturing",
+  "storing",
+  "restoring",
+  "ready",
+] as const;
 
 const IdentifierSchema = z.string().min(1).max(160);
 const IsoDateTimeSchema = z.string().datetime({ offset: true });
@@ -31,13 +40,14 @@ export const JobProgressMessageSchema = z
   })
   .strict();
 
+export type CaptureProgressStage = z.infer<typeof CaptureProgressStageSchema>;
 export type JobProgressMessage = z.infer<typeof JobProgressMessageSchema>;
 
 export function createJobProgressMessage(options: {
   requestId: string;
   jobId: string;
   state: z.infer<typeof JobStateSchema>;
-  stage: z.infer<typeof CaptureProgressStageSchema>;
+  stage: CaptureProgressStage;
   completed: number;
   total: number;
   tileIndex?: number;
