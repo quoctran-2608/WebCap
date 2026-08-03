@@ -1003,13 +1003,13 @@ function ensureRegionSelectionRuntime(state: PagePreparationRuntimeState): void 
       state.region = openRegionSelector({
         jobId: message.payload.jobId,
         onCommit: async (rect) => {
-          state.region = undefined;
+          delete state.region;
           await sendRegionSelectionEvent("REGION_SELECTION_COMMIT", message.payload.jobId, {
             rect,
           });
         },
         onCancel: async (reason) => {
-          state.region = undefined;
+          delete state.region;
           await sendRegionSelectionEvent("REGION_SELECTION_CANCEL", message.payload.jobId, {
             reason,
           });
@@ -1035,7 +1035,7 @@ function ensureRegionSelectionRuntime(state: PagePreparationRuntimeState): void 
 
   state.regionPageHideListener = () => {
     state.region?.dispose();
-    state.region = undefined;
+    delete state.region;
   };
   chrome.runtime.onMessage.addListener(state.regionListener);
   window.addEventListener("pagehide", state.regionPageHideListener, { once: true });

@@ -54,7 +54,7 @@ export interface PersistentJobCoordinatorPort {
   initialize(): Promise<void>;
   create(options: CreatePersistentJobOptions): Promise<CaptureJob>;
   get(jobId: string): Promise<CaptureJob | undefined>;
-  getActiveForTab(tabId: number): Promise<CaptureJob | undefined>;
+  getActiveForTab?(tabId: number): Promise<CaptureJob | undefined>;
   update(
     jobId: string,
     patch: JobTransitionPatch,

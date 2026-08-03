@@ -271,7 +271,7 @@ async function executeJobRequest(
     case "JOB_GET_ACTIVE": {
       return {
         kind: "active",
-        job: (await dependencies.jobs.getActiveForTab(request.payload.tabId)) ?? null,
+        job: (await dependencies.jobs.getActiveForTab?.(request.payload.tabId)) ?? null,
       };
     }
     case "JOB_CANCEL": {
