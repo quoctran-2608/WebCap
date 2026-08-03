@@ -56,6 +56,12 @@ function readyJob(): CaptureJob {
   };
 }
 
+function jobReader(job: CaptureJob): PersistentJobCoordinatorPort {
+  return {
+    get: () => Promise.resolve(structuredClone(job)),
+  } as unknown as PersistentJobCoordinatorPort;
+}
+
 function manifestRepository(): PdfEditManifestRepositoryPort & {
   current: () => PdfEditManifest | undefined;
 } {
@@ -78,10 +84,7 @@ describe("PdfEditorService", () => {
   it("creates and restores a persistent manifest with an explicitly approximate estimate", async () => {
     const job = readyJob();
     const manifests = manifestRepository();
-    const jobs = {
-      get: () => Promise.resolve(structuredClone(job)),
-    } as PersistentJobCoordinatorPort;
-    const service = new PdfEditorService({ jobs, manifests, now: () => now });
+    const service = new PdfEditorService({ jobs: jobReader(job), manifests, now: () => now });
 
     const first = await service.get(job.id);
     const second = await service.get(job.id);
@@ -99,10 +102,7 @@ describe("PdfEditorService", () => {
   it("recomputes pages for settings and persists non-destructive remove/reorder edits", async () => {
     const job = readyJob();
     const manifests = manifestRepository();
-    const jobs = {
-      get: () => Promise.resolve(structuredClone(job)),
-    } as PersistentJobCoordinatorPort;
-    const service = new PdfEditorService({ jobs, manifests, now: () => now });
+    const service = new PdfEditorService({ jobs: jobReader(job), manifests, now: () => now });
     const initial = await service.get(job.id);
 
     const settings = await service.update(job.id, initial.manifest.revision, {
@@ -139,10 +139,7 @@ describe("PdfEditorService", () => {
   it("rejects stale revisions and page identifiers outside the current manifest", async () => {
     const job = readyJob();
     const manifests = manifestRepository();
-    const jobs = {
-      get: () => Promise.resolve(structuredClone(job)),
-    } as PersistentJobCoordinatorPort;
-    const service = new PdfEditorService({ jobs, manifests, now: () => now });
+    const service = new PdfEditorService({ jobs: jobReader(job), manifests, now: () => now });
     const initial = await service.get(job.id);
 
     await service.update(job.id, initial.manifest.revision, {
