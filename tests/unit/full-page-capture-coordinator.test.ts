@@ -5,7 +5,6 @@ import {
   type JobProgressPublisher,
 } from "@background/full-page-capture-coordinator";
 import type {
-  CreatePersistentJobOptions,
   JobCleanupReport,
   PersistentJobCoordinatorPort,
 } from "@background/job-coordinator";
@@ -13,9 +12,9 @@ import { transitionJob, updateJob, type JobTransitionPatch } from "@background/j
 import type { PagePreparationService } from "@background/page-preparation-service";
 import type { CaptureEngine, CaptureEngineContext } from "@capture/capture-engine";
 import type { CaptureJob, CaptureTile, JobState, PageMetrics } from "@shared/contracts/domain";
+import type { StoredTileRecord } from "@shared/contracts/job";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
-import type { StoredTileRecord } from "@shared/contracts/job";
 import type { TileRepositoryPort } from "@storage/tile-repository";
 
 const NOW = "2026-08-03T04:00:00.000Z";
@@ -76,7 +75,7 @@ class MemoryJobCoordinator implements PersistentJobCoordinatorPort {
     return Promise.resolve();
   }
 
-  create(_options: CreatePersistentJobOptions): Promise<CaptureJob> {
+  create(): Promise<CaptureJob> {
     return Promise.resolve(structuredClone(this.job));
   }
 
@@ -179,15 +178,18 @@ class MemoryTiles implements TileRepositoryPort {
   }
 }
 
-function pages(options: { restoreError?: Error } = {}) {
+function pageHarness(options: { restoreError?: Error } = {}) {
+  const prepare = vi.fn(() => Promise.resolve({ preparationId: "job-full" }));
+  const restore = vi.fn(() =>
+    options.restoreError === undefined
+      ? Promise.resolve({ preparationId: "job-full", completed: true })
+      : Promise.reject(options.restoreError),
+  );
   return {
-    prepare: vi.fn(() => Promise.resolve({ preparationId: "job-full" })),
-    restore: vi.fn(() =>
-      options.restoreError === undefined
-        ? Promise.resolve({ preparationId: "job-full", completed: true })
-        : Promise.reject(options.restoreError),
-    ),
-  } as unknown as PagePreparationService;
+    service: { prepare, restore } as unknown as PagePreparationService,
+    prepare,
+    restore,
+  };
 }
 
 function stored(tile: CaptureTile): CaptureTile {
@@ -217,13 +219,13 @@ function successfulEngine(): CaptureEngine {
   };
 }
 
-function setup(engine: CaptureEngine, pageService = pages()) {
+function setup(engine: CaptureEngine, page = pageHarness()) {
   const jobs = new MemoryJobCoordinator();
   const tiles = new MemoryTiles();
   const events: Parameters<JobProgressPublisher["publish"]>[0][] = [];
   const coordinator = new FullPageCaptureCoordinator({
     jobs,
-    pages: pageService,
+    pages: page.service,
     engine,
     tiles,
     progress: {
@@ -233,12 +235,12 @@ function setup(engine: CaptureEngine, pageService = pages()) {
     },
     now: () => new Date(NOW),
   });
-  return { coordinator, jobs, tiles, events, pageService };
+  return { coordinator, jobs, tiles, events, page };
 }
 
 describe("FullPageCaptureCoordinator", () => {
   it("runs prepare, captures and persists each tile, restores, then reaches ready", async () => {
-    const { coordinator, jobs, tiles, events, pageService } = setup(successfulEngine());
+    const { coordinator, jobs, tiles, events, page } = setup(successfulEngine());
 
     await coordinator.start("job-full");
 
@@ -248,8 +250,8 @@ describe("FullPageCaptureCoordinator", () => {
     expect(jobs.job.cleanup).toEqual({ attempted: true, completed: true });
     expect(tiles.records).toHaveLength(2);
     expect(tiles.records.map((record) => record.index)).toEqual([0, 1]);
-    expect(pageService.prepare).toHaveBeenCalledTimes(1);
-    expect(pageService.restore).toHaveBeenCalledTimes(1);
+    expect(page.prepare).toHaveBeenCalledTimes(1);
+    expect(page.restore).toHaveBeenCalledTimes(1);
     expect(events.at(-1)).toMatchObject({ stage: "ready", completed: 2, total: 2 });
   });
 
@@ -275,7 +277,7 @@ describe("FullPageCaptureCoordinator", () => {
         return { metrics, targetRect: metrics.document, tiles: tiles.map(stored) };
       },
     };
-    const { coordinator, jobs, tiles, pageService } = setup(engine);
+    const { coordinator, jobs, tiles, page } = setup(engine);
 
     const running = coordinator.start("job-full");
     await firstStored;
@@ -287,7 +289,7 @@ describe("FullPageCaptureCoordinator", () => {
     expect(jobs.job.error?.code).toBe("E_CANCELLED");
     expect(jobs.job.cleanup).toEqual({ attempted: true, completed: true });
     expect(tiles.records).toHaveLength(1);
-    expect(pageService.restore).toHaveBeenCalledTimes(1);
+    expect(page.restore).toHaveBeenCalledTimes(1);
   });
 
   it("records debugger detach as a retryable fallback-eligible failure", async () => {
@@ -307,7 +309,7 @@ describe("FullPageCaptureCoordinator", () => {
           ),
         ),
     };
-    const { coordinator, jobs, pageService } = setup(engine);
+    const { coordinator, jobs, page } = setup(engine);
 
     await coordinator.start("job-full");
 
@@ -318,7 +320,7 @@ describe("FullPageCaptureCoordinator", () => {
       fallbackAllowed: true,
     });
     expect(jobs.job.cleanup).toEqual({ attempted: true, completed: true });
-    expect(pageService.restore).toHaveBeenCalledTimes(1);
+    expect(page.restore).toHaveBeenCalledTimes(1);
   });
 
   it("preserves the capture error while recording a partial restore", async () => {
@@ -346,7 +348,7 @@ describe("FullPageCaptureCoordinator", () => {
       kind: "cdp",
       capture: () => Promise.reject(captureError),
     };
-    const { coordinator, jobs } = setup(engine, pages({ restoreError }));
+    const { coordinator, jobs } = setup(engine, pageHarness({ restoreError }));
 
     await coordinator.start("job-full");
 
