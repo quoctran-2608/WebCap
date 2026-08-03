@@ -162,3 +162,152 @@ await replaceInFile(
     report.residualMutations += 1;
   }`,
 );
+
+await replaceInFile(
+  "src/content/entry.ts",
+  `interface CssPropertyMutation {
+  element: HTMLElement;
+  property: string;
+  beforeValue: string;
+  beforePriority: string;
+  appliedValue: string;
+  appliedPriority: string;
+}`,
+  `interface CssPropertyMutation {
+  element: HTMLElement;
+  property: string;
+  beforeValue: string;
+  beforePriority: string;
+  appliedValue: string;
+  appliedPriority: string;
+  beforeStyleAttribute: string | null;
+  appliedStyleAttribute: string | null;
+}`,
+);
+
+await replaceInFile(
+  "src/content/entry.ts",
+  `function applyCssProperty(
+  element: HTMLElement,
+  property: string,
+  value: string,
+  priority: string,
+): CssPropertyMutation {
+  const beforeValue = element.style.getPropertyValue(property);
+  const beforePriority = element.style.getPropertyPriority(property);
+  element.style.setProperty(property, value, priority);
+  return {
+    element,
+    property,
+    beforeValue,
+    beforePriority,
+    appliedValue: element.style.getPropertyValue(property),
+    appliedPriority: element.style.getPropertyPriority(property),
+  };
+}`,
+  `function applyCssProperty(
+  element: HTMLElement,
+  property: string,
+  value: string,
+  priority: string,
+): CssPropertyMutation {
+  const beforeValue = element.style.getPropertyValue(property);
+  const beforePriority = element.style.getPropertyPriority(property);
+  const beforeStyleAttribute = element.getAttribute("style");
+  element.style.setProperty(property, value, priority);
+  return {
+    element,
+    property,
+    beforeValue,
+    beforePriority,
+    appliedValue: element.style.getPropertyValue(property),
+    appliedPriority: element.style.getPropertyPriority(property),
+    beforeStyleAttribute,
+    appliedStyleAttribute: element.getAttribute("style"),
+  };
+}`,
+);
+
+await replaceInFile(
+  "src/content/entry.ts",
+  `      const currentValue = mutation.element.style.getPropertyValue(mutation.property);
+      const currentPriority = mutation.element.style.getPropertyPriority(mutation.property);
+      if (
+        shouldRestoreCssProperty(
+          currentValue,
+          currentPriority,
+          mutation.appliedValue,
+          mutation.appliedPriority,
+        )
+      ) {
+        if (mutation.beforeValue.length === 0) {
+          mutation.element.style.removeProperty(mutation.property);
+        } else {
+          mutation.element.style.setProperty(
+            mutation.property,
+            mutation.beforeValue,
+            mutation.beforePriority,
+          );
+        }
+        report.restoredProperties += 1;
+      } else {
+        report.skippedChangedProperties += 1;
+      }`,
+  `      const currentStyleAttribute = mutation.element.getAttribute("style");
+      if (currentStyleAttribute === mutation.appliedStyleAttribute) {
+        if (mutation.beforeStyleAttribute === null) {
+          mutation.element.removeAttribute("style");
+        } else {
+          mutation.element.setAttribute("style", mutation.beforeStyleAttribute);
+        }
+        report.restoredProperties += 1;
+      } else {
+        report.skippedChangedProperties += 1;
+      }`,
+);
+
+await replaceInFile(
+  "src/content/entry.ts",
+  `async function runLazyPreScroll(
+  active: ActivePreparation,
+  options: PagePreparationOptions,
+): Promise<{`,
+  `function scrollPreparedPage(active: ActivePreparation, left: number, top: number): void {
+  window.scrollTo({ left, top, behavior: "auto" });
+  active.snapshot.preparedScrollX = window.scrollX;
+  active.snapshot.preparedScrollY = window.scrollY;
+}
+
+async function runLazyPreScroll(
+  active: ActivePreparation,
+  options: PagePreparationOptions,
+): Promise<{`,
+);
+
+await replaceInFile(
+  "src/content/entry.ts",
+  `  window.scrollTo({ left: targetStartX, top: targetStartY, behavior: "auto" });`,
+  `  scrollPreparedPage(active, targetStartX, targetStartY);`,
+);
+
+await replaceInFile(
+  "src/content/entry.ts",
+  `        window.scrollTo({ left: targetStartX, top: nextY, behavior: "auto" });`,
+  `        scrollPreparedPage(active, targetStartX, nextY);`,
+);
+
+await replaceInFile(
+  "src/content/entry.ts",
+  `  throwIfCancelled(active);
+  window.scrollTo({ left: targetStartX, top: targetStartY, behavior: "auto" });
+  const finalSettle = await waitForLayoutSettle(active, settleMs, Math.max(1_000, settleMs * 8), 2);
+  stableSamples += finalSettle.stableSamples;
+  mutationCount += finalSettle.mutationCount;
+  active.snapshot.preparedScrollX = window.scrollX;
+  active.snapshot.preparedScrollY = window.scrollY;`,
+  `  throwIfCancelled(active);
+  scrollPreparedPage(active, targetStartX, targetStartY);
+  const finalSettle = await waitForLayoutSettle(active, settleMs, Math.max(1_000, settleMs * 8), 2);
+  stableSamples += finalSettle.stableSamples;
+  mutationCount += finalSettle.mutationCount;`,
+);
