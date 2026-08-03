@@ -392,7 +392,8 @@ export class PdfExporter {
       if (bytes.byteLength <= 0) {
         throw exportError("The generated PDF artifact is empty.", "EmptyPdfArtifact");
       }
-      const blob = new Blob([bytes], { type: "application/pdf" });
+      const ownedBytes = Uint8Array.from(bytes);
+      const blob = new Blob([ownedBytes.buffer], { type: "application/pdf" });
       const record: ArtifactRecord = {
         artifactId: payload.outputArtifactId,
         sourceArtifactId: payload.jobId,
