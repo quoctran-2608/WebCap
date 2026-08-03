@@ -42,43 +42,11 @@ jobs:
       - name: Format S10 branch
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/s10-scroll-fallback-fixed-policy'
         run: |
-          pnpm exec prettier --write \
-            src/background/full-page-capture-coordinator.ts \
-            src/background/persistent-job-router.ts \
-            src/background/scroll-capture-page-adapter.ts \
-            src/capture/capture-engine.ts \
-            src/capture/overlap-resolver.ts \
-            src/capture/scroll-capture-engine.ts \
-            src/shared/contracts/domain.ts \
-            src/shared/contracts/job-progress.ts \
-            tests/e2e/full-page-capture.spec.ts \
-            tests/e2e/scroll-fallback.spec.ts \
-            tests/fixtures/fixed-header-footer.html \
-            tests/fixtures/sticky-header.html \
-            tests/fixtures/wide-table.html \
-            tests/unit/full-page-fallback-coordinator.test.ts \
-            tests/unit/overlap-resolver.test.ts \
-            tests/unit/scroll-capture-engine.test.ts
+          pnpm format
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add \
-              src/background/full-page-capture-coordinator.ts \
-              src/background/persistent-job-router.ts \
-              src/background/scroll-capture-page-adapter.ts \
-              src/capture/capture-engine.ts \
-              src/capture/overlap-resolver.ts \
-              src/capture/scroll-capture-engine.ts \
-              src/shared/contracts/domain.ts \
-              src/shared/contracts/job-progress.ts \
-              tests/e2e/full-page-capture.spec.ts \
-              tests/e2e/scroll-fallback.spec.ts \
-              tests/fixtures/fixed-header-footer.html \
-              tests/fixtures/sticky-header.html \
-              tests/fixtures/wide-table.html \
-              tests/unit/full-page-fallback-coordinator.test.ts \
-              tests/unit/overlap-resolver.test.ts \
-              tests/unit/scroll-capture-engine.test.ts
+            git add -A
             git commit -m "Format S10 scroll fallback changes"
             git push origin HEAD:${GITHUB_HEAD_REF}
           fi
