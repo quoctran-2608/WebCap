@@ -26,6 +26,7 @@
     "paths": {
       "@background/*": ["./src/background/*"],
       "@capture/*": ["./src/capture/*"],
+      "@content/*": ["./src/content/*"],
       "@popup/*": ["./src/popup/*"],
       "@offscreen/*": ["./src/offscreen/*"],
       "@shared/*": ["./src/shared/*"],

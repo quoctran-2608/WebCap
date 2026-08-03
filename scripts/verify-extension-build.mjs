@@ -20,6 +20,7 @@ const requiredFiles = [
   "popup.html",
   "offscreen.html",
   "service-worker.js",
+  "content-script.js",
   "icons/icon-16.png",
   "icons/icon-32.png",
   "icons/icon-48.png",
@@ -70,6 +71,17 @@ if (!offscreenHtml.includes('type="module"')) {
 
 if (/https?:\/\//u.test(offscreenHtml)) {
   throw new Error("offscreen.html contains a remote URL.");
+}
+
+const contentScript = await readFile(resolve(distDirectory, "content-script.js"), "utf8");
+if (/\bimport\s/u.test(contentScript) || /\brequire\s*\(/u.test(contentScript)) {
+  throw new Error("content-script.js is not a self-contained classic script.");
+}
+if (/https?:\/\//u.test(contentScript)) {
+  throw new Error("content-script.js contains a remote URL.");
+}
+if (!contentScript.includes("PAGE_PREPARATION_PREPARE")) {
+  throw new Error("content-script.js does not contain the page preparation protocol.");
 }
 
 stdout.write("Verified Manifest V3 unpacked extension output in dist/.\n");

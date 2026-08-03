@@ -11,7 +11,7 @@
   "packageManager": "pnpm@11.15.1",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/verify-extension-build.mjs",
+    "build": "vite build && node scripts/build-content-script.mjs && node scripts/verify-extension-build.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
