@@ -420,9 +420,9 @@ pnpm build
 
 **Commit gợi ý:** `Implement CDP tiled full-page capture`.
 
-**Hoàn thành:** 2026-08-03 · PR #13 · final validation pending.
+**Hoàn thành:** 2026-08-03 · PR #13 · validation code head `547887d` · CI run `30787032374`.
 
-**Ghi chú kỹ thuật:** `CdpCaptureEngine` dùng một debugger session protocol 1.3 cho toàn bộ capture loop, đo và plan theo CSS coordinates, chụp `Page.captureScreenshot` ngoài viewport, chuyển base64 thành PNG Blob rồi persist từng tile trước khi tăng progress. Persistent coordinator nối prepare → measure → plan → capture → restore → ready, có CAS progress, bounded retry, cancel token và cancel trực tiếp content preparation, giữ primary error khi cleanup cũng lỗi. Popup mở full-page mode với progress/cancel/retry/fallback prompt. CI đã xác nhận 159 unit tests và 8 Playwright E2E gồm multi-tile Blob integrity, exact restore, debugger release, cancel và occupied-debugger path cùng toàn bộ regression S08/visible.
+**Ghi chú kỹ thuật:** `CdpCaptureEngine` dùng một debugger session protocol 1.3 cho toàn bộ capture loop, đo và plan theo CSS coordinates, chụp `Page.captureScreenshot` ngoài viewport, chuyển base64 thành PNG Blob rồi persist từng tile trước khi tăng progress. Persistent coordinator nối prepare → measure → plan → capture → restore → ready, có CAS progress, bounded retry, cancel token và cancel trực tiếp content preparation, giữ primary error khi cleanup cũng lỗi. Popup mở full-page mode với progress/cancel/retry/fallback prompt. CI sạch đã xác nhận 160 unit tests và 8 Playwright E2E gồm multi-tile Blob integrity, exact restore, debugger release, cancel và occupied-debugger path cùng toàn bộ regression S08/visible.
 
 ---
 
@@ -811,7 +811,7 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S06 | DONE | 2026-08-02 | PR #10 / 58fbc61 | format, lint, typecheck, 110 unit, build, 2 Playwright E2E | State transitions, CAS repository, per-tab lease, restart recovery, persistent dedupe và expiry cleanup đã được xác thực. |
 | S07 | DONE | 2026-08-03 | PR #11 / fb03138 / squash 15b4ec6 | format, lint, typecheck, 136 unit, build, 2 Playwright E2E | Debugger ownership/timeouts/detach, CSS metrics normalization và deterministic 2D tile planning 10k/30k/100k đã được xác thực. |
 | S08 | DONE | 2026-08-03 | PR #12 / b1f07eb | format, lint, typecheck, 150 unit, build, 5 Playwright E2E | Content preparation protocol, bounded lazy/layout settle, exact compare-before-restore và success/error/cancel cleanup đã được xác thực. |
-| S09 | DONE | 2026-08-03 | PR #13 / final validation pending | format, lint, typecheck, 159 unit, build, 8 Playwright E2E | CDP multi-tile capture, immediate IndexedDB tile persistence, progress/cancel, exact restore, debugger release và fallback prompt đã được xác thực. |
+| S09 | DONE | 2026-08-03 | PR #13 / 547887d / CI 30787032374 | format, lint, typecheck, 160 unit, build, 8 Playwright E2E | CDP multi-tile capture, immediate IndexedDB tile persistence, progress/cancel, exact restore, debugger release và fallback prompt đã được xác thực. |
 | S10 | NEXT | — | — | — | Sẵn sàng triển khai scroll fallback, fixed policy và long-page validation. |
 | S11 | READY | — | — | — | — |
 | S12 | READY | — | — | — | — |
