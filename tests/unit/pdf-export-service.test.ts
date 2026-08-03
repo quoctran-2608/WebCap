@@ -75,12 +75,11 @@ function storedRecord(): StoredTileRecord {
   return {
     schemaVersion: 1,
     jobId: tile.jobId,
-    tileId: tile.id,
     index: tile.index,
     tile,
     blob: new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }),
     createdAt: NOW.toISOString(),
-    expiresAt: "2026-08-03T11:30:00.000Z",
+    updatedAt: "2026-08-03T11:00:00.000Z",
   };
 }
 
