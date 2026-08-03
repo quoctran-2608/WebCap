@@ -1,0 +1,51 @@
+name: Finalize S07 documentation
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out S07 branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Finalize S07 documentation
+        run: |
+          node scripts/finalize-s07.mjs
+          pnpm format
+          pnpm format:check
+
+      - name: Commit finalized documentation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PLAN.md README.md CHANGELOG.md docs/manual-testing.md scripts/finalize-s07.mjs
+          git diff --cached --check
+          git commit -m "Finalize S07 roadmap"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
