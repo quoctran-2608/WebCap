@@ -42,12 +42,16 @@ jobs:
       - name: Format S10 branch
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/s10-scroll-fallback-fixed-policy'
         run: |
+          if [ -f scripts/fix-s10-lint.mjs ]; then
+            node scripts/fix-s10-lint.mjs
+            rm scripts/fix-s10-lint.mjs
+          fi
           pnpm format
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add -A
-            git commit -m "Format S10 scroll fallback changes"
+            git commit -m "Fix and format S10 fallback tests"
             git push origin HEAD:${GITHUB_HEAD_REF}
           fi
 
