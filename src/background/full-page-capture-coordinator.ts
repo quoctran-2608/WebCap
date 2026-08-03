@@ -194,6 +194,9 @@ export class FullPageCaptureCoordinator {
     }
     run.cancellation.cancel(reason);
     const job = await this.requireJob(jobId);
+    if (job.state === "ready" || job.state === "failed") {
+      return this.jobs.cancel(jobId, reason);
+    }
     if (job.state === "preparing") {
       try {
         await this.pages.cancel(job.tabId, job.id);
@@ -280,12 +283,21 @@ export class FullPageCaptureCoordinator {
       }
     }
 
+    if (operationError === undefined && restoreError === undefined) {
+      try {
+        cancellation.throwIfCancelled("cleanup");
+      } catch (error) {
+        operationError = error;
+      }
+    }
+
     if (operationError !== undefined || restoreError !== undefined) {
       await this.settleFailure(job.id, cancellation, operationError, restoreError);
       return;
     }
 
     try {
+      cancellation.throwIfCancelled("cleanup");
       const cleanup = cleanupState(undefined);
       job = await this.requireJob(job.id);
       if (job.state !== "capturing") {
@@ -303,7 +315,9 @@ export class FullPageCaptureCoordinator {
         );
       }
       job = await this.jobs.transition(job.id, "processing", { cleanup });
+      cancellation.throwIfCancelled("cleanup");
       job = await this.jobs.transition(job.id, "ready", { cleanup });
+      cancellation.throwIfCancelled("cleanup");
       await this.publish({
         jobId: job.id,
         state: job.state,
