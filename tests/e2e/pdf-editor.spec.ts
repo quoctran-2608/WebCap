@@ -110,6 +110,7 @@ test("@smoke edits, restores, exports, and downloads PDF without recapture", asy
   });
   await popup.getByRole("button", { name: "Mở trình biên tập PDF" }).click();
   const editor = await editorPromise;
+  await editor.bringToFront();
   await editor.waitForLoadState("domcontentloaded");
   await expect(editor.getByRole("heading", { name: "Trình biên tập PDF" })).toBeVisible();
 
@@ -147,6 +148,7 @@ test("@smoke edits, restores, exports, and downloads PDF without recapture", asy
   const editedFirstSource = await cards.first().locator("span").textContent();
 
   await editor.reload();
+  await editor.bringToFront();
   await expect(editor.getByRole("heading", { name: "Trình biên tập PDF" })).toBeVisible();
   await expect(editor.locator(".page-card")).toHaveCount(editedCount);
   await expect(editor.locator(".page-card").first().locator("span")).toHaveText(
