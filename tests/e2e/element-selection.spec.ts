@@ -257,6 +257,10 @@ test("@smoke selects the deepest target inside an open shadow root", async ({
   const root = targetPage.locator("[data-webcap-element-selector]");
   const box = await shadowButton.boundingBox();
   if (box === null) throw new Error("Open shadow target is not visible.");
+  const documentOffset = await targetPage.evaluate(() => ({
+    x: window.scrollX,
+    y: window.scrollY,
+  }));
   await targetPage.mouse.move(box.x + 25, box.y + 25);
   await targetPage.mouse.click(box.x + 25, box.y + 25);
   await expect(root.locator("[data-label]")).toContainText("button#shadow-action.shadow-button");
@@ -269,8 +273,8 @@ test("@smoke selects the deepest target inside an open shadow root", async ({
     classNames: ["shadow-button"],
   });
   expect(state.job?.targetRect).toMatchObject({
-    x: box.x,
-    y: box.y,
+    x: box.x + documentOffset.x,
+    y: box.y + documentOffset.y,
     width: box.width,
     height: box.height,
   });
