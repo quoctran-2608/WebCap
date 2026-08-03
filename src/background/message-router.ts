@@ -111,7 +111,8 @@ function isPersistentJobMessageType(value: unknown): boolean {
     type === "JOB_CREATE" ||
     type === "JOB_GET" ||
     type === "JOB_GET_ACTIVE" ||
-    type === "JOB_CANCEL"
+    type === "JOB_CANCEL" ||
+    type === "PDF_EXPORT_START"
   );
 }
 

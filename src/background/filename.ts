@@ -1,4 +1,4 @@
-import type { ImageFormat } from "@shared/contracts/domain";
+import type { OutputFormat } from "@shared/contracts/domain";
 
 const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F-\u009F]/gu;
 const ILLEGAL_FILENAME_CHARACTERS = /[<>:"/\\|?*]/gu;
@@ -16,7 +16,7 @@ function timestamp(date: Date): string {
   )}-${pad(date.getUTCMinutes())}-${pad(date.getUTCSeconds())}`;
 }
 
-function extensionFor(format: ImageFormat): string {
+function extensionFor(format: OutputFormat): string {
   return format === "jpeg" ? "jpg" : format;
 }
 
@@ -35,7 +35,7 @@ export interface BuildCaptureFilenameOptions {
   title?: string;
   domain?: string;
   createdAt: Date;
-  format: ImageFormat;
+  format: OutputFormat;
 }
 
 export function buildCaptureFilename(options: BuildCaptureFilenameOptions): string {

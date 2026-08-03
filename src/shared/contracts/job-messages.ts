@@ -67,6 +67,16 @@ export const JobCancelMessageSchema = EnvelopeBaseSchema.extend({
     .strict(),
 }).strict();
 
+export const PdfExportStartMessageSchema = EnvelopeBaseSchema.extend({
+  type: z.literal("PDF_EXPORT_START"),
+  payload: z
+    .object({
+      jobId: IdentifierSchema,
+      settings: CaptureSettingsSchema.shape.pdf.optional(),
+    })
+    .strict(),
+}).strict();
+
 export const JobResponseMessageSchema = z
   .object({
     protocolVersion: z.literal(PROTOCOL_VERSION),
@@ -96,12 +106,14 @@ export const PersistentJobRequestSchema = z.discriminatedUnion("type", [
   JobGetMessageSchema,
   JobGetActiveMessageSchema,
   JobCancelMessageSchema,
+  PdfExportStartMessageSchema,
 ]);
 
 export type JobCreateMessage = z.infer<typeof JobCreateMessageSchema>;
 export type JobGetMessage = z.infer<typeof JobGetMessageSchema>;
 export type JobGetActiveMessage = z.infer<typeof JobGetActiveMessageSchema>;
 export type JobCancelMessage = z.infer<typeof JobCancelMessageSchema>;
+export type PdfExportStartMessage = z.infer<typeof PdfExportStartMessageSchema>;
 export type JobResponseMessage = z.infer<typeof JobResponseMessageSchema>;
 export type JobActiveResponseMessage = z.infer<typeof JobActiveResponseMessageSchema>;
 export type PersistentJobRequest = z.infer<typeof PersistentJobRequestSchema>;
@@ -181,6 +193,26 @@ export function createJobCancelMessage(
     payload: {
       jobId: options.jobId,
       ...(options.reason === undefined ? {} : { reason: options.reason }),
+    },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createPdfExportStartMessage(
+  options: JobMessageCreationOptions & {
+    jobId: string;
+    settings?: CaptureSettings["pdf"];
+  },
+): PdfExportStartMessage {
+  return PdfExportStartMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "popup",
+    target: "background",
+    type: "PDF_EXPORT_START",
+    payload: {
+      jobId: options.jobId,
+      ...(options.settings === undefined ? {} : { settings: options.settings }),
     },
     sentAt: options.sentAt,
   });

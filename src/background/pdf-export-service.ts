@@ -81,10 +81,7 @@ export class PdfExportService {
     this.artifactTtlMs = options.artifactTtlMs ?? DEFAULT_ARTIFACT_TTL_MS;
   }
 
-  async start(
-    jobId: string,
-    settings?: CaptureSettings["pdf"],
-  ): Promise<CaptureJob> {
+  async start(jobId: string, settings?: CaptureSettings["pdf"]): Promise<CaptureJob> {
     const current = await this.jobs.get(jobId);
     if (current === undefined) {
       throw exportSourceError(jobId, "PdfExportJobMissing");

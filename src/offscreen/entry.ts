@@ -1,6 +1,8 @@
 import {
   createOffscreenErrorMessage,
   createOffscreenImageProcessedMessage,
+  createOffscreenPdfExportedMessage,
+  createOffscreenPdfExportProgressMessage,
   createOffscreenObjectUrlCreatedMessage,
   createOffscreenObjectUrlRevokedMessage,
   createOffscreenReadyMessage,
@@ -9,19 +11,34 @@ import {
 } from "@shared/contracts/offscreen";
 import { normalizeError } from "@shared/errors/normalize-error";
 import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
+import { IndexedDbTileRepository } from "@storage/tile-repository";
 
 import { ImageProcessor } from "./image-processor";
 import { ObjectUrlRegistry } from "./object-url-registry";
+import { PdfExporter, type PdfExportProgress } from "./pdf-exporter";
 
 export interface OffscreenRouterDependencies {
   processor: ImageProcessor;
+  pdfExporter: PdfExporter;
+  reportPdfProgress: (progress: PdfExportProgress) => Promise<void>;
   objectUrls: ObjectUrlRegistry;
   now: () => Date;
 }
 
 const artifacts = new IndexedDbArtifactRepository();
+const tiles = new IndexedDbTileRepository();
 const defaultDependencies: OffscreenRouterDependencies = {
   processor: new ImageProcessor({ artifacts }),
+  pdfExporter: new PdfExporter({ artifacts, tiles }),
+  reportPdfProgress: async (progress) => {
+    await chrome.runtime.sendMessage(
+      createOffscreenPdfExportProgressMessage({
+        requestId: crypto.randomUUID(),
+        sentAt: new Date().toISOString(),
+        ...progress,
+      }),
+    );
+  },
   objectUrls: new ObjectUrlRegistry({ artifacts }),
   now: () => new Date(),
 };
@@ -73,6 +90,17 @@ export async function routeOffscreenMessage(
           artifact: await dependencies.processor.process(parsed.value.payload),
           sentAt: dependencies.now().toISOString(),
         });
+      case "OFFSCREEN_EXPORT_PDF": {
+        const result = await dependencies.pdfExporter.export(
+          parsed.value.payload,
+          dependencies.reportPdfProgress,
+        );
+        return createOffscreenPdfExportedMessage({
+          requestId: parsed.value.requestId,
+          artifact: result.artifact,
+          sentAt: dependencies.now().toISOString(),
+        });
+      }
       case "OFFSCREEN_CREATE_OBJECT_URL":
         return createOffscreenObjectUrlCreatedMessage({
           requestId: parsed.value.requestId,
@@ -91,7 +119,7 @@ export async function routeOffscreenMessage(
       requestId: parsed.value.requestId,
       error: normalizeError(error, {
         code: "E_EXPORT_FAILED",
-        stage: "process",
+        stage: parsed.value.type === "OFFSCREEN_EXPORT_PDF" ? "export" : "process",
         userMessageKey: "errors.exportFailed",
         retryable: true,
         fallbackAllowed: false,

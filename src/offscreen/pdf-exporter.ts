@@ -207,7 +207,11 @@ function positiveScale(value: number, axis: "x" | "y"): number {
   return value;
 }
 
-function roundRange(start: number, end: number, maximum: number): { start: number; length: number } {
+function roundRange(
+  start: number,
+  end: number,
+  maximum: number,
+): { start: number; length: number } {
   const roundedStart = Math.max(0, Math.min(maximum, Math.round(start)));
   const roundedEnd = Math.max(roundedStart, Math.min(maximum, Math.round(end)));
   return { start: roundedStart, length: roundedEnd - roundedStart };
@@ -279,13 +283,18 @@ export class PdfExporter {
         try {
           const context = canvas.getContext();
           if (context === null) {
-            throw exportError("WebCap could not create a PDF page canvas context.", "PdfCanvasUnavailable");
+            throw exportError(
+              "WebCap could not create a PDF page canvas context.",
+              "PdfCanvasUnavailable",
+            );
           }
           context.fillWhite(canvas.width, canvas.height);
           const intersections = planPdfTileIntersections(page.sourceRectCss, payload.tiles);
           for (const intersection of intersections) {
             const record = recordByIndex.get(intersection.tileIndex);
-            const tile = payload.tiles.find((candidate) => candidate.index === intersection.tileIndex);
+            const tile = payload.tiles.find(
+              (candidate) => candidate.index === intersection.tileIndex,
+            );
             if (record?.blob === undefined || tile === undefined) {
               throw storageReadError("A PDF page tile disappeared during export.", {
                 jobId: payload.jobId.slice(0, 24),
@@ -312,14 +321,16 @@ export class PdfExporter {
               );
               const globalDestinationX = roundRange(
                 (intersection.logicalRectCss.x - payload.targetRect.x) * renderScaleX,
-                (intersection.logicalRectCss.x + intersection.logicalRectCss.width -
+                (intersection.logicalRectCss.x +
+                  intersection.logicalRectCss.width -
                   payload.targetRect.x) *
                   renderScaleX,
                 canvasWidth,
               );
               const globalDestinationY = roundRange(
                 (intersection.logicalRectCss.y - payload.targetRect.y) * renderScaleY,
-                (intersection.logicalRectCss.y + intersection.logicalRectCss.height -
+                (intersection.logicalRectCss.y +
+                  intersection.logicalRectCss.height -
                   payload.targetRect.y) *
                   renderScaleY,
                 totalPixelHeight,
@@ -333,7 +344,10 @@ export class PdfExporter {
                 destinationY < 0 ||
                 destinationY + globalDestinationY.length > canvas.height
               ) {
-                throw exportError("PDF tile crop produced an empty or out-of-page rectangle.", "PdfTileCropInvalid");
+                throw exportError(
+                  "PDF tile crop produced an empty or out-of-page rectangle.",
+                  "PdfTileCropInvalid",
+                );
               }
               context.drawImage(
                 decoded,

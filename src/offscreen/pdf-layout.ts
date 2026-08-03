@@ -77,7 +77,8 @@ function orient(
   heightPt: number,
   orientation: CaptureSettings["pdf"]["orientation"],
 ): { widthPt: number; heightPt: number } {
-  const portrait = widthPt <= heightPt ? { widthPt, heightPt } : { widthPt: heightPt, heightPt: widthPt };
+  const portrait =
+    widthPt <= heightPt ? { widthPt, heightPt } : { widthPt: heightPt, heightPt: widthPt };
   return orientation === "portrait"
     ? portrait
     : { widthPt: portrait.heightPt, heightPt: portrait.widthPt };
@@ -201,9 +202,7 @@ export function createRunningPixelRanges(
     const heightCss = positive(pageHeightsCss[index] ?? 0, "PDF page source height");
     const isLast = index === pageHeightsCss.length - 1;
     const exactLength = heightCss * scale + residual;
-    const roundedLength = isLast
-      ? targetTotal - start
-      : Math.max(1, Math.round(exactLength));
+    const roundedLength = isLast ? targetTotal - start : Math.max(1, Math.round(exactLength));
     const end = start + roundedLength;
     residual = exactLength - roundedLength;
     ranges.push({ index, start, end, length: roundedLength, residual });

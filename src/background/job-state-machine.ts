@@ -32,6 +32,8 @@ export type JobTransitionPatch = Partial<
     | "completedTiles"
     | "totalTiles"
     | "cleanup"
+    | "exportProgress"
+    | "outputArtifactId"
     | "error"
     | "expiresAt"
   >
@@ -105,6 +107,18 @@ export function validateJobInvariants(
     tileIndexes.add(tile.index);
   }
 
+  if (
+    job.exportProgress !== undefined &&
+    job.exportProgress.completedPages > job.exportProgress.totalPages
+  ) {
+    return err(
+      stateError("Completed PDF pages cannot exceed total pages.", "PdfProgressOverflow", {
+        completedPages: job.exportProgress.completedPages,
+        totalPages: job.exportProgress.totalPages,
+      }),
+    );
+  }
+
   if (job.cleanup.completed && !job.cleanup.attempted) {
     return err(
       stateError("Completed cleanup must be marked as attempted.", "CleanupNotAttempted", {
@@ -138,11 +152,19 @@ export function validateJobInvariants(
     }
   }
 
-  if (job.state === "exporting" && context.sourceArtifactExists !== true) {
+  if (
+    job.state === "exporting" &&
+    (context.sourceArtifactExists !== true || job.exportProgress === undefined)
+  ) {
     return err(
-      stateError("Exporting requires an existing source artifact.", "SourceArtifactMissing", {
-        sourceArtifactExists: false,
-      }),
+      stateError(
+        "Exporting requires an existing source and initialized PDF progress.",
+        "ExportSourceMissing",
+        {
+          sourceArtifactExists: context.sourceArtifactExists === true,
+          hasExportProgress: job.exportProgress !== undefined,
+        },
+      ),
     );
   }
 

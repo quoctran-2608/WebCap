@@ -10,6 +10,8 @@ import { DebuggerClient } from "@background/debugger-client";
 import { FullPageCaptureCoordinator } from "@background/full-page-capture-coordinator";
 import { createChromePagePreparationAdapter } from "@background/page-preparation-adapter";
 import { PagePreparationService } from "@background/page-preparation-service";
+import { OffscreenService } from "@background/offscreen-service";
+import { PdfExportService } from "@background/pdf-export-service";
 import { createChromeScrollCapturePageAdapter } from "@background/scroll-capture-page-adapter";
 import {
   RegionSelectionService,
@@ -21,6 +23,11 @@ import { ScrollCaptureEngine } from "@capture/scroll-capture-engine";
 import { DEDUPE_RECORD_SCHEMA_VERSION, DEDUPE_TTL_MS } from "@shared/constants";
 import type { CaptureJob } from "@shared/contracts/domain";
 import type { StoredDedupeRecord } from "@shared/contracts/job";
+import {
+  createOffscreenPdfExportProgressAckMessage,
+  isOffscreenPdfExportProgressMessage,
+  type OffscreenPdfExportProgressAckMessage,
+} from "@shared/contracts/offscreen";
 import {
   JobActiveResponseMessageSchema,
   JobResponseMessageSchema,
@@ -63,10 +70,20 @@ export type PersistentJobRouterResponse =
 
 export type RegionSelectionRouterResponse = RegionSelectionEventAckMessage | ErrorResponseMessage;
 export type ElementSelectionRouterResponse = ElementSelectionEventAckMessage | ErrorResponseMessage;
+export type PdfProgressRouterResponse = OffscreenPdfExportProgressAckMessage;
 
 export interface FullPageCapturePort {
   start(jobId: string): Promise<void>;
   cancel(jobId: string, reason?: string): Promise<CaptureJob>;
+}
+
+export interface PdfExportPort {
+  start(jobId: string, settings?: CaptureJob["settings"]["pdf"]): Promise<CaptureJob>;
+  handleProgress(progress: {
+    jobId: string;
+    completedPages: number;
+    totalPages: number;
+  }): Promise<CaptureJob | undefined>;
 }
 
 export interface PersistentJobRouterDependencies {
@@ -76,6 +93,7 @@ export interface PersistentJobRouterDependencies {
   captures?: FullPageCapturePort;
   regions?: RegionSelectionPort;
   elements?: ElementSelectionPort & ElementTargetValidationPort;
+  pdfExports?: PdfExportPort;
 }
 
 let sharedDependencies: PersistentJobRouterDependencies | undefined;
@@ -141,8 +159,21 @@ function defaultDependencies(): PersistentJobRouterDependencies {
     targetValidator: elements,
   });
   const regions = new RegionSelectionService(createChromeRegionSelectionBrowserAdapter());
+  const pdfExports = new PdfExportService({
+    jobs,
+    tiles,
+    offscreen: new OffscreenService(),
+  });
   const dedupe = new IndexedDbDedupeRepository();
-  sharedDependencies = { jobs, captures, regions, elements, dedupe, now: () => new Date() };
+  sharedDependencies = {
+    jobs,
+    captures,
+    regions,
+    elements,
+    pdfExports,
+    dedupe,
+    now: () => new Date(),
+  };
   const nowIso = new Date().toISOString();
   void Promise.allSettled([jobs.initialize(), dedupe.deleteExpired(nowIso)]);
   return sharedDependencies;
@@ -165,7 +196,8 @@ export function isPersistentJobMessageType(value: unknown): boolean {
     type === "JOB_CREATE" ||
     type === "JOB_GET" ||
     type === "JOB_GET_ACTIVE" ||
-    type === "JOB_CANCEL"
+    type === "JOB_CANCEL" ||
+    type === "PDF_EXPORT_START"
   );
 }
 
@@ -300,6 +332,25 @@ async function executeJobRequest(
         job: (await dependencies.jobs.getActiveForTab?.(request.payload.tabId)) ?? null,
       };
     }
+    case "PDF_EXPORT_START": {
+      if (dependencies.pdfExports === undefined) {
+        throw createWebCapRuntimeError(
+          createWebCapError({
+            code: "E_OFFSCREEN_UNAVAILABLE",
+            stage: "export",
+            message: "The PDF export coordinator is unavailable.",
+            userMessageKey: "errors.offscreenUnavailable",
+            retryable: true,
+            fallbackAllowed: false,
+            causeCode: "PdfExportCoordinatorMissing",
+          }),
+        );
+      }
+      return {
+        kind: "job",
+        job: await dependencies.pdfExports.start(request.payload.jobId, request.payload.settings),
+      };
+    }
     case "JOB_CANCEL": {
       const job = await dependencies.jobs.get(request.payload.jobId);
       if (job === undefined) {
@@ -383,7 +434,9 @@ export async function routePersistentJobMessage(
       sentAt: dependencies.now().toISOString(),
     });
     const jobId =
-      parsed.value.type === "JOB_GET" || parsed.value.type === "JOB_CANCEL"
+      parsed.value.type === "JOB_GET" ||
+      parsed.value.type === "JOB_CANCEL" ||
+      parsed.value.type === "PDF_EXPORT_START"
         ? parsed.value.payload.jobId
         : undefined;
     await cacheResponse(parsed.value.type, parsed.value.requestId, jobId, response, dependencies);
@@ -581,6 +634,25 @@ export async function routeElementSelectionMessage(
   }
 }
 
+export async function routePdfExportProgressMessage(
+  message: unknown,
+  dependencies: PersistentJobRouterDependencies,
+): Promise<PdfProgressRouterResponse | undefined> {
+  if (!isOffscreenPdfExportProgressMessage(message)) {
+    return undefined;
+  }
+  const accepted =
+    dependencies.pdfExports === undefined
+      ? false
+      : (await dependencies.pdfExports.handleProgress(message.payload)) !== undefined;
+  return createOffscreenPdfExportProgressAckMessage({
+    requestId: message.requestId,
+    jobId: message.payload.jobId,
+    accepted,
+    sentAt: dependencies.now().toISOString(),
+  });
+}
+
 export function registerPersistentJobRouter(): void {
   const dependencies = defaultDependencies();
   chrome.runtime.onMessage.addListener(
@@ -589,6 +661,14 @@ export function registerPersistentJobRouter(): void {
       sender: chrome.runtime.MessageSender,
       sendResponse: (response?: unknown) => void,
     ) => {
+      if (isOffscreenPdfExportProgressMessage(message)) {
+        void routePdfExportProgressMessage(message, dependencies).then((response) => {
+          if (response !== undefined) {
+            sendResponse(response);
+          }
+        });
+        return true;
+      }
       if (isElementSelectionEventType(message)) {
         void routeElementSelectionMessage(message, sender, dependencies).then((response) => {
           if (response !== undefined) {
