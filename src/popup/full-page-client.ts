@@ -15,8 +15,14 @@ function rejectAfter(timeoutMs: number): Promise<never> {
   });
 }
 
-async function sendJobRequest(request: unknown, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS): Promise<CaptureJob> {
-  const response = await Promise.race([chrome.runtime.sendMessage(request), rejectAfter(timeoutMs)]);
+async function sendJobRequest(
+  request: unknown,
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+): Promise<CaptureJob> {
+  const response = await Promise.race([
+    chrome.runtime.sendMessage(request),
+    rejectAfter(timeoutMs),
+  ]);
   if (isErrorResponseMessage(response)) {
     const error = new Error(response.payload.message);
     error.name = response.payload.code;

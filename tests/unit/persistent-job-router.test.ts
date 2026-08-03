@@ -186,7 +186,10 @@ describe("persistent job router", () => {
     );
 
     expect(cancel).toHaveBeenCalledWith(cancelled.id, "test");
-    expect(response).toMatchObject({ type: "JOB_RESPONSE", payload: { job: { state: "capturing" } } });
+    expect(response).toMatchObject({
+      type: "JOB_RESPONSE",
+      payload: { job: { state: "capturing" } },
+    });
   });
 
   it("caches normalized errors for duplicate missing-job reads", async () => {

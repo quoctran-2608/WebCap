@@ -84,12 +84,14 @@ async function readFullPageState(serviceWorker: Worker): Promise<StoredFullPageS
     const job = jobs
       .filter((candidate) => candidate.mode === "full-page")
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
-    const tiles = (tileValues as Array<{
-      jobId: string;
-      index: number;
-      tile: { status: string; attempts: number; byteLength?: number };
-      blob?: Blob;
-    }>)
+    const tiles = (
+      tileValues as Array<{
+        jobId: string;
+        index: number;
+        tile: { status: string; attempts: number; byteLength?: number };
+        blob?: Blob;
+      }>
+    )
       .filter((record) => job !== undefined && record.jobId === job.id)
       .sort((left, right) => left.index - right.index)
       .map((record) => ({
@@ -205,10 +207,7 @@ test("@smoke surfaces a fallback prompt when the debugger is already occupied", 
   await targetPage.locator("body").click({ position: { x: 20, y: 20 } });
   const before = await snapshotPage(targetPage);
   const tabId = await resolveFixtureTab(serviceWorker, targetPage);
-  await serviceWorker.evaluate(
-    async (id) => chrome.debugger.attach({ tabId: id }, "0.1"),
-    tabId,
-  );
+  await serviceWorker.evaluate(async (id) => chrome.debugger.attach({ tabId: id }, "0.1"), tabId);
 
   try {
     const popup = await openPopup();

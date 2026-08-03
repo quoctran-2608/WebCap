@@ -58,8 +58,8 @@ function engineFor(session: DebuggerSession): {
   engine: CdpCaptureEngine;
   withSession: ReturnType<typeof vi.fn>;
 } {
-  const withSession = vi.fn(
-    (_tabId: number, task: (value: DebuggerSession) => Promise<unknown>) => task(session),
+  const withSession = vi.fn((_tabId: number, task: (value: DebuggerSession) => Promise<unknown>) =>
+    task(session),
   );
   const debuggerClient = { withSession } as unknown as DebuggerClient;
   return { engine: new CdpCaptureEngine(debuggerClient), withSession };
@@ -103,9 +103,7 @@ describe("CdpCaptureEngine", () => {
     expect(result.tiles).toHaveLength(4);
     expect(planned[0]?.map((tile) => tile.index)).toEqual([0, 1, 2, 3]);
     expect(stored.map(({ tile }) => tile.index)).toEqual([0, 1, 2, 3]);
-    expect(stored.every(({ tile }) => tile.status === "stored" && tile.attempts === 1)).toBe(
-      true,
-    );
+    expect(stored.every(({ tile }) => tile.status === "stored" && tile.attempts === 1)).toBe(true);
     expect(stored.every(({ blob }) => blob.type === "image/png" && blob.size === 3)).toBe(true);
     expect(captureCalls).toHaveLength(4);
     expect(captureCalls[0]).toMatchObject({
@@ -116,9 +114,7 @@ describe("CdpCaptureEngine", () => {
       clip: { x: 0, y: 0, width: 8_192, height: 8_192, scale: 1 },
     });
     expect(progress.some((event) => event.stage === "measuring")).toBe(true);
-    expect(progress.some((event) => event.stage === "storing" && event.tileIndex === 3)).toBe(
-      true,
-    );
+    expect(progress.some((event) => event.stage === "storing" && event.tileIndex === 3)).toBe(true);
   });
 
   it("retries transient capture failures with the bounded backoff policy", async () => {

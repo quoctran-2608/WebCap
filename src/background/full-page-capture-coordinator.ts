@@ -1,9 +1,5 @@
 import type { PagePreparationService } from "@background/page-preparation-service";
-import type {
-  CaptureCancellation,
-  CaptureEngine,
-  CaptureProgress,
-} from "@capture/capture-engine";
+import type { CaptureCancellation, CaptureEngine, CaptureProgress } from "@capture/capture-engine";
 import { JOB_PROGRESS_THROTTLE_MS, TILE_RECORD_SCHEMA_VERSION } from "@shared/constants";
 import type { CaptureJob, CaptureTile } from "@shared/contracts/domain";
 import type { StoredTileRecord } from "@shared/contracts/job";
@@ -173,8 +169,7 @@ export class FullPageCaptureCoordinator {
     this.tiles = options.tiles;
     this.now = options.now ?? (() => new Date());
     const requestId = options.requestId ?? (() => crypto.randomUUID());
-    this.progress =
-      options.progress ?? new ChromeRuntimeJobProgressPublisher(this.now, requestId);
+    this.progress = options.progress ?? new ChromeRuntimeJobProgressPublisher(this.now, requestId);
   }
 
   start(jobId: string): Promise<void> {
@@ -327,9 +322,7 @@ export class FullPageCaptureCoordinator {
     await this.tiles.put(record);
 
     const job = await this.requireJob(jobId);
-    const tilePlan = job.tilePlan.map((planned) =>
-      planned.index === tile.index ? tile : planned,
-    );
+    const tilePlan = job.tilePlan.map((planned) => (planned.index === tile.index ? tile : planned));
     const completedTiles = tilePlan.filter((planned) => planned.status === "stored").length;
     const updated = await this.jobs.update(jobId, { tilePlan, completedTiles });
     await this.publish({

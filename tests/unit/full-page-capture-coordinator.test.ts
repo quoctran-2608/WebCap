@@ -12,12 +12,7 @@ import type {
 import { transitionJob, updateJob, type JobTransitionPatch } from "@background/job-state-machine";
 import type { PagePreparationService } from "@background/page-preparation-service";
 import type { CaptureEngine, CaptureEngineContext } from "@capture/capture-engine";
-import type {
-  CaptureJob,
-  CaptureTile,
-  JobState,
-  PageMetrics,
-} from "@shared/contracts/domain";
+import type { CaptureJob, CaptureTile, JobState, PageMetrics } from "@shared/contracts/domain";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 import type { StoredTileRecord } from "@shared/contracts/job";
@@ -101,7 +96,11 @@ class MemoryJobCoordinator implements PersistentJobCoordinatorPort {
     return Promise.resolve(structuredClone(this.job));
   }
 
-  transition(jobId: string, nextState: JobState, patch: JobTransitionPatch = {}): Promise<CaptureJob> {
+  transition(
+    jobId: string,
+    nextState: JobState,
+    patch: JobTransitionPatch = {},
+  ): Promise<CaptureJob> {
     if (jobId !== this.job.id) {
       return Promise.reject(new Error("missing job"));
     }
@@ -208,7 +207,10 @@ function successfulEngine(): CaptureEngine {
       const tiles = [plannedTile(0), plannedTile(1)];
       await context.onPlan(metrics, metrics.document, tiles);
       for (const tile of tiles) {
-        await context.storeTile(stored(tile), new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }));
+        await context.storeTile(
+          stored(tile),
+          new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" }),
+        );
       }
       return { metrics, targetRect: metrics.document, tiles: tiles.map(stored) };
     },

@@ -3,12 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import iconData from "../../assets/icons.json";
 
 import { FOUNDATION_CAPABILITIES, type CaptureCapabilities } from "@shared/capabilities";
-import type {
-  CaptureJob,
-  CaptureMode,
-  ImageFormat,
-  OutputFormat,
-} from "@shared/contracts/domain";
+import type { CaptureJob, CaptureMode, ImageFormat, OutputFormat } from "@shared/contracts/domain";
 import type { TabCapabilityPayload } from "@shared/contracts/messages";
 import type {
   VisibleSessionSnapshot,
@@ -17,11 +12,7 @@ import type {
 
 import { createArtifactPreview } from "./artifact-preview";
 import { estimateOutputBytes, formatBytes } from "./formatting";
-import {
-  cancelFullPageCapture,
-  getCaptureJob,
-  startFullPageCapture,
-} from "./full-page-client";
+import { cancelFullPageCapture, getCaptureJob, startFullPageCapture } from "./full-page-client";
 import {
   cancelVisibleCapture,
   downloadArtifact,
@@ -97,8 +88,10 @@ function errorMessage(error: unknown): string {
 }
 
 function isFullPageBusy(job: CaptureJob | undefined): boolean {
-  return job !== undefined &&
-    ["created", "preparing", "capturing", "processing", "cancelling"].includes(job.state);
+  return (
+    job !== undefined &&
+    ["created", "preparing", "capturing", "processing", "cancelling"].includes(job.state)
+  );
 }
 
 export function App(): React.JSX.Element {
@@ -180,8 +173,7 @@ export function App(): React.JSX.Element {
   }, []);
 
   const status: UiStatus = localStatus === "idle" ? (session?.status ?? "idle") : localStatus;
-  const visibleBusy =
-    status === "capturing" || status === "processing" || status === "downloading";
+  const visibleBusy = status === "capturing" || status === "processing" || status === "downloading";
   const fullPageBusy = isFullPageBusy(fullPageJob);
   const busy = selectedMode === "full-page" ? fullPageBusy : visibleBusy;
   const terminal =
@@ -562,7 +554,8 @@ export function App(): React.JSX.Element {
             <div>
               <strong>{FULL_PAGE_STATUS_COPY[fullPageJob.state]}</strong>
               <small>
-                {fullPageJob.completedTiles}/{fullPageJob.totalTiles || "?"} tile · {fullPageProgress}%
+                {fullPageJob.completedTiles}/{fullPageJob.totalTiles || "?"} tile ·{" "}
+                {fullPageProgress}%
               </small>
               <progress
                 value={fullPageJob.completedTiles}
@@ -673,11 +666,7 @@ export function App(): React.JSX.Element {
                 {fullPageJob.completedTiles} tile PNG đang được giữ cục bộ trong IndexedDB. Ghép ảnh
                 toàn trang và export cuối thuộc milestone S10/S13.
               </p>
-              <button
-                className="text-action"
-                type="button"
-                onClick={() => void handleCancel()}
-              >
+              <button className="text-action" type="button" onClick={() => void handleCancel()}>
                 Kết thúc phiên tile
               </button>
             </div>
@@ -704,15 +693,17 @@ export function App(): React.JSX.Element {
               </button>
             </div>
           )}
-          {selectedMode === "visible" && status === "completed" && session?.downloadId !== undefined && (
-            <p
-              className="feedback feedback--success"
-              data-testid="download-success"
-              data-download-id={session.downloadId}
-            >
-              {CAPTURE_STATUS_COPY.completed}
-            </p>
-          )}
+          {selectedMode === "visible" &&
+            status === "completed" &&
+            session?.downloadId !== undefined && (
+              <p
+                className="feedback feedback--success"
+                data-testid="download-success"
+                data-download-id={session.downloadId}
+              >
+                {CAPTURE_STATUS_COPY.completed}
+              </p>
+            )}
           {selectedMode === "visible" && status === "cancelled" && (
             <div className="feedback feedback--neutral">
               <p>{CAPTURE_STATUS_COPY.cancelled}</p>
@@ -747,11 +738,13 @@ export function App(): React.JSX.Element {
               )}
             </div>
           )}
-          {selectedMode === "full-page" && uiError !== undefined && fullPageJob?.state !== "failed" && (
-            <div className="feedback feedback--error" role="alert">
-              <p>{uiError}</p>
-            </div>
-          )}
+          {selectedMode === "full-page" &&
+            uiError !== undefined &&
+            fullPageJob?.state !== "failed" && (
+              <div className="feedback feedback--error" role="alert">
+                <p>{uiError}</p>
+              </div>
+            )}
         </div>
       </section>
 

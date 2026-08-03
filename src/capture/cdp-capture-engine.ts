@@ -60,14 +60,10 @@ function isRetryable(error: unknown): boolean {
 
 function boundedTarget(metrics: PageMetrics, context: CaptureEngineContext): Rect {
   const requested = context.targetRect ?? metrics.document;
-  const maxRight = metrics.document.x + Math.min(
-    metrics.document.width,
-    context.settings.limits.maxCssWidth,
-  );
-  const maxBottom = metrics.document.y + Math.min(
-    metrics.document.height,
-    context.settings.limits.maxCssHeight,
-  );
+  const maxRight =
+    metrics.document.x + Math.min(metrics.document.width, context.settings.limits.maxCssWidth);
+  const maxBottom =
+    metrics.document.y + Math.min(metrics.document.height, context.settings.limits.maxCssHeight);
   const x = Math.max(metrics.document.x, requested.x);
   const y = Math.max(metrics.document.y, requested.y);
   return {

@@ -250,8 +250,7 @@ export async function routePersistentJobMessage(
   } catch (error) {
     const normalized = normalizeError(error, {
       stage: parsed.value.type === "JOB_CANCEL" ? "cleanup" : "storage",
-      userMessageKey:
-        parsed.value.type === "JOB_CANCEL" ? "errors.jobCancel" : "errors.jobCommand",
+      userMessageKey: parsed.value.type === "JOB_CANCEL" ? "errors.jobCancel" : "errors.jobCommand",
       retryable: true,
       fallbackAllowed: false,
     });
