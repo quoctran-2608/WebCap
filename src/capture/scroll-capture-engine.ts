@@ -236,7 +236,9 @@ export class ScrollCaptureEngine implements CaptureEngine {
 
       let dataUrl: string;
       try {
-        dataUrl = await this.limiter.run(() => this.tabs.captureVisibleTab(context.windowId as number));
+        dataUrl = await this.limiter.run(() =>
+          this.tabs.captureVisibleTab(context.windowId as number),
+        );
       } catch (error) {
         throw createWebCapRuntimeError(
           normalizeError(error, {

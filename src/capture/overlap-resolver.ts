@@ -19,7 +19,11 @@ export interface ScrollCapturePlan {
   tiles: CaptureTile[];
 }
 
-function planError(message: string, causeCode: string, safeContext?: Record<string, number>): Error {
+function planError(
+  message: string,
+  causeCode: string,
+  safeContext?: Record<string, number>,
+): Error {
   return createWebCapRuntimeError(
     createWebCapError({
       code: "E_TILE_PLAN",
@@ -41,7 +45,12 @@ function requirePositive(value: number, name: string): number {
   return value;
 }
 
-function createStops(start: number, extent: number, viewportExtent: number, overlap: number): number[] {
+function createStops(
+  start: number,
+  extent: number,
+  viewportExtent: number,
+  overlap: number,
+): number[] {
   const maximumStart = Math.max(start, start + extent - viewportExtent);
   if (maximumStart - start <= TILE_COVERAGE_EPSILON_CSS) {
     return [start];
@@ -97,8 +106,7 @@ function assertCoverage(target: Rect, tiles: CaptureTile[], rows: number, column
       }
       if (
         column === columns - 1 &&
-        Math.abs(output.x + output.width - (target.x + target.width)) >
-          TILE_COVERAGE_EPSILON_CSS
+        Math.abs(output.x + output.width - (target.x + target.width)) > TILE_COVERAGE_EPSILON_CSS
       ) {
         throw planError("Scroll capture does not reach the target right edge.", "RightGap", {
           row,
@@ -124,8 +132,7 @@ function assertCoverage(target: Rect, tiles: CaptureTile[], rows: number, column
       }
       if (
         row === rows - 1 &&
-        Math.abs(output.y + output.height - (target.y + target.height)) >
-          TILE_COVERAGE_EPSILON_CSS
+        Math.abs(output.y + output.height - (target.y + target.height)) > TILE_COVERAGE_EPSILON_CSS
       ) {
         throw planError("Scroll capture does not reach the target bottom edge.", "BottomGap", {
           column,
@@ -158,8 +165,7 @@ export function planScrollCaptureTiles(request: ScrollCapturePlanRequest): Scrol
   const tiles: CaptureTile[] = [];
   for (let row = 0; row < yStops.length; row += 1) {
     const scrollY = yStops[row] as number;
-    const previousBottom =
-      row === 0 ? target.y : (yStops[row - 1] as number) + viewportHeight;
+    const previousBottom = row === 0 ? target.y : (yStops[row - 1] as number) + viewportHeight;
     const outputY = Math.max(target.y, previousBottom, scrollY);
     const outputBottom = Math.min(target.y + target.height, scrollY + viewportHeight);
 

@@ -44,7 +44,12 @@ export interface ScrollCaptureCleanupResult {
 
 export interface ScrollCapturePageAdapter {
   scrollAndSettle(request: ScrollCapturePageRequest): Promise<ScrollCapturePageResult>;
-  cleanup(tabId: number, preparationId: string, returnX: number, returnY: number): Promise<ScrollCaptureCleanupResult>;
+  cleanup(
+    tabId: number,
+    preparationId: string,
+    returnX: number,
+    returnY: number,
+  ): Promise<ScrollCaptureCleanupResult>;
 }
 
 const ScrollCapturePageResultSchema = z
@@ -128,9 +133,7 @@ async function executeScrollCapture(
   const restoreMarked = () => {
     let restored = 0;
     let skipped = 0;
-    const marked = Array.from(
-      document.querySelectorAll<HTMLElement>(`[${PREPARATION_ATTRIBUTE}]`),
-    );
+    const marked = Array.from(document.querySelectorAll<HTMLElement>(`[${PREPARATION_ATTRIBUTE}]`));
     for (const element of marked) {
       if (element.getAttribute(PREPARATION_ATTRIBUTE) !== request.preparationId) {
         continue;
