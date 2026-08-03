@@ -100,18 +100,30 @@ function roundRange(
 
 const browserEnvironment: ThumbnailEnvironment = {
   async decode(blob) {
-    const bitmap = await createImageBitmap(blob);
-    return {
-      width: bitmap.width,
-      height: bitmap.height,
-      source: bitmap,
-      close: () => bitmap.close(),
-    };
+    const url = URL.createObjectURL(blob);
+    const image = new Image();
+    try {
+      await new Promise<void>((resolve, reject) => {
+        image.onload = () => resolve();
+        image.onerror = () => reject(new Error("PDF thumbnail source image could not be decoded."));
+        image.src = url;
+      });
+      return {
+        width: image.naturalWidth,
+        height: image.naturalHeight,
+        source: image,
+        close() {
+          image.src = "";
+          URL.revokeObjectURL(url);
+        },
+      };
+    } catch (error) {
+      URL.revokeObjectURL(url);
+      throw error;
+    }
   },
   createCanvas(width, height) {
-    const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
+    const canvas = new OffscreenCanvas(width, height);
     const context = canvas.getContext("2d");
     if (context === null) throw new Error("PDF thumbnail canvas is unavailable.");
     return {
@@ -146,16 +158,7 @@ const browserEnvironment: ThumbnailEnvironment = {
           destinationHeight,
         );
       },
-      encodeJpeg(quality) {
-        return new Promise((resolve, reject) => {
-          canvas.toBlob(
-            (blob) =>
-              blob === null ? reject(new Error("PDF thumbnail encoding failed.")) : resolve(blob),
-            "image/jpeg",
-            quality,
-          );
-        });
-      },
+      encodeJpeg: (quality) => canvas.convertToBlob({ type: "image/jpeg", quality }),
       release() {
         canvas.width = 1;
         canvas.height = 1;
