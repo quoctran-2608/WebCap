@@ -13,7 +13,7 @@ async function replaceExactlyOnce(path, replacements) {
 }
 
 await replaceExactlyOnce("PLAN.md", [
-  ["current_session: S07", "current_session: S08"],
+  ["\ncurrent_session: S07\n---", "\ncurrent_session: S08\n---"],
   [
     "| S07 | M2 | Debugger client, page metrics và 2D tile planner | S06 | 20k–28k | NEXT |",
     "| S07 | M2 | Debugger client, page metrics và 2D tile planner | S06 | 20k–28k | DONE |",
