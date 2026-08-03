@@ -39,17 +39,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Apply S13 type fixes
+      - name: Apply S13 invariant fix
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/s13-paged-pdf-exporter'
         run: |
-          if [ -f scripts/fix-s13-types.mjs ]; then
-            node scripts/fix-s13-types.mjs
+          if [ -f scripts/fix-s13-invariant.mjs ]; then
+            node scripts/fix-s13-invariant.mjs
             pnpm format
-            rm scripts/fix-s13-types.mjs
+            rm scripts/fix-s13-invariant.mjs
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add -A
-            git commit -m "Fix PDF type boundaries"
+            git commit -m "Preserve PDF export invariant compatibility"
             git push origin HEAD:${GITHUB_HEAD_REF}
           fi
 
