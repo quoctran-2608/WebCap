@@ -40,7 +40,7 @@ jobs:
         run: |
           if [ -f scripts/apply-s13-core.mjs ]; then
             node scripts/apply-s13-core.mjs
-            pnpm install
+            pnpm install --no-frozen-lockfile
             pnpm format
             rm scripts/apply-s13-core.mjs
             git config user.name "github-actions[bot]"
