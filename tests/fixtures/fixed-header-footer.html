@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebCap fixed header footer fixture</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-width: 100%;
+        background: #f8fafc;
+      }
+
+      header,
+      footer {
+        position: fixed;
+        left: 0;
+        right: 0;
+        z-index: 20;
+        display: grid;
+        place-items: center;
+        color: white;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+
+      header {
+        top: 0;
+        height: 56px;
+        background: #b91c1c;
+      }
+
+      footer {
+        bottom: 0;
+        height: 48px;
+        background: #1d4ed8;
+      }
+
+      main {
+        min-height: 2,400px;
+        padding: 88px 32px 80px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.15), rgba(15, 23, 42, 0.08)),
+          repeating-linear-gradient(
+            180deg,
+            #fef3c7 0,
+            #fef3c7 300px,
+            #d1fae5 300px,
+            #d1fae5 600px,
+            #dbeafe 600px,
+            #dbeafe 900px
+          );
+      }
+
+      section {
+        min-height: 420px;
+        padding: 24px;
+        border: 2px solid rgba(15, 23, 42, 0.25);
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.7);
+        margin-bottom: 36px;
+      }
+
+      button {
+        padding: 12px 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <header id="fixed-header">HEADER — TILE ĐẦU</header>
+    <main>
+      <button id="focus-target" type="button">Điểm focus trước capture</button>
+      <section><h1>Phần 1</h1><p>Khối nội dung đầu trang.</p></section>
+      <section><h2>Phần 2</h2><p>Khối nội dung giữa trang.</p></section>
+      <section><h2>Phần 3</h2><p>Khối nội dung cuối trang.</p></section>
+      <section><h2>Phần 4</h2><p>Đảm bảo trang dài hơn nhiều viewport.</p></section>
+      <section><h2>Phần 5</h2><p>Điểm kết thúc fixture.</p></section>
+    </main>
+    <footer id="fixed-footer">FOOTER — TILE CUỐI</footer>
+  </body>
+</html>
