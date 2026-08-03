@@ -57,6 +57,7 @@ export default defineConfig({
       "@background": resolve(projectRoot, "src/background"),
       "@capture": resolve(projectRoot, "src/capture"),
       "@content": resolve(projectRoot, "src/content"),
+      "@editor": resolve(projectRoot, "src/editor"),
       "@popup": resolve(projectRoot, "src/popup"),
       "@offscreen": resolve(projectRoot, "src/offscreen"),
       "@shared": resolve(projectRoot, "src/shared"),
@@ -71,6 +72,7 @@ export default defineConfig({
     rolldownOptions: {
       input: {
         popup: resolve(popupRoot, "popup.html"),
+        editor: resolve(popupRoot, "editor.html"),
         offscreen: resolve(offscreenRoot, "entry.ts"),
         "service-worker": resolve(projectRoot, "src/background/service-worker.ts"),
       },
