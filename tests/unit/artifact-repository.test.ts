@@ -47,17 +47,13 @@ function createImmediateReadDatabase(value: unknown): IDBDatabase {
 }
 
 describe("IndexedDbArtifactRepository", () => {
-  it(
-    "subscribes to transaction completion before a fast read request can finish",
-    async () => {
-      const repository = new IndexedDbArtifactRepository({
-        openDatabase: () => Promise.resolve(createImmediateReadDatabase(record)),
-      });
+  it("subscribes to transaction completion before a fast read request can finish", async () => {
+    const repository = new IndexedDbArtifactRepository({
+      openDatabase: () => Promise.resolve(createImmediateReadDatabase(record)),
+    });
 
-      await expect(repository.get(record.artifactId)).resolves.toEqual(record);
-    },
-    1_000,
-  );
+    await expect(repository.get(record.artifactId)).resolves.toEqual(record);
+  }, 1_000);
 
   it("normalizes quota failures with a user-safe code", async () => {
     const repository = new IndexedDbArtifactRepository({
