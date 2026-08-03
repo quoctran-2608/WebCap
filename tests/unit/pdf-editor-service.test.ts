@@ -78,7 +78,9 @@ describe("PdfEditorService", () => {
   it("creates and restores a persistent manifest with an explicitly approximate estimate", async () => {
     const job = readyJob();
     const manifests = manifestRepository();
-    const jobs = { get: () => Promise.resolve(structuredClone(job)) } as PersistentJobCoordinatorPort;
+    const jobs = {
+      get: () => Promise.resolve(structuredClone(job)),
+    } as PersistentJobCoordinatorPort;
     const service = new PdfEditorService({ jobs, manifests, now: () => now });
 
     const first = await service.get(job.id);
@@ -97,7 +99,9 @@ describe("PdfEditorService", () => {
   it("recomputes pages for settings and persists non-destructive remove/reorder edits", async () => {
     const job = readyJob();
     const manifests = manifestRepository();
-    const jobs = { get: () => Promise.resolve(structuredClone(job)) } as PersistentJobCoordinatorPort;
+    const jobs = {
+      get: () => Promise.resolve(structuredClone(job)),
+    } as PersistentJobCoordinatorPort;
     const service = new PdfEditorService({ jobs, manifests, now: () => now });
     const initial = await service.get(job.id);
 
@@ -110,10 +114,9 @@ describe("PdfEditorService", () => {
         jpegQuality: 0.75,
       },
     });
-    const selected = [
-      settings.manifest.pages.at(-1)?.id,
-      settings.manifest.pages[0]?.id,
-    ].filter((value): value is string => value !== undefined);
+    const selected = [settings.manifest.pages.at(-1)?.id, settings.manifest.pages[0]?.id].filter(
+      (value): value is string => value !== undefined,
+    );
     const edited = await service.update(job.id, settings.manifest.revision, {
       kind: "pages",
       pageIds: selected,
@@ -136,7 +139,9 @@ describe("PdfEditorService", () => {
   it("rejects stale revisions and page identifiers outside the current manifest", async () => {
     const job = readyJob();
     const manifests = manifestRepository();
-    const jobs = { get: () => Promise.resolve(structuredClone(job)) } as PersistentJobCoordinatorPort;
+    const jobs = {
+      get: () => Promise.resolve(structuredClone(job)),
+    } as PersistentJobCoordinatorPort;
     const service = new PdfEditorService({ jobs, manifests, now: () => now });
     const initial = await service.get(job.id);
 

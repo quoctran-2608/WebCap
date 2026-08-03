@@ -99,8 +99,7 @@ function environment(pageWidths: number[], released: { count: number }): PdfExpo
       width,
       height,
       getContext: () => ({ fillWhite: () => undefined, drawImage: () => undefined }),
-      convertToJpeg: () =>
-        Promise.resolve(new Blob([new Uint8Array([1])], { type: "image/jpeg" })),
+      convertToJpeg: () => Promise.resolve(new Blob([new Uint8Array([1])], { type: "image/jpeg" })),
       release() {
         released.count += 1;
       },

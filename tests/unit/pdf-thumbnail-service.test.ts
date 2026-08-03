@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createPdfPageThumbnail,
-  type ThumbnailEnvironment,
-} from "@editor/thumbnail-service";
+import { createPdfPageThumbnail, type ThumbnailEnvironment } from "@editor/thumbnail-service";
 import type { ArtifactRecord } from "@shared/contracts/artifact";
 import type { CaptureTile } from "@shared/contracts/domain";
 import type { PdfEditorPage } from "@shared/contracts/pdf-editor";
