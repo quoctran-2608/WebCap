@@ -1,11 +1,7 @@
 import { z } from "zod";
 
 import { PROTOCOL_VERSION } from "@shared/constants";
-import {
-  CaptureSettingsSchema,
-  CaptureTileSchema,
-  RectSchema,
-} from "@shared/contracts/domain";
+import { CaptureSettingsSchema, CaptureTileSchema, RectSchema } from "@shared/contracts/domain";
 import { PdfEditorPageSchema } from "@shared/contracts/pdf-editor";
 
 const IsoDateTimeSchema = z.string().datetime({ offset: true });
@@ -37,9 +33,7 @@ export const OffscreenExportEditedPdfMessageSchema = z
   })
   .strict();
 
-export type OffscreenExportEditedPdfMessage = z.infer<
-  typeof OffscreenExportEditedPdfMessageSchema
->;
+export type OffscreenExportEditedPdfMessage = z.infer<typeof OffscreenExportEditedPdfMessageSchema>;
 
 export function createOffscreenExportEditedPdfMessage(
   options: {

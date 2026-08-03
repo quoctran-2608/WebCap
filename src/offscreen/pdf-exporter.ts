@@ -258,8 +258,7 @@ export class PdfExporter {
 
   async export(
     payload: PdfExportPayload,
-    reportProgress: (progress: PdfExportProgress) => Promise<boolean> = () =>
-      Promise.resolve(true),
+    reportProgress: (progress: PdfExportProgress) => Promise<boolean> = () => Promise.resolve(true),
   ): Promise<PdfExportResult> {
     const records = await this.tiles.listByJob(payload.jobId);
     const recordByIndex = new Map(records.map((record) => [record.index, record]));

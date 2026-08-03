@@ -77,7 +77,11 @@ function metadata(record: ArtifactRecord): ArtifactMetadata {
   };
 }
 
-function roundRange(start: number, end: number, maximum: number): { start: number; length: number } {
+function roundRange(
+  start: number,
+  end: number,
+  maximum: number,
+): { start: number; length: number } {
   const roundedStart = Math.max(0, Math.min(maximum, Math.round(start)));
   const roundedEnd = Math.max(roundedStart, Math.min(maximum, Math.round(end)));
   return { start: roundedStart, length: roundedEnd - roundedStart };
@@ -134,7 +138,8 @@ const browserEnvironment: ThumbnailEnvironment = {
       encodeJpeg(quality) {
         return new Promise((resolve, reject) => {
           canvas.toBlob(
-            (blob) => (blob === null ? reject(new Error("PDF thumbnail encoding failed.")) : resolve(blob)),
+            (blob) =>
+              blob === null ? reject(new Error("PDF thumbnail encoding failed.")) : resolve(blob),
             "image/jpeg",
             quality,
           );
@@ -148,7 +153,9 @@ const browserEnvironment: ThumbnailEnvironment = {
   },
 };
 
-export async function createPdfPageThumbnail(options: PdfThumbnailOptions): Promise<ArtifactMetadata> {
+export async function createPdfPageThumbnail(
+  options: PdfThumbnailOptions,
+): Promise<ArtifactMetadata> {
   const artifacts = options.artifacts ?? new IndexedDbArtifactRepository();
   const tiles = options.tileRepository ?? new IndexedDbTileRepository();
   const environment = options.environment ?? browserEnvironment;

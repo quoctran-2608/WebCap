@@ -17,9 +17,7 @@ export const PdfEditorExportStartMessageSchema = z
   })
   .strict();
 
-export type PdfEditorExportStartMessage = z.infer<
-  typeof PdfEditorExportStartMessageSchema
->;
+export type PdfEditorExportStartMessage = z.infer<typeof PdfEditorExportStartMessageSchema>;
 
 export function createPdfEditorExportStartMessage(options: {
   requestId: string;

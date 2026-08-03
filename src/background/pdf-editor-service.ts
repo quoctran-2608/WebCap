@@ -17,12 +17,7 @@ export interface PdfEditorServiceOptions {
   now?: () => Date;
 }
 
-function editorError(
-  message: string,
-  causeCode: string,
-  jobId: string,
-  retryable = false,
-): Error {
+function editorError(message: string, causeCode: string, jobId: string, retryable = false): Error {
   return createWebCapRuntimeError(
     createWebCapError({
       code: "E_PROTOCOL_MESSAGE",

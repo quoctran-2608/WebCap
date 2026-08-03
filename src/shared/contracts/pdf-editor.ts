@@ -231,9 +231,7 @@ export function createPdfEditorErrorMessage(
   });
 }
 
-export function parsePdfEditorRequest(
-  value: unknown,
-): Result<PdfEditorRequest, WebCapErrorData> {
+export function parsePdfEditorRequest(value: unknown): Result<PdfEditorRequest, WebCapErrorData> {
   const parsed = PdfEditorRequestSchema.safeParse(value);
   if (parsed.success) {
     return ok(parsed.data);
@@ -254,11 +252,7 @@ export function parsePdfEditorRequest(
 export function isPdfEditorMessageType(value: unknown): boolean {
   if (typeof value !== "object" || value === null || !("type" in value)) return false;
   const type = (value as { type?: unknown }).type;
-  return (
-    type === "PDF_EDITOR_GET" ||
-    type === "PDF_EDITOR_UPDATE" ||
-    type === "PDF_EXPORT_CANCEL"
-  );
+  return type === "PDF_EDITOR_GET" || type === "PDF_EDITOR_UPDATE" || type === "PDF_EXPORT_CANCEL";
 }
 
 export function isPdfEditorResponseMessage(value: unknown): value is PdfEditorResponseMessage {

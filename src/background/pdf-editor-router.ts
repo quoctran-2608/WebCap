@@ -120,7 +120,11 @@ function defaultDependencies(): PdfEditorRouterDependencies {
   if (sharedDependencies !== undefined) return sharedDependencies;
   const jobs = new IndexedDbJobRepository();
   const manifests = new PdfEditManifestRepository();
-  const coordinator = new PdfEditorJobCoordinator(jobs, new JobSessionRepository(), () => new Date());
+  const coordinator = new PdfEditorJobCoordinator(
+    jobs,
+    new JobSessionRepository(),
+    () => new Date(),
+  );
   sharedDependencies = {
     editor: new PdfEditorService({ jobs: coordinator, manifests }),
     exporter: new PdfExportService({
@@ -131,7 +135,9 @@ function defaultDependencies(): PdfEditorRouterDependencies {
     }),
     now: () => new Date(),
   };
-  void new IndexedDbArtifactRepository().deleteExpired(new Date().toISOString()).catch(() => undefined);
+  void new IndexedDbArtifactRepository()
+    .deleteExpired(new Date().toISOString())
+    .catch(() => undefined);
   return sharedDependencies;
 }
 

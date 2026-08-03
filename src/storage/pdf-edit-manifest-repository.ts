@@ -1,7 +1,4 @@
-import {
-  PdfEditManifestSchema,
-  type PdfEditManifest,
-} from "@shared/contracts/pdf-editor";
+import { PdfEditManifestSchema, type PdfEditManifest } from "@shared/contracts/pdf-editor";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 
 const STORAGE_PREFIX = "webcap.pdf-edit.";
