@@ -193,7 +193,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function hasString(value: Record<string, unknown>, key: string): boolean {
-  return typeof value[key] === "string" && (value[key] as string).length > 0;
+  const candidate = value[key];
+  return typeof candidate === "string" && candidate.length > 0;
 }
 
 export function isPagePreparationRequest(value: unknown): value is PagePreparationRequest {

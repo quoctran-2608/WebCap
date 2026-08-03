@@ -52,8 +52,7 @@ async function sendContentMessage(
   message: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   return serviceWorker.evaluate(
-    async ({ id, payload }) =>
-      (await chrome.tabs.sendMessage(id, payload)) as Record<string, unknown>,
+    async ({ id, payload }) => await chrome.tabs.sendMessage<Record<string, unknown>>(id, payload),
     { id: tabId, payload: message },
   );
 }
@@ -252,9 +251,9 @@ test("@smoke restores automatically after unstable layout and cancellation", asy
 
   const result = await serviceWorker.evaluate(
     async ({ id, prepare, cancel }) => {
-      const pending = chrome.tabs.sendMessage(id, prepare) as Promise<Record<string, unknown>>;
+      const pending = chrome.tabs.sendMessage<Record<string, unknown>>(id, prepare);
       await new Promise((resolve) => setTimeout(resolve, 60));
-      const cancelResponse = (await chrome.tabs.sendMessage(id, cancel)) as Record<string, unknown>;
+      const cancelResponse = await chrome.tabs.sendMessage<Record<string, unknown>>(id, cancel);
       const prepareResponse = await pending;
       return { cancelResponse, prepareResponse };
     },

@@ -214,7 +214,17 @@ export class PagePreparationService {
     }
 
     if (!operationSucceeded) {
-      throw operationError;
+      if (operationError instanceof Error) {
+        throw operationError;
+      }
+      throw createWebCapRuntimeError(
+        normalizeError(operationError, {
+          stage: "capture",
+          userMessageKey: "errors.captureFailed",
+          retryable: true,
+          fallbackAllowed: false,
+        }),
+      );
     }
     if (cleanupError !== undefined) {
       throw cleanupError;

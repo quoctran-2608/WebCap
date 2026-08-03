@@ -155,7 +155,7 @@ describe("PagePreparationService", () => {
   it("restores in finally after a successful prepared operation", async () => {
     const browser = new FakePagePreparationBrowser(responseByType);
     const service = createService(browser);
-    const operation = vi.fn(async () => "captured");
+    const operation = vi.fn(() => Promise.resolve("captured"));
 
     await expect(
       service.withPreparedPage({ tabId: 10, preparationId: "job-10" }, operation),
