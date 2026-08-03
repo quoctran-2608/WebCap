@@ -54,3 +54,20 @@ S07 remains an infrastructure milestone and does not expose a full-page capture 
 6. Raise pixel scale or lower the pixel-area guardrail and confirm tile height shrinks or dynamic splitting produces safe sub-rectangles; exceeding `maxTiles` must fail with `E_TILE_PLAN`.
 
 Run `pnpm test:unit` for debugger/metrics/planner behavior and `pnpm test:e2e` to preserve the completed visible-capture regression slice.
+
+## S08 page preparation and restoration inspection
+
+S08 is also an infrastructure milestone; the popup still keeps full-page capture disabled. Exercise `PagePreparationService` or the versioned content protocol only on disposable fixture tabs:
+
+1. Run `pnpm build` and confirm `dist/content-script.js` exists, contains no module imports or remote URLs, and is injected only through `chrome.scripting.executeScript()` when preparation starts.
+2. On `tests/fixtures/animated-page.html`, prepare the page and confirm animations are paused, the caret is transparent, and smooth scrolling is disabled while the preparation is active.
+3. On `tests/fixtures/lazy-images.html`, enable lazy loading and confirm WebCap scrolls in bounded steps, waits for stable layout samples, loads the deferred sections, returns to the target start, and reports the measured document dimensions.
+4. On `tests/fixtures/fixed-sticky.html`, confirm S08 does not mutate the fixed or sticky elements; only a known WebCap overlay is hidden and its original inline `style` attribute is restored byte-for-byte.
+5. Restore after success and compare window scroll, active element, selection, injected style count, document/body inline styles, and WebCap-owned modified nodes with the pre-prepare snapshot.
+6. Force `E_LAYOUT_UNSTABLE` with `tests/fixtures/layout-shift.html`; cleanup must still restore the page before the error response is returned.
+7. Cancel during lazy pre-scroll; the prepare request must return `E_CANCELLED`, cleanup must complete, and a second restore request must be idempotent.
+8. Change a WebCap-modified inline style from page code after prepare; restore must skip that node rather than overwrite the site's newer value and must report the skipped mutation.
+9. Verify a partial cleanup report is normalized as `E_CLEANUP_PARTIAL` without masking an earlier capture/operation error.
+10. Re-run the completed visible-capture flow to confirm S08 does not change existing popup behavior, manifest permissions, IndexedDB schema, or image export.
+
+Automated coverage is included in `pnpm test:unit` and `pnpm test:e2e`. The Playwright suite covers lazy content, animation freeze, fixed/sticky preservation, exact inline-style restoration, unstable layout cleanup, cancellation, and the two existing visible-capture regressions.
