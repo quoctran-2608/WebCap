@@ -4,10 +4,7 @@ import {
   FullPageCaptureCoordinator,
   type JobProgressPublisher,
 } from "@background/full-page-capture-coordinator";
-import type {
-  JobCleanupReport,
-  PersistentJobCoordinatorPort,
-} from "@background/job-coordinator";
+import type { JobCleanupReport, PersistentJobCoordinatorPort } from "@background/job-coordinator";
 import { transitionJob, updateJob, type JobTransitionPatch } from "@background/job-state-machine";
 import type { PagePreparationService } from "@background/page-preparation-service";
 import type { CaptureEngine, CaptureEngineContext } from "@capture/capture-engine";
