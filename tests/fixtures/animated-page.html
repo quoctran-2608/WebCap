@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebCap animated fixture</title>
+    <style>
+      html { scroll-behavior: smooth; }
+      body { min-height: 3200px; margin: 0; font: 16px system-ui; }
+      @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.1); } }
+      #animated { width: 180px; height: 180px; margin: 80px; background: #ef7d7d; animation: pulse 0.4s infinite alternate; }
+      input { margin: 80px; }
+    </style>
+  </head>
+  <body>
+    <input id="focus-target" value="animated focus" />
+    <div id="animated"></div>
+  </body>
+</html>

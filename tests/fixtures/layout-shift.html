@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebCap unstable layout fixture</title>
+    <style>
+      body { margin: 0; font: 16px system-ui; }
+      #spacer { height: 1200px; background: linear-gradient(#eef3ff, #d8e3ff); }
+    </style>
+  </head>
+  <body>
+    <input id="focus-target" value="unstable focus" />
+    <div id="spacer"></div>
+    <script>
+      const spacer = document.querySelector("#spacer");
+      let revision = 0;
+      setInterval(() => {
+        revision += 1;
+        spacer.style.height = revision % 2 === 0 ? "1200px" : "1450px";
+        spacer.dataset.revision = String(revision);
+      }, 35);
+    </script>
+  </body>
+</html>
