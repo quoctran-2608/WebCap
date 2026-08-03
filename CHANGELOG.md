@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Page-size and unit-conversion primitives for A4, Letter, fit-width, portrait/landscape, margins, CSS pixels, millimeters, inches, and PDF points.
+- Continuous PDF source slicing with running fractional pixel residuals so final page coverage reaches the exact source pixel without accumulated seams.
+- Deterministic tile-to-page intersection planning that consumes overlap/output metadata and rejects missing or duplicated logical coverage.
+- Page-at-a-time offscreen PDF rendering with one page-sized `OffscreenCanvas`, sequential single-tile decoding, per-page JPEG encoding, local `pdf-lib` embedding, and explicit bitmap/canvas release.
+- Persistent `PDF_EXPORT_START` routing, monotonic page progress, output artifact IDs, `application/pdf` Blob storage, page-count metadata, retryable export failures, and source-tile preservation.
+- PDF contract, state-machine, service, router, real-document integrity, memory-lifecycle, and browser integration coverage; the S13 reference suite passes 215 unit tests and 19 Playwright cases.
 - Element capture mode with an isolated Shadow DOM hover/highlight selector, sanitized tag/id/class labels, dimensions, click confirmation, Enter/Escape controls, and parent/previous-child keyboard navigation.
 - Recursive open-Shadow-DOM hit testing with `elementsFromPoint()`, `composedPath()` fallback, invalid-root/WebCap-root exclusion, and scrollable-candidate metadata.
 - Opaque element target descriptors backed by content-runtime node identity, CSS document bounds through the shared CoordinateSpace, and revalidation after preparation plus immediately before each capture-engine attempt.

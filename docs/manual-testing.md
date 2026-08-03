@@ -129,3 +129,16 @@ Run `pnpm test:unit` for the coordinate matrix, protocol, selector service, rout
 8. Verify normal element capture revalidates the same content-runtime identity after page preparation and again before the engine attempt; moving the same connected node may update its bounds, but disconnecting/replacing it must stop capture.
 9. A scrollable candidate is labelled as scrollable but S12 captures visible bounds only. Full internal scroll content remains disabled until S16. Closed shadow-root deep inspection is unsupported and must not be represented as available.
 10. Run `pnpm test:unit` and `pnpm test:e2e`. The reference S12 suite contains 200 unit tests across 53 files and 18 Playwright cases, including all prior visible, full-page, fallback, preparation, and region regressions.
+
+## S13 page-at-a-time PDF export validation
+
+1. Build and load the extension, serve `tests/fixtures/full-page-long.html`, and create a ready full-page tile set. S13 intentionally does not expose a PDF button in the popup; the user-facing editor and options arrive in S14.
+2. From an extension context, send a typed `PDF_EXPORT_START` request for the ready job with A4 portrait, 8 mm margins, and a JPEG quality such as 0.82. The immediate response must contain the same job in `exporting` with page progress initialized at zero.
+3. Inspect the job while export runs. `completedPages` must increase monotonically and never exceed `totalPages`; reopening or polling the job must not transfer tile/image Blob bytes through runtime messages.
+4. When complete, confirm the job contains `outputArtifactId`, equal completed/total page counts, and state `completed`. The original source tile records must still exist for later S14 retry/re-export.
+5. Inspect the output artifact in IndexedDB: format `pdf`, MIME `application/pdf`, a non-empty Blob, a positive page count, and a filename ending in `.pdf`. The first five bytes should decode to `%PDF-`.
+6. Open the generated file in Chrome and another PDF reader. Confirm all pages load and the source proceeds continuously from top to bottom without a white gap or duplicated strip at page/tile boundaries.
+7. Repeat pure layout checks for A4, Letter, landscape, fit-width, fractional source heights, and DPR-derived non-integer pixel ranges. The final range must end exactly at the rounded source pixel height.
+8. Remove a stored source tile before export. WebCap must fail before page-canvas allocation with retryable `E_STORAGE_READ`; no partial output artifact may be persisted.
+9. Force JPEG/PDF encoding failure after export starts. The job must become retryable `failed` with `E_EXPORT_FAILED`, while the stored capture tiles remain intact.
+10. Run `pnpm test:unit` and `pnpm test:e2e`. The S13 reference suite contains 215 unit tests across 58 files and 19 Playwright cases, including a real 9,600 CSS-pixel tile-set-to-PDF browser export and all previous capture regressions.
