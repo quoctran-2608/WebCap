@@ -20,12 +20,12 @@ export interface PdfExportPayload {
   targetRect: Rect;
   tiles: CaptureTile[];
   settings: CaptureSettings["pdf"];
-  pages?: PdfEditorPage[];
+  pages?: PdfEditorPage[] | undefined;
   filename: string;
   createdAt: string;
   expiresAt: string;
-  sourceTitle?: string;
-  sourceDomain?: string;
+  sourceTitle?: string | undefined;
+  sourceDomain?: string | undefined;
 }
 
 export interface PdfExportProgress {
@@ -258,7 +258,8 @@ export class PdfExporter {
 
   async export(
     payload: PdfExportPayload,
-    reportProgress: (progress: PdfExportProgress) => Promise<boolean> = () => Promise.resolve(true),
+    reportProgress: (progress: PdfExportProgress) => Promise<boolean> = () =>
+      Promise.resolve(true),
   ): Promise<PdfExportResult> {
     const records = await this.tiles.listByJob(payload.jobId);
     const recordByIndex = new Map(records.map((record) => [record.index, record]));
