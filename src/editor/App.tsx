@@ -31,9 +31,10 @@ function errorMessage(error: unknown): string {
 interface PageThumbnailProps {
   snapshot: PdfEditorSnapshot;
   page: PdfEditorPage;
+  eager: boolean;
 }
 
-function PageThumbnail({ snapshot, page }: PageThumbnailProps) {
+function PageThumbnail({ snapshot, page, eager }: PageThumbnailProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [url, setUrl] = useState<string>();
   const [failed, setFailed] = useState(false);
@@ -60,7 +61,7 @@ function PageThumbnail({ snapshot, page }: PageThumbnailProps) {
     };
 
     const target = containerRef.current;
-    if (target === null || typeof IntersectionObserver === "undefined") {
+    if (eager || target === null || typeof IntersectionObserver === "undefined") {
       void load();
     } else {
       observer = new IntersectionObserver(
@@ -80,7 +81,7 @@ function PageThumbnail({ snapshot, page }: PageThumbnailProps) {
       observer?.disconnect();
       if (objectUrl !== undefined) URL.revokeObjectURL(objectUrl);
     };
-  }, [page, snapshot.job, snapshot.manifest.revision]);
+  }, [eager, page, snapshot.job, snapshot.manifest.revision]);
 
   return (
     <div className="thumbnail" ref={containerRef} aria-busy={url === undefined && !failed}>
@@ -280,7 +281,7 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
                   }
                 }}
               >
-                <PageThumbnail snapshot={snapshot} page={page} />
+                <PageThumbnail snapshot={snapshot} page={page} eager={index === 0} />
                 <div className="page-card-body">
                   <div>
                     <strong>Trang {index + 1}</strong>
