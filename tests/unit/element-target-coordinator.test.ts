@@ -128,9 +128,7 @@ function pageHarness(): {
   restore: ReturnType<typeof vi.fn>;
 } {
   const prepare = vi.fn(() => Promise.resolve({ preparationId: "element-job" }));
-  const restore = vi.fn(() =>
-    Promise.resolve({ preparationId: "element-job", completed: true }),
-  );
+  const restore = vi.fn(() => Promise.resolve({ preparationId: "element-job", completed: true }));
   const cancel = vi.fn(() => Promise.resolve(true));
   return {
     service: { prepare, restore, cancel } as unknown as PagePreparationService,
