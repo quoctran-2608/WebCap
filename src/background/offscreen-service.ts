@@ -3,6 +3,11 @@ import type { ImageFormat } from "@shared/contracts/domain";
 import type { PdfEditorPage } from "@shared/contracts/pdf-editor";
 import { createOffscreenExportEditedPdfMessage } from "@shared/contracts/pdf-editor-offscreen";
 import {
+  createOffscreenPdfThumbnailMessage,
+  isOffscreenPdfThumbnailCreatedMessage,
+  type OffscreenPdfThumbnailMessage,
+} from "@shared/contracts/pdf-thumbnail-offscreen";
+import {
   createOffscreenCreateObjectUrlMessage,
   createOffscreenExportPdfMessage,
   createOffscreenPingMessage,
@@ -67,6 +72,8 @@ export interface ProcessImageOptions {
 export type ExportPdfOptions = OffscreenExportPdfMessage["payload"] & {
   pages?: PdfEditorPage[];
 };
+
+export type CreatePdfThumbnailOptions = OffscreenPdfThumbnailMessage["payload"];
 
 const OFFSCREEN_PATH = "offscreen.html";
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
@@ -215,6 +222,27 @@ export class OffscreenService {
       if (!isOffscreenPdfExportedMessage(response) || response.requestId !== request.requestId) {
         throw unavailableError(
           new TypeError("Offscreen processor returned an invalid PDF response."),
+        );
+      }
+      return response.payload;
+    });
+  }
+
+  async createPdfThumbnail(options: CreatePdfThumbnailOptions): Promise<ArtifactMetadata> {
+    return this.withDocument(async () => {
+      const request = createOffscreenPdfThumbnailMessage({
+        requestId: this.createRequestId(),
+        sentAt: this.now().toISOString(),
+        ...options,
+      });
+      const response = await this.runtime.sendMessage(request);
+      throwOffscreenError(response);
+      if (
+        !isOffscreenPdfThumbnailCreatedMessage(response) ||
+        response.requestId !== request.requestId
+      ) {
+        throw unavailableError(
+          new TypeError("Offscreen processor returned an invalid PDF thumbnail response."),
         );
       }
       return response.payload;

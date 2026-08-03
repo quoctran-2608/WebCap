@@ -1,13 +1,16 @@
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@shared/constants";
 import {
   createPdfEditorGetMessage,
+  createPdfEditorThumbnailGetMessage,
   createPdfEditorUpdateMessage,
   createPdfExportCancelMessage,
   isPdfEditorErrorMessage,
   isPdfEditorResponseMessage,
+  isPdfEditorThumbnailResponseMessage,
   type PdfEditorSnapshot,
   type PdfEditorUpdateAction,
 } from "@shared/contracts/pdf-editor";
+import type { ArtifactMetadata } from "@shared/contracts/artifact";
 import { createPdfEditorExportStartMessage } from "@shared/contracts/pdf-editor-export";
 
 function rejectAfter(timeoutMs: number): Promise<never> {
@@ -48,6 +51,31 @@ export function getPdfEditorSnapshot(jobId: string): Promise<PdfEditorSnapshot> 
       sentAt: new Date().toISOString(),
     }),
   );
+}
+
+export async function getPdfEditorThumbnail(
+  jobId: string,
+  manifestRevision: number,
+  pageId: string,
+): Promise<ArtifactMetadata> {
+  const request = createPdfEditorThumbnailGetMessage({
+    requestId: crypto.randomUUID(),
+    jobId,
+    manifestRevision,
+    pageId,
+    sentAt: new Date().toISOString(),
+  });
+  const response: unknown = await Promise.race([
+    chrome.runtime.sendMessage(request),
+    rejectAfter(DEFAULT_REQUEST_TIMEOUT_MS),
+  ]);
+  if (isPdfEditorErrorMessage(response)) {
+    throw new Error(response.payload.message);
+  }
+  if (!isPdfEditorThumbnailResponseMessage(response) || response.requestId !== request.requestId) {
+    throw new TypeError("Service worker returned an invalid PDF thumbnail response.");
+  }
+  return response.payload;
 }
 
 export function updatePdfEditor(

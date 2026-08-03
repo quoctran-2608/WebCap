@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { PROTOCOL_VERSION } from "@shared/constants";
+import { ArtifactMetadataSchema, type ArtifactMetadata } from "@shared/contracts/artifact";
 import {
   CaptureJobSchema,
   CaptureSettingsSchema,
@@ -75,6 +76,17 @@ export const PdfEditorGetMessageSchema = EnvelopeBaseSchema.extend({
   payload: z.object({ jobId: IdentifierSchema }).strict(),
 }).strict();
 
+export const PdfEditorThumbnailGetMessageSchema = EnvelopeBaseSchema.extend({
+  type: z.literal("PDF_EDITOR_THUMBNAIL_GET"),
+  payload: z
+    .object({
+      jobId: IdentifierSchema,
+      manifestRevision: NonNegativeIntegerSchema,
+      pageId: IdentifierSchema,
+    })
+    .strict(),
+}).strict();
+
 export const PdfEditorUpdateActionSchema = z.discriminatedUnion("kind", [
   z
     .object({
@@ -118,6 +130,18 @@ export const PdfEditorResponseMessageSchema = z
   })
   .strict();
 
+export const PdfEditorThumbnailResponseMessageSchema = z
+  .object({
+    protocolVersion: z.literal(PROTOCOL_VERSION),
+    requestId: IdentifierSchema,
+    source: z.literal("background"),
+    target: z.literal("editor"),
+    type: z.literal("PDF_EDITOR_THUMBNAIL_RESPONSE"),
+    payload: ArtifactMetadataSchema,
+    sentAt: IsoDateTimeSchema,
+  })
+  .strict();
+
 export const PdfEditorErrorMessageSchema = z
   .object({
     protocolVersion: z.literal(PROTOCOL_VERSION),
@@ -132,6 +156,7 @@ export const PdfEditorErrorMessageSchema = z
 
 export const PdfEditorRequestSchema = z.discriminatedUnion("type", [
   PdfEditorGetMessageSchema,
+  PdfEditorThumbnailGetMessageSchema,
   PdfEditorUpdateMessageSchema,
   PdfExportCancelMessageSchema,
 ]);
@@ -142,9 +167,13 @@ export type PdfEditorEstimate = z.infer<typeof PdfEditorEstimateSchema>;
 export type PdfEditorSnapshot = z.infer<typeof PdfEditorSnapshotSchema>;
 export type PdfEditorUpdateAction = z.infer<typeof PdfEditorUpdateActionSchema>;
 export type PdfEditorGetMessage = z.infer<typeof PdfEditorGetMessageSchema>;
+export type PdfEditorThumbnailGetMessage = z.infer<typeof PdfEditorThumbnailGetMessageSchema>;
 export type PdfEditorUpdateMessage = z.infer<typeof PdfEditorUpdateMessageSchema>;
 export type PdfExportCancelMessage = z.infer<typeof PdfExportCancelMessageSchema>;
 export type PdfEditorResponseMessage = z.infer<typeof PdfEditorResponseMessageSchema>;
+export type PdfEditorThumbnailResponseMessage = z.infer<
+  typeof PdfEditorThumbnailResponseMessageSchema
+>;
 export type PdfEditorErrorMessage = z.infer<typeof PdfEditorErrorMessageSchema>;
 export type PdfEditorRequest = z.infer<typeof PdfEditorRequestSchema>;
 
@@ -163,6 +192,24 @@ export function createPdfEditorGetMessage(
     target: "pdf-editor-background",
     type: "PDF_EDITOR_GET",
     payload: { jobId: options.jobId },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createPdfEditorThumbnailGetMessage(
+  options: MessageOptions & { jobId: string; manifestRevision: number; pageId: string },
+): PdfEditorThumbnailGetMessage {
+  return PdfEditorThumbnailGetMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "editor",
+    target: "pdf-editor-background",
+    type: "PDF_EDITOR_THUMBNAIL_GET",
+    payload: {
+      jobId: options.jobId,
+      manifestRevision: options.manifestRevision,
+      pageId: options.pageId,
+    },
     sentAt: options.sentAt,
   });
 }
@@ -217,6 +264,20 @@ export function createPdfEditorResponseMessage(
   });
 }
 
+export function createPdfEditorThumbnailResponseMessage(
+  options: MessageOptions & { artifact: ArtifactMetadata },
+): PdfEditorThumbnailResponseMessage {
+  return PdfEditorThumbnailResponseMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "editor",
+    type: "PDF_EDITOR_THUMBNAIL_RESPONSE",
+    payload: options.artifact,
+    sentAt: options.sentAt,
+  });
+}
+
 export function createPdfEditorErrorMessage(
   options: MessageOptions & { error: WebCapErrorData },
 ): PdfEditorErrorMessage {
@@ -252,11 +313,28 @@ export function parsePdfEditorRequest(value: unknown): Result<PdfEditorRequest, 
 export function isPdfEditorMessageType(value: unknown): boolean {
   if (typeof value !== "object" || value === null || !("type" in value)) return false;
   const type = (value as { type?: unknown }).type;
-  return type === "PDF_EDITOR_GET" || type === "PDF_EDITOR_UPDATE" || type === "PDF_EXPORT_CANCEL";
+  return (
+    type === "PDF_EDITOR_GET" ||
+    type === "PDF_EDITOR_THUMBNAIL_GET" ||
+    type === "PDF_EDITOR_UPDATE" ||
+    type === "PDF_EXPORT_CANCEL"
+  );
 }
 
 export function isPdfEditorResponseMessage(value: unknown): value is PdfEditorResponseMessage {
   return PdfEditorResponseMessageSchema.safeParse(value).success;
+}
+
+export function isPdfEditorThumbnailGetMessage(
+  value: unknown,
+): value is PdfEditorThumbnailGetMessage {
+  return PdfEditorThumbnailGetMessageSchema.safeParse(value).success;
+}
+
+export function isPdfEditorThumbnailResponseMessage(
+  value: unknown,
+): value is PdfEditorThumbnailResponseMessage {
+  return PdfEditorThumbnailResponseMessageSchema.safeParse(value).success;
 }
 
 export function isPdfEditorErrorMessage(value: unknown): value is PdfEditorErrorMessage {

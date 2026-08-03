@@ -17,10 +17,13 @@ import { summarizeJob } from "@shared/contracts/job";
 import {
   createPdfEditorErrorMessage,
   createPdfEditorResponseMessage,
+  createPdfEditorThumbnailResponseMessage,
   isPdfEditorMessageType,
+  isPdfEditorThumbnailGetMessage,
   parsePdfEditorRequest,
   type PdfEditorErrorMessage,
   type PdfEditorResponseMessage,
+  type PdfEditorThumbnailResponseMessage,
 } from "@shared/contracts/pdf-editor";
 import { isPdfEditorExportStartMessage } from "@shared/contracts/pdf-editor-export";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
@@ -34,11 +37,13 @@ import {
 import { PdfEditManifestRepository } from "@storage/pdf-edit-manifest-repository";
 import { IndexedDbTileRepository } from "@storage/tile-repository";
 
-export type PdfEditorRouterResponse = PdfEditorResponseMessage | PdfEditorErrorMessage;
+export type PdfEditorRouterResponse =
+  PdfEditorResponseMessage | PdfEditorThumbnailResponseMessage | PdfEditorErrorMessage;
 
 export interface PdfEditorRouterDependencies {
   editor: Pick<PdfEditorService, "get" | "update">;
   exporter: Pick<PdfExportService, "start" | "cancel">;
+  thumbnails: Pick<OffscreenService, "createPdfThumbnail">;
   now: () => Date;
 }
 
@@ -128,14 +133,16 @@ function defaultDependencies(): PdfEditorRouterDependencies {
     new JobSessionRepository(),
     () => new Date(),
   );
+  const offscreen = new OffscreenService();
   sharedDependencies = {
     editor: new PdfEditorService({ jobs: coordinator, manifests }),
     exporter: new PdfExportService({
       jobs: coordinator,
       tiles: new IndexedDbTileRepository(),
-      offscreen: new OffscreenService(),
+      offscreen,
       manifests,
     }),
+    thumbnails: offscreen,
     now: () => new Date(),
   };
   void new IndexedDbArtifactRepository()
@@ -168,6 +175,31 @@ export async function routePdfEditorMessage(
   if (requestId === undefined) return undefined;
 
   try {
+    if (isPdfEditorThumbnailGetMessage(message)) {
+      const snapshot = await dependencies.editor.get(message.payload.jobId);
+      if (snapshot.manifest.revision !== message.payload.manifestRevision) {
+        throw new Error("The PDF editor thumbnail request uses a stale manifest revision.");
+      }
+      const page = snapshot.manifest.pages.find(
+        (candidate) => candidate.id === message.payload.pageId,
+      );
+      if (page === undefined) {
+        throw new Error("The requested PDF editor page does not exist.");
+      }
+      const artifact = await dependencies.thumbnails.createPdfThumbnail({
+        jobId: snapshot.job.id,
+        manifestRevision: snapshot.manifest.revision,
+        page,
+        tiles: snapshot.job.tilePlan,
+        expiresAt: snapshot.job.expiresAt,
+      });
+      return createPdfEditorThumbnailResponseMessage({
+        requestId,
+        artifact,
+        sentAt: dependencies.now().toISOString(),
+      });
+    }
+
     if (isPdfEditorExportStartMessage(message)) {
       await dependencies.exporter.start(message.payload.jobId);
       return createPdfEditorResponseMessage({

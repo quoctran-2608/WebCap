@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { downloadArtifact } from "@popup/worker-client";
+import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
 import type {
   PdfEditorPage,
   PdfEditorSettings,
@@ -9,10 +10,12 @@ import type {
 import {
   cancelPdfEditorExport,
   getPdfEditorSnapshot,
+  getPdfEditorThumbnail,
   startPdfEditorExport,
   updatePdfEditor,
 } from "./editor-client";
-import { createPdfPageThumbnail } from "./thumbnail-service";
+
+const artifacts = new IndexedDbArtifactRepository();
 
 function formatBytes(value: number): string {
   if (value < 1_024) return `${value} B`;
@@ -42,15 +45,14 @@ function PageThumbnail({ snapshot, page }: PageThumbnailProps) {
 
     const load = async () => {
       try {
-        const thumbnail = await createPdfPageThumbnail({
-          jobId: snapshot.job.id,
-          manifestRevision: snapshot.manifest.revision,
-          page,
-          tiles: snapshot.job.tilePlan,
-          expiresAt: snapshot.job.expiresAt,
-        });
-        if (!active) return;
-        objectUrl = URL.createObjectURL(thumbnail.blob);
+        const metadata = await getPdfEditorThumbnail(
+          snapshot.job.id,
+          snapshot.manifest.revision,
+          page.id,
+        );
+        const record = await artifacts.get(metadata.artifactId);
+        if (!active || record?.blob === undefined) return;
+        objectUrl = URL.createObjectURL(record.blob);
         setUrl(objectUrl);
       } catch {
         if (active) setFailed(true);

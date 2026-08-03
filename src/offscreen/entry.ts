@@ -1,4 +1,10 @@
+import { createPdfPageThumbnail } from "@editor/thumbnail-service";
 import { isOffscreenExportEditedPdfMessage } from "@shared/contracts/pdf-editor-offscreen";
+import {
+  createOffscreenPdfThumbnailCreatedMessage,
+  isOffscreenPdfThumbnailMessage,
+  type OffscreenPdfThumbnailCreatedMessage,
+} from "@shared/contracts/pdf-thumbnail-offscreen";
 import {
   OffscreenPdfExportProgressAckMessageSchema,
   createOffscreenErrorMessage,
@@ -18,6 +24,8 @@ import { IndexedDbTileRepository } from "@storage/tile-repository";
 import { ImageProcessor } from "./image-processor";
 import { ObjectUrlRegistry } from "./object-url-registry";
 import { PdfExporter, type PdfExportPayload, type PdfExportProgress } from "./pdf-exporter";
+
+export type OffscreenRouterResponse = OffscreenResponse | OffscreenPdfThumbnailCreatedMessage;
 
 export interface OffscreenRouterDependencies {
   processor: ImageProcessor;
@@ -84,7 +92,30 @@ async function exportPdf(
 export async function routeOffscreenMessage(
   message: unknown,
   dependencies: OffscreenRouterDependencies = defaultDependencies,
-): Promise<OffscreenResponse | undefined> {
+): Promise<OffscreenRouterResponse | undefined> {
+  if (isOffscreenPdfThumbnailMessage(message)) {
+    try {
+      const thumbnail = await createPdfPageThumbnail(message.payload);
+      return createOffscreenPdfThumbnailCreatedMessage({
+        requestId: message.requestId,
+        artifact: thumbnail.metadata,
+        sentAt: dependencies.now().toISOString(),
+      });
+    } catch (error) {
+      return createOffscreenErrorMessage({
+        requestId: message.requestId,
+        error: normalizeError(error, {
+          code: "E_EXPORT_FAILED",
+          stage: "process",
+          userMessageKey: "errors.exportFailed",
+          retryable: true,
+          fallbackAllowed: false,
+        }),
+        sentAt: dependencies.now().toISOString(),
+      });
+    }
+  }
+
   if (isOffscreenExportEditedPdfMessage(message)) {
     try {
       return await exportPdf(message.requestId, message.payload, dependencies);
