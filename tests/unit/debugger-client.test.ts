@@ -15,30 +15,26 @@ class FakeDebuggerAdapter implements ChromeDebuggerAdapter {
   commandError: unknown;
   commandResult: unknown = { ok: true };
 
-  async attach(target: DebuggerTarget, version: string): Promise<void> {
+  attach(target: DebuggerTarget, version: string): Promise<void> {
     this.calls.push(`attach:${target.tabId}:${version}`);
-    if (this.attachError !== undefined) {
-      throw this.attachError;
-    }
+    return this.attachError === undefined ? Promise.resolve() : Promise.reject(this.attachError);
   }
 
-  async detach(target: DebuggerTarget): Promise<void> {
+  detach(target: DebuggerTarget): Promise<void> {
     this.calls.push(`detach:${target.tabId}`);
-    if (this.detachError !== undefined) {
-      throw this.detachError;
-    }
+    return this.detachError === undefined ? Promise.resolve() : Promise.reject(this.detachError);
   }
 
-  async sendCommand(
+  sendCommand(
     target: DebuggerTarget,
     method: string,
-    _commandParams?: Record<string, unknown>,
+    commandParams?: Record<string, unknown>,
   ): Promise<unknown> {
+    void commandParams;
     this.calls.push(`command:${target.tabId}:${method}`);
-    if (this.commandError !== undefined) {
-      throw this.commandError;
-    }
-    return this.commandResult;
+    return this.commandError === undefined
+      ? Promise.resolve(this.commandResult)
+      : Promise.reject(this.commandError);
   }
 
   addDetachListener(listener: DebuggerDetachListener): () => void {
@@ -92,7 +88,7 @@ describe("DebuggerClient", () => {
     const client = new DebuggerClient(adapter);
 
     const error = await client
-      .withSession(7, async () => undefined)
+      .withSession(7, () => Promise.resolve(undefined))
       .catch((value: unknown) => value);
 
     expectRuntimeError(error, "E_DEBUGGER_ATTACH");
@@ -135,7 +131,7 @@ describe("DebuggerClient", () => {
     await vi.waitFor(() => expect(adapter.calls).toContain("attach:5:0.1"));
 
     const error = await client
-      .withSession(5, async () => undefined)
+      .withSession(5, () => Promise.resolve(undefined))
       .catch((value: unknown) => value);
     expectRuntimeError(error, "E_DEBUGGER_ATTACH");
 
@@ -148,7 +144,9 @@ describe("DebuggerClient", () => {
     adapter.detachError = new Error("Detach transport failed");
     const client = new DebuggerClient(adapter);
 
-    const error = await client.withSession(2, async () => "done").catch((value: unknown) => value);
+    const error = await client
+      .withSession(2, () => Promise.resolve("done"))
+      .catch((value: unknown) => value);
     expectRuntimeError(error, "E_CLEANUP_PARTIAL");
   });
 
@@ -157,6 +155,6 @@ describe("DebuggerClient", () => {
     adapter.detachError = new Error("Debugger is not attached to the tab");
     const client = new DebuggerClient(adapter);
 
-    await expect(client.withSession(2, async () => "done")).resolves.toBe("done");
+    await expect(client.withSession(2, () => Promise.resolve("done"))).resolves.toBe("done");
   });
 });
