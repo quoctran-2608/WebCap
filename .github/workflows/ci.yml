@@ -39,10 +39,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Format S09 branch
+      - name: Format and complete S09 branch
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/s09-cdp-full-page-capture'
         run: |
+          node scripts/complete-s09-plan.mjs
           pnpm exec prettier --write \
+            PLAN.md \
+            README.md \
+            CHANGELOG.md \
+            docs/manual-testing.md \
             src/background/full-page-capture-coordinator.ts \
             src/background/persistent-job-router.ts \
             src/capture/cdp-capture-engine.ts \
@@ -52,12 +57,12 @@ jobs:
             tests/unit/cdp-capture-engine.test.ts \
             tests/unit/full-page-capture-coordinator.test.ts \
             tests/unit/persistent-job-router.test.ts
-          rm -f .github/workflows/format-s09.yml
+          rm -f scripts/complete-s09-plan.mjs .github/workflows/format-s09.yml
           if ! git diff --quiet; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add -A
-            git commit -m "Format S09 full-page capture changes"
+            git commit -m "Complete S09 roadmap and documentation"
             git push origin HEAD:${GITHUB_HEAD_REF}
           fi
 
