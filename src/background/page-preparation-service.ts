@@ -5,15 +5,12 @@ import {
   createPagePreparationCancelMessage,
   createPagePreparationPrepareMessage,
   createPagePreparationRestoreMessage,
-  createPagePreparationScrollMessage,
   parsePagePreparationResponse,
   type PagePreparationCleanupReport,
   type PagePreparationOptions,
   type PagePreparationReadyPayload,
   type PagePreparationResponse,
-  type PagePreparationScrollPayload,
 } from "@shared/contracts/page-preparation";
-import type { FixedElementMode } from "@shared/contracts/domain";
 import {
   createWebCapError,
   createWebCapRuntimeError,
@@ -25,19 +22,6 @@ export interface PreparePageOptions {
   tabId: number;
   preparationId: string;
   options?: Partial<PagePreparationOptions>;
-}
-
-export interface ScrollPreparedPageOptions {
-  tabId: number;
-  preparationId: string;
-  scrollX: number;
-  scrollY: number;
-  tileIndex: number;
-  totalTiles: number;
-  fixedElementMode: FixedElementMode;
-  settleMs: number;
-  expectedDocumentWidth: number;
-  expectedDocumentHeight: number;
 }
 
 export interface PagePreparationServiceOptions {
@@ -62,21 +46,6 @@ function activeConflict(tabId: number, preparationId: string): Error {
       retryable: true,
       fallbackAllowed: false,
       causeCode: "ActivePreparationConflict",
-      safeContext: { tabId, preparationId },
-    }),
-  );
-}
-
-function missingPreparation(tabId: number, preparationId: string): Error {
-  return createWebCapRuntimeError(
-    createWebCapError({
-      code: "E_PROTOCOL_MESSAGE",
-      stage: "protocol",
-      message: "The prepared page session is unavailable for scrolling.",
-      userMessageKey: "errors.pagePreparationMissing",
-      retryable: true,
-      fallbackAllowed: false,
-      causeCode: "PreparationSessionMissing",
       safeContext: { tabId, preparationId },
     }),
   );
@@ -172,39 +141,6 @@ export class PagePreparationService {
         }
       });
     return pending;
-  }
-
-  async scrollForCapture(options: ScrollPreparedPageOptions): Promise<PagePreparationScrollPayload> {
-    const active = this.activeByTab.get(options.tabId);
-    if (active === undefined || active.preparationId !== options.preparationId) {
-      throw missingPreparation(options.tabId, options.preparationId);
-    }
-    await active.pending;
-
-    const response = await this.send(
-      options.tabId,
-      createPagePreparationScrollMessage({
-        requestId: this.createRequestId(),
-        preparationId: options.preparationId,
-        sentAt: this.now().toISOString(),
-        scrollX: options.scrollX,
-        scrollY: options.scrollY,
-        tileIndex: options.tileIndex,
-        totalTiles: options.totalTiles,
-        fixedElementMode: options.fixedElementMode,
-        settleMs: options.settleMs,
-        expectedDocumentWidth: options.expectedDocumentWidth,
-        expectedDocumentHeight: options.expectedDocumentHeight,
-      }),
-    );
-    const error = responseError(response);
-    if (error !== undefined) {
-      throw error;
-    }
-    if (response.type !== "PAGE_PREPARATION_SCROLLED") {
-      throw invalidResponseError("PAGE_PREPARATION_SCROLLED", response.type);
-    }
-    return response.payload;
   }
 
   async restore(tabId: number, preparationId: string): Promise<PagePreparationCleanupReport> {
