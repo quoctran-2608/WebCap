@@ -8,6 +8,7 @@ export default defineConfig({
       "@background": resolve(import.meta.dirname, "src/background"),
       "@capture": resolve(import.meta.dirname, "src/capture"),
       "@content": resolve(import.meta.dirname, "src/content"),
+      "@editor": resolve(import.meta.dirname, "src/editor"),
       "@popup": resolve(import.meta.dirname, "src/popup"),
       "@offscreen": resolve(import.meta.dirname, "src/offscreen"),
       "@shared": resolve(import.meta.dirname, "src/shared"),
