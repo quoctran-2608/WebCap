@@ -78,10 +78,7 @@ export function estimatePdfExportMemory(input: PdfMemoryGuardInput): PdfMemoryEs
   const tileBytes = finiteNonNegative(input.tileBytes, "tileBytes");
   const pageCount = integerNonNegative(input.pageCount, "pageCount");
   const maxPagePixelArea = finitePositive(input.maxPagePixelArea, "maxPagePixelArea");
-  const largestTilePixelArea = finitePositive(
-    input.largestTilePixelArea,
-    "largestTilePixelArea",
-  );
+  const largestTilePixelArea = finitePositive(input.largestTilePixelArea, "largestTilePixelArea");
   const jpegQuality = qualityValue(input.jpegQuality);
   const heapLimitBytes =
     input.heapLimitBytes === undefined
