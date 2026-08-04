@@ -16,7 +16,7 @@ concurrency:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Check out repository
@@ -48,6 +48,9 @@ jobs:
 
       - name: Unit tests
         run: pnpm test:unit
+
+      - name: PDF performance benchmark
+        run: pnpm benchmark:pdf
 
       - name: Build extension
         run: pnpm build
