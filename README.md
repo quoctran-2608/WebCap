@@ -33,7 +33,8 @@ pnpm lint          # Run ESLint with zero warnings allowed.
 pnpm format:check  # Verify formatting without modifying files.
 pnpm format        # Format tracked source/configuration files.
 pnpm test:unit     # Run the unit-test suite once.
-pnpm benchmark:pdf    # Run repeatable long-page PDF reference benchmarks.
+pnpm benchmark:pdf # Run repeatable long-page PDF reference benchmarks.
+pnpm test:e2e       # Run the persistent-Chromium extension regression suite.
 pnpm test:smoke    # Smoke-test the built popup ↔ service-worker handshake in Chrome.
 pnpm test          # Run Vitest in watch mode.
 pnpm package       # Build and verify the unpacked extension; ZIP packaging comes later.
