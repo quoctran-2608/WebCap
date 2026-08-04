@@ -82,7 +82,8 @@ export function estimatePdfExportMemory(input: PdfMemoryGuardInput): PdfMemoryEs
       ? DEFAULT_HEAP_LIMIT_BYTES
       : finitePositive(input.heapLimitBytes, "heapLimitBytes");
 
-  const totalPixels = Math.ceil(widthCss * renderScaleX) * Math.ceil(heightCss * renderScaleY);
+  const totalPixels =
+    Math.ceil(widthCss * renderScaleX) * Math.ceil(heightCss * renderScaleY);
   const estimatedPageRgbaBytes = Math.ceil(maxPagePixelArea * 4);
   const estimatedDecodedTileBytes = Math.ceil(largestTilePixelArea * 4);
   const estimatedEncodedPageBytes = Math.ceil(
@@ -118,7 +119,9 @@ export function estimatePdfExportMemory(input: PdfMemoryGuardInput): PdfMemoryEs
   };
 }
 
-export function assertPdfExportMemorySafe(input: PdfMemoryGuardInput): PdfMemoryEstimate {
+export function assertPdfExportMemorySafe(
+  input: PdfMemoryGuardInput,
+): PdfMemoryEstimate {
   const estimate = estimatePdfExportMemory(input);
   if (!estimate.shouldBlock) return estimate;
 
