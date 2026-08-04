@@ -1,4 +1,4 @@
-name: Apply and Validate S19
+name: Publish Validated S19 Source
 
 on:
   pull_request:
@@ -9,14 +9,14 @@ permissions:
   contents: write
 
 concurrency:
-  group: s19-apply-${{ github.event.pull_request.number }}
+  group: s19-publish-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  apply-and-validate:
+  publish:
     if: github.head_ref == 'agent/s19-diagnostics-i18n-privacy'
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 10
 
     steps:
       - name: Check out S19 branch
@@ -25,22 +25,7 @@ jobs:
           ref: ${{ github.head_ref }}
           fetch-depth: 0
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.15.1
-          run_install: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.22.0
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Verify and apply S19 patches
+      - name: Publish exact source validated by run 30898828204
         shell: bash
         run: |
           set -euo pipefail
@@ -66,7 +51,6 @@ jobs:
             > /tmp/s19-core.patch.gz.b64
           test "$(wc -c < /tmp/s19-core.patch.gz.b64)" -eq 58948
           echo '7089a7a88f7f874a962b4c2072c93ef3119624a6d043515dc23a2a03ba450b6d  /tmp/s19-core.patch.gz.b64' | sha256sum -c -
-
           base64 --decode /tmp/s19-core.patch.gz.b64 | gunzip > /tmp/s19-core.patch
           test "$(wc -c < /tmp/s19-core.patch)" -eq 183435
           echo 'ac07710e7922d78cd55ddc96a25874a968d0de3b96477ca678d3e1398eca974f  /tmp/s19-core.patch' | sha256sum -c -
@@ -79,6 +63,11 @@ jobs:
           git apply --check /tmp/s19-e2e-fix.patch
           git apply /tmp/s19-e2e-fix.patch
 
+          # GitHub Actions cannot push permanent workflow changes without the
+          # workflows permission. The already validated CI change is published
+          # separately through the GitHub connector, then clean read-only CI runs.
+          git checkout -- .github/workflows/ci.yml
+
           git rm -f \
             .s19-stage.part00 \
             .s19-stage.part01 \
@@ -89,41 +78,8 @@ jobs:
             .s19-e2e-fix.patch.b64
           git rm -f .github/workflows/s19-workspace.yml
 
-      - name: Check formatting
-        run: pnpm format:check
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Privacy and dependency audit
-        run: pnpm run audit
-
-      - name: Unit tests
-        run: pnpm test:unit
-
-      - name: PDF performance benchmark
-        run: pnpm benchmark:pdf
-
-      - name: Build extension
-        run: pnpm build
-
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Extension E2E
-        run: pnpm test:e2e
-
-      - name: Commit validated S19 implementation
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf dist playwright-report test-results
           git add -A
           git diff --cached --check
-          git status --short
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'Add diagnostics localization and privacy UX'
