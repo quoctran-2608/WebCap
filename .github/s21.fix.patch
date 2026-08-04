@@ -165,3 +165,21 @@ index 07287e5..3128176 100644
      expect(current.getVisibleSession()).toBeUndefined();
      expect(report).toMatchObject({
        cancellationAttempted: true,
+diff --git a/tests/unit/image-export-service.test.ts b/tests/unit/image-export-service.test.ts
+index b549bfe..36fa5ca 100644
+--- a/tests/unit/image-export-service.test.ts
++++ b/tests/unit/image-export-service.test.ts
+@@ -1,4 +1,4 @@
+-import { describe, expect, it } from "vitest";
++import { describe, expect, it, vi } from "vitest";
+ 
+ import type { OffscreenService } from "@background/offscreen-service";
+ import type { DownloadService } from "@background/download-service";
+@@ -172,6 +172,7 @@ describe("ImageExportService", () => {
+       format: "png",
+       quality: 1,
+     });
++    await vi.waitFor(() => expect(resolveProcessing).toBeTypeOf("function"));
+     const cancelPromise = service.cancelBySourceArtifactId("source-1");
+     resolveProcessing({} as never);
+ 
