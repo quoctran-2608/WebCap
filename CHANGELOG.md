@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Persisted Vietnamese and English localization shared by the popup, PDF editor, region selector, element selector, restricted-page guidance, permission rationale, and every user-facing WebCap error code, with deterministic fallback that never exposes raw translation keys.
+- Copyable versioned diagnostics JSON built from an explicit technical allowlist, plus normalized remote errors that retain safe codes/details while excluding URLs, page text, selectors, credentials, tokens, cookies, image data, and binary payloads.
+- Production logger hardening with `warn` as the default threshold and a single safe-context boundary for finite counters and approved identifiers only.
+- Contextual optional-permission explanations, local-first privacy documentation, restricted-Chrome-page guidance, keyboard/live-region/semantic-label/reduced-motion improvements, and browser coverage for locale persistence and diagnostics copying.
+- Permanent `pnpm run audit` CI checks for remote executable code, analytics SDKs, unsafe diagnostic fields, default host permissions, direct dependency licenses, and lockfile inventory; all 18 direct packages are MIT or Apache-2.0 with zero incompatible direct licenses.
+- The S19 clean read-only reference gate passes 276 unit tests across 78 files, four PDF benchmark scenarios, the verified Manifest V3 build, and 35 Playwright E2E cases, including trust UX and all S05–S18 regressions.
 - Bounded lazy/infinite-page preparation with explicit completion reasons for stable height, maximum CSS height, elapsed duration, tile limit, and user-requested stop.
 - Partial-capture metadata and popup warnings that preserve only a safe contiguous stored prefix, allow the user to keep captured tiles, and never represent guard-limited output as complete.
 - Temporary scroll-snap suppression with compare-before-restore cleanup plus bounded layout-shift settling before measurement and capture.
