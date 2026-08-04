@@ -8,12 +8,12 @@ The benchmark must demonstrate that WebCap can export long captures without crea
 
 The required reference scenarios are:
 
-| Scenario | CSS dimensions | Purpose |
-| --- | ---: | --- |
-| Standard 10k | 1,440 × 10,000 | Common long landing page |
-| Standard 30k | 1,440 × 30,000 | Large article or report |
-| Standard 100k | 1,440 × 100,000 | MVP long-page target |
-| Wide 30k | 4,096 × 30,000 | Wide table and horizontal-content stress |
+| Scenario      |  CSS dimensions | Purpose                                  |
+| ------------- | --------------: | ---------------------------------------- |
+| Standard 10k  |  1,440 × 10,000 | Common long landing page                 |
+| Standard 30k  |  1,440 × 30,000 | Large article or report                  |
+| Standard 100k | 1,440 × 100,000 | MVP long-page target                     |
+| Wide 30k      |  4,096 × 30,000 | Wide table and horizontal-content stress |
 
 ## Commands
 
@@ -25,7 +25,7 @@ pnpm benchmark:pdf
 The benchmark prints one JSON line per scenario with the prefix field:
 
 ```json
-{"type":"webcap-pdf-benchmark"}
+{ "type": "webcap-pdf-benchmark" }
 ```
 
 This makes the measurements easy to extract from GitHub Actions logs without parsing human-formatted test output.
