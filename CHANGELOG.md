@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Typed PDF-source capability model for non-PDF, original passthrough, viewer capture, authentication-required, and unsupported sources using permitted URL, content-type, and Chrome PDF viewer signals.
+- Explicit optional-origin and `file:///*` permission flow that runs only after user intent and leaves image capture available when permission is denied.
+- Original PDF byte passthrough with active-tab revalidation, credential-context fetch, 128 MiB guard, `%PDF-` verification, SHA-256/size metadata, unchanged local IndexedDB Blob persistence, and download through the existing object-URL lifecycle without rasterization.
+- Public `.pdf`, content-type-only PDF, and authentication-required fixtures; the S17 reference gate passes 265 unit tests across 74 files, four PDF benchmarks, the Manifest V3 build, and 26 Playwright E2E cases with zero artifact creation on auth failure.
 - Full scrollable-area selection using computed overflow, client/scroll dimensions, sanitized candidate labels, and explicit visible-bounds versus full-scroll-content intent.
 - Opaque content-runtime scroll-target snapshots with same-node revalidation, stale-target rejection, bounded settle checks, and exact restoration of container/document scroll and WebCap-owned inline mutations.
 - Dedicated two-dimensional internal-scroll capture engine using rate-limited `captureVisibleTab`, container content-box crop metadata, overlap-aware logical output rectangles, and immediate local Blob persistence.

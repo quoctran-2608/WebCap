@@ -5,12 +5,15 @@ import iconData from "../../assets/icons.json";
 import { FOUNDATION_CAPABILITIES, type CaptureCapabilities } from "@shared/capabilities";
 import type { CaptureJob, CaptureMode, ImageFormat, OutputFormat } from "@shared/contracts/domain";
 import type { TabCapabilityPayload } from "@shared/contracts/messages";
+import type { PdfOriginalDownload, PdfSourceCapability } from "@shared/contracts/pdf-source";
 import type {
   VisibleSessionSnapshot,
   VisibleSessionStatus,
 } from "@shared/contracts/visible-session";
 
 import { createArtifactPreview } from "./artifact-preview";
+import { downloadOriginalPdf, inspectPdfSource } from "./pdf-source-client";
+import { requestPdfSourcePermission } from "./pdf-source-permission";
 import { estimateOutputBytes, formatBytes } from "./formatting";
 import {
   cancelFullPageCapture,
@@ -95,6 +98,48 @@ function errorMessage(error: unknown): string {
     : "WebCap không thể hoàn tất thao tác.";
 }
 
+function pdfCapabilityCopy(capability: PdfSourceCapability): { title: string; detail: string } {
+  if (capability.status === "auth-required") {
+    return {
+      title: "Nguồn PDF cần đăng nhập",
+      detail:
+        "Đăng nhập trong tab hiện tại rồi kiểm tra lại. WebCap không đọc hoặc ghi log thông tin đăng nhập.",
+    };
+  }
+  if (capability.status === "viewer-capture") {
+    return {
+      title: "Không thể lấy byte PDF gốc",
+      detail:
+        "Bạn vẫn có thể chụp phần PDF đang hiển thị bằng chế độ toàn trang, vùng chọn hoặc vùng cuộn.",
+    };
+  }
+  if (capability.status === "unsupported") {
+    return {
+      title: "Nguồn PDF không được hỗ trợ",
+      detail:
+        "Chrome không cho phép WebCap truy cập trực tiếp nguồn này. Có thể dùng chụp ảnh nếu tab vẫn hiển thị nội dung.",
+    };
+  }
+  if (capability.permission === "file-access-required") {
+    return {
+      title: "Cần bật quyền truy cập file",
+      detail:
+        "Mở trang quản lý tiện ích của Chrome, bật “Cho phép truy cập vào URL của tệp”, rồi mở lại popup.",
+    };
+  }
+  if (capability.permission === "host-required") {
+    return {
+      title: "Có thể tải PDF nguyên bản",
+      detail:
+        "WebCap chỉ xin quyền cho đúng nguồn PDF này khi bạn bấm tải; byte tài liệu không được gửi lên máy chủ.",
+    };
+  }
+  return {
+    title: "Có thể tải PDF nguyên bản",
+    detail: "WebCap sẽ giữ nguyên byte PDF, kiểm tra chữ ký và tải xuống mà không rasterize lại.",
+  };
+}
+
 function tiledStatusCopy(job: CaptureJob): string {
   if (job.mode === "element") {
     if (job.state === "created") return "Chọn phần tử trực tiếp trên trang…";
@@ -143,6 +188,11 @@ export function App(): React.JSX.Element {
   const [localStatus, setLocalStatus] = useState<UiStatus>("idle");
   const [previewUrl, setPreviewUrl] = useState<string>();
   const [uiError, setUiError] = useState<string>();
+  const [pdfCapability, setPdfCapability] = useState<PdfSourceCapability>();
+  const [pdfInspecting, setPdfInspecting] = useState(false);
+  const [pdfDownloading, setPdfDownloading] = useState(false);
+  const [pdfDownload, setPdfDownload] = useState<PdfOriginalDownload>();
+  const [pdfError, setPdfError] = useState<string>();
   const resumedSessionRef = useRef<string | undefined>(undefined);
   const activeCaptureRequestIdRef = useRef<string | undefined>(undefined);
   const feedbackHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -220,6 +270,38 @@ export function App(): React.JSX.Element {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    setPdfDownload(undefined);
+    setPdfError(undefined);
+    if (
+      workerStatus !== "connected" ||
+      tabCapability.status === "unavailable" ||
+      tabCapability.tabId === undefined
+    ) {
+      setPdfCapability(undefined);
+      return () => {
+        active = false;
+      };
+    }
+
+    setPdfInspecting(true);
+    void inspectPdfSource()
+      .then((capability) => {
+        if (active) setPdfCapability(capability);
+      })
+      .catch((error: unknown) => {
+        if (active) setPdfError(errorMessage(error));
+      })
+      .finally(() => {
+        if (active) setPdfInspecting(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [tabCapability.status, tabCapability.tabId, workerStatus]);
 
   const status: UiStatus = localStatus === "idle" ? (session?.status ?? "idle") : localStatus;
   const visibleBusy = status === "capturing" || status === "processing" || status === "downloading";
@@ -587,6 +669,56 @@ export function App(): React.JSX.Element {
     window.close();
   }, [fullPageJob]);
 
+  const handleRefreshPdfSource = useCallback(async (): Promise<void> => {
+    setPdfInspecting(true);
+    setPdfError(undefined);
+    try {
+      setPdfCapability(await inspectPdfSource());
+    } catch (error) {
+      setPdfError(errorMessage(error));
+    } finally {
+      setPdfInspecting(false);
+    }
+  }, []);
+
+  const handleOriginalPdfDownload = useCallback(async (): Promise<void> => {
+    if (pdfCapability?.tabId === undefined) return;
+    setPdfDownloading(true);
+    setPdfDownload(undefined);
+    setPdfError(undefined);
+    try {
+      const granted = await requestPdfSourcePermission(pdfCapability);
+      if (!granted) {
+        setPdfError(
+          pdfCapability.permission === "file-access-required"
+            ? "Chrome chưa cho phép WebCap đọc file cục bộ. Bật quyền truy cập URL của tệp trong trang quản lý tiện ích rồi thử lại."
+            : "Bạn đã từ chối quyền cho nguồn PDF. Luồng chụp ảnh của WebCap vẫn sử dụng được.",
+        );
+        return;
+      }
+
+      const refreshed = await inspectPdfSource();
+      setPdfCapability(refreshed);
+      if (refreshed.permission !== "granted") {
+        setPdfError("Chrome chưa cấp quyền cần thiết cho nguồn PDF này.");
+        return;
+      }
+
+      const result = await downloadOriginalPdf(pdfCapability.tabId);
+      if ("artifact" in result) {
+        setPdfDownload(result);
+        setPdfCapability(result.capability);
+      } else {
+        setPdfCapability(result);
+        setPdfError(pdfCapabilityCopy(result).detail);
+      }
+    } catch (error) {
+      setPdfError(errorMessage(error));
+    } finally {
+      setPdfDownloading(false);
+    }
+  }, [pdfCapability]);
+
   const sourceEstimate =
     session?.source === undefined
       ? undefined
@@ -639,6 +771,96 @@ export function App(): React.JSX.Element {
           </strong>
         </div>
       </section>
+
+      {(pdfInspecting || (pdfCapability !== undefined && pdfCapability.status !== "not-pdf")) && (
+        <section
+          className="pdf-source-card"
+          aria-labelledby="pdf-source-title"
+          aria-busy={pdfInspecting || pdfDownloading}
+          data-testid="pdf-source-card"
+          data-status={pdfCapability?.status ?? "checking"}
+          data-permission={pdfCapability?.permission ?? "not-required"}
+        >
+          <div className="section-heading">
+            <div>
+              <p className="section-heading__eyebrow">NGUỒN PDF</p>
+              <h2 id="pdf-source-title">
+                {pdfInspecting
+                  ? "Đang kiểm tra nguồn PDF…"
+                  : pdfCapability === undefined
+                    ? "Nguồn PDF"
+                    : pdfCapabilityCopy(pdfCapability).title}
+              </h2>
+            </div>
+            <span className="planned-badge">S17</span>
+          </div>
+
+          {pdfCapability !== undefined && (
+            <>
+              <p className="pdf-source-card__detail">{pdfCapabilityCopy(pdfCapability).detail}</p>
+              <dl className="pdf-source-metadata">
+                <div>
+                  <dt>Nguồn</dt>
+                  <dd>{pdfCapability.sourceLabel ?? "Tab hiện tại"}</dd>
+                </div>
+                <div>
+                  <dt>Tệp</dt>
+                  <dd>{pdfCapability.filename ?? "document.pdf"}</dd>
+                </div>
+              </dl>
+            </>
+          )}
+
+          {pdfCapability?.status === "original-passthrough" && (
+            <button
+              className="primary-action"
+              type="button"
+              disabled={pdfInspecting || pdfDownloading || pdfCapability.tabId === undefined}
+              onClick={() => void handleOriginalPdfDownload()}
+            >
+              {pdfDownloading
+                ? "Đang kiểm tra và tải PDF…"
+                : pdfCapability.permission === "host-required"
+                  ? "Cho phép nguồn và tải PDF gốc"
+                  : pdfCapability.permission === "file-access-required"
+                    ? "Kiểm tra quyền file và tải PDF gốc"
+                    : "Tải PDF gốc"}
+            </button>
+          )}
+
+          {(pdfCapability?.status === "auth-required" ||
+            pdfCapability?.status === "viewer-capture") && (
+            <button
+              className="secondary-action"
+              type="button"
+              disabled={pdfInspecting || pdfDownloading}
+              onClick={() => void handleRefreshPdfSource()}
+            >
+              Kiểm tra lại nguồn PDF
+            </button>
+          )}
+
+          {pdfDownload !== undefined && (
+            <div
+              className="feedback feedback--success"
+              data-testid="pdf-source-download-success"
+              data-download-id={pdfDownload.downloadId}
+              data-checksum={pdfDownload.checksumSha256}
+            >
+              <strong>PDF nguyên bản đã được gửi tới Chrome Downloads.</strong>
+              <small>
+                {formatBytes(pdfDownload.originalByteLength)} · SHA-256{" "}
+                {pdfDownload.checksumSha256.slice(0, 12)}…
+              </small>
+            </div>
+          )}
+          {pdfError !== undefined && (
+            <div className="feedback feedback--error" role="alert">
+              <p>{pdfError}</p>
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="capture-panel" aria-labelledby="capture-title" aria-busy={busy}>
         <div className="section-heading">

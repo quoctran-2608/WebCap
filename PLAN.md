@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S17
+current_session: S18
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -115,8 +115,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | S14 | M4 | Editor, PDF options và export retry | S13 | 20k–28k | DONE |
 | S15 | M4 | PDF benchmarks, integrity và memory guards | S14 | 18k–26k | DONE |
 | S16 | M5 | Scrollable-container detection và capture | S15 | 22k–30k | DONE |
-| S17 | M5 | PDF source detection và original passthrough | S16 | 18k–26k | NEXT |
-| S18 | M6 | Hardening lazy/infinite/iframe/canvas/WebGL | S17 | 22k–30k | READY |
+| S17 | M5 | PDF source detection và original passthrough | S16 | 18k–26k | DONE |
+| S18 | M6 | Hardening lazy/infinite/iframe/canvas/WebGL | S17 | 22k–30k | NEXT |
 | S19 | M6 | Diagnostics, i18n, privacy và permissions | S18 | 18k–26k | READY |
 | S20 | M6 | Release candidate, packaging và store readiness | S19 | 18k–26k | READY |
 
@@ -645,6 +645,8 @@ pnpm build
 
 **Commit gợi ý:** `Add PDF source passthrough`.
 
+**Hoàn thành 2026-08-04:** capability model phân biệt non-PDF/original/viewer/auth-required/unsupported; optional origin/file permission chỉ được xin sau hành động người dùng; original bytes được revalidate tab, fetch trong credential context, chặn ở 128 MiB, kiểm tra `%PDF-`, băm SHA-256, lưu Blob nguyên bản trong IndexedDB và tải qua download lifecycle hiện có. Permission denial/auth failure không phá luồng capture ảnh; không thêm PDF.js, dependency, backend, analytics, credential log hoặc quyền mặc định mới.
+
 ---
 
 ## S18 — Hardening lazy/infinite/iframe/canvas/WebGL
@@ -827,19 +829,19 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S14 | DONE | 2026-08-04 | PR #18 | format, lint, typecheck, 230 unit, build, 20 Playwright E2E | Editor theo job ID, manifest non-destructive, thumbnail bounded/lazy, remove/reorder, PDF options, progress/cancel/retry và download không recapture đã được xác thực. |
 | S15 | DONE | 2026-08-04 | PR #19 / CI 30871783639 | format, lint, typecheck, 239 unit, 4 PDF benchmarks, build, 20 Playwright E2E | Guard trước allocation, PDF integrity trước persistence, diagnostics heap best-effort và reference 10k/30k/100k/wide đã xác thực page-at-a-time với decoded concurrency bằng 1; source tiles được giữ để retry. |
 | S16 | DONE | 2026-08-04 | PR #20 / CI 30876338727 | format, lint, typecheck, 248 unit, 4 PDF benchmarks, build, 23 Playwright E2E | Candidate detection, opaque target revalidation, 2D visible-tab crop capture, sticky-child cleanup, crop-aware PDF/thumbnail và exact restore đã được xác thực trên nested scroll, wide table và stale modal/chat. |
-| S17 | NEXT | — | — | — | Sẵn sàng phát hiện nguồn PDF và passthrough byte nguyên bản khi truy cập an toàn. |
-| S18 | READY | — | — | — | — |
+| S17 | DONE | 2026-08-04 | PR #21 / cdffec8 / CI 30882436209 | format, lint, typecheck, 265 unit, 4 PDF benchmarks, build, 26 Playwright E2E | URL/content-type/viewer detection, exact-origin/file permission, active-tab revalidation, original-byte integrity/hash/local Blob download và auth-required zero-artifact fallback đã được xác thực. |
+| S18 | NEXT | — | — | — | Sẵn sàng harden lazy/infinite, iframe, canvas/WebGL, scroll-snap/layout-shift và zoom/DPR matrix trọng yếu. |
 | S19 | READY | — | — | — | — |
 | S20 | READY | — | — | — | — |
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S17 — PDF source detection và original passthrough**.
+Session kế tiếp là **S18 — Hardening lazy/infinite/iframe/canvas/WebGL**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S17.
-2. Đọc PRD PDF source scope, SPEC M5 và các phần privacy/permission liên quan.
-3. Kiểm tra repo/branch và kết quả CI S16.
-4. Chỉ triển khai S17.
-5. Kết thúc với PDF source detection, capability routing, original-byte passthrough khi an toàn, permission-denied/auth-like fallback trung thực và fixtures public/local.
+1. Đọc `PLAN.md` phần S18.
+2. Đọc PRD edge cases, SPEC §15–17, §27 fixtures và open validations.
+3. Kiểm tra repo/branch và kết quả CI S17.
+4. Chỉ triển khai S18.
+5. Kết thúc với stop conditions cho infinite scroll, lazy-growth policy, iframe pixel behavior, canvas/WebGL validation, scroll-snap/layout-shift mitigations, zoom/DPR matrix và known limitations trung thực.

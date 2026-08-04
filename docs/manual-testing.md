@@ -181,3 +181,16 @@ Run `pnpm test:unit` for the coordinate matrix, protocol, selector service, rout
 8. Export or thumbnail a captured scroll-area tile set. Confirm PDF/thumbnail composition uses only `captureCropCss`, not unrelated pixels from the full viewport screenshot.
 9. Inspect runtime/storage boundaries: messages contain opaque target IDs and geometry metadata only; screenshots remain local IndexedDB Blob values; no new permission, remote service, analytics event, or schema migration is introduced.
 10. Run `pnpm test:unit`, `pnpm benchmark:pdf`, and `pnpm test:e2e`. The S16 clean reference gate contains 248 unit tests across 69 files, four PDF benchmark cases, and 23 Playwright extension cases including nested scroll, wide table, stale modal/chat, open Shadow DOM, stale element, region, DPR/zoom, PDF, and full-page regressions.
+
+## S17 PDF source detection and original-byte passthrough validation
+
+1. Build and load the extension, serve the PDF fixture, navigate directly to the public `.pdf`, and open WebCap. Confirm the PDF source card reports original passthrough without fetching the body before explicit user action.
+2. Choose the original-download action. If host access is not already granted, confirm Chrome requests only the exact HTTP(S) origin; for a local PDF, confirm the request is limited to `file:///*` and the UI explains that file-URL access must also be enabled for the extension.
+3. Inspect the downloaded public PDF and the stored artifact metadata. Byte length and SHA-256 must match the fixture, the Blob must start with `%PDF-`, MIME type must be `application/pdf`, and no rasterized tile/page artifact may be created.
+4. Repeat with a URL that has no `.pdf` suffix but returns `Content-Type: application/pdf`. Confirm detection uses the permitted HEAD/content-type signal and original passthrough still preserves the exact bytes.
+5. Open an authentication-required fixture. Confirm the capability becomes `auth-required`, the UI gives an honest viewer/image-capture fallback, and no original artifact or download is created.
+6. Deny the optional host/file permission. Confirm no PDF body request occurs, the error copy contains no cookie/token/credential value, and visible/full-page/region/element/scroll-area controls remain usable.
+7. Change the active tab after capability detection and before download. Confirm background revalidation rejects the stale source rather than fetching or downloading a different tab URL.
+8. Exercise an oversized or invalid-signature response. Confirm the 128 MiB guard or `%PDF-` validation fails safely, stores no artifact, and retains the existing capture flows.
+9. Inspect runtime/storage boundaries: PDF requests and responses contain URL/capability/artifact metadata only; original bytes remain local Blob values in IndexedDB; no backend, analytics path, permanent `<all_urls>`, credential log, dependency, or PDF.js viewer is introduced.
+10. Run `pnpm test:unit`, `pnpm benchmark:pdf`, and `pnpm test:e2e`. The S17 clean reference gate contains 265 unit tests across 74 files, four PDF benchmark cases, and 26 Playwright extension cases including public PDF, content-type-only PDF, authentication-required zero-artifact behavior, and all previous capture/export regressions.
