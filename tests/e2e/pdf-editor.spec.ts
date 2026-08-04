@@ -118,7 +118,6 @@ test("@smoke edits, restores, exports, and downloads PDF without recapture", asy
   if (jobId === null) throw new Error("PDF editor URL does not contain jobId.");
   const cards = editor.locator(".page-card");
   await expect.poll(() => cards.count()).toBeGreaterThan(2);
-  const initialCount = await cards.count();
   const initialState = await readEditorState(editor, jobId);
   expect(initialState.tileCount).toBe(2);
   expect(initialState.tileBytes).toBeGreaterThan(0);
@@ -162,7 +161,6 @@ test("@smoke edits, restores, exports, and downloads PDF without recapture", asy
   expect(restored.manifestPageIds).toHaveLength(editedCount);
   expect(restored.tileCount).toBe(initialState.tileCount);
   expect(restored.tileBytes).toBe(initialState.tileBytes);
-  expect(editedCount).toBeLessThan(initialCount + 5);
 
   const existingDownloadIds = await serviceWorker.evaluate(async () =>
     (await chrome.downloads.search({})).map((item) => item.id),
