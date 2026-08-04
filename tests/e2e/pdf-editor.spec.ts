@@ -62,31 +62,26 @@ async function readEditorState(editor: Page, jobId: string): Promise<EditorStora
 
 async function waitForPdfDownload(
   serviceWorker: Worker,
-  previousIds: number[],
-): Promise<{ id: number; filename: string }> {
-  let downloadId: number | undefined;
+  downloadId: number,
+): Promise<{ id: number; filename: string; state: string }> {
   await expect
     .poll(
-      async () => {
-        downloadId = await serviceWorker.evaluate(async (known) => {
-          const items = await chrome.downloads.search({ orderBy: ["-startTime"], limit: 20 });
-          return items.find(
-            (item) =>
-              !known.includes(item.id) &&
-              item.filename.toLowerCase().endsWith(".pdf") &&
-              item.state === "complete",
-          )?.id;
-        }, previousIds);
-        return downloadId;
-      },
+      () =>
+        serviceWorker.evaluate(async (id) => {
+          const [item] = await chrome.downloads.search({ id });
+          if (item?.state === "interrupted") {
+            return `${item.state}:${item.error ?? "unknown"}`;
+          }
+          return item?.state ?? "missing";
+        }, downloadId),
       { timeout: 30_000 },
     )
-    .not.toBeUndefined();
-  if (downloadId === undefined) throw new Error("PDF download did not complete.");
-  return serviceWorker.evaluate(async (resolvedId) => {
-    const [item] = await chrome.downloads.search({ id: resolvedId });
+    .toBe("complete");
+
+  return serviceWorker.evaluate(async (id) => {
+    const [item] = await chrome.downloads.search({ id });
     if (item === undefined) throw new Error("PDF download was not found.");
-    return { id: item.id, filename: item.filename };
+    return { id: item.id, filename: item.filename, state: item.state };
   }, downloadId);
 }
 
@@ -162,9 +157,6 @@ test("@smoke edits, restores, exports, and downloads PDF without recapture", asy
   expect(restored.tileCount).toBe(initialState.tileCount);
   expect(restored.tileBytes).toBe(initialState.tileBytes);
 
-  const existingDownloadIds = await serviceWorker.evaluate(async () =>
-    (await chrome.downloads.search({})).map((item) => item.id),
-  );
   await editor.getByRole("button", { name: "Tạo PDF" }).click();
   await expect(editor.getByRole("button", { name: "Tải PDF xuống" })).toBeVisible({
     timeout: 45_000,
@@ -180,7 +172,15 @@ test("@smoke edits, restores, exports, and downloads PDF without recapture", asy
   expect(completed.outputArtifactId).toBeTruthy();
 
   await editor.getByRole("button", { name: "Tải PDF xuống" }).click();
-  const download = await waitForPdfDownload(serviceWorker, existingDownloadIds);
+  const downloadStatus = editor.getByTestId("download-status");
+  await expect(downloadStatus).toHaveAttribute("data-download-id", /^\d+$/, {
+    timeout: 30_000,
+  });
+  const downloadId = Number(await downloadStatus.getAttribute("data-download-id"));
+  expect(Number.isInteger(downloadId)).toBe(true);
+  const download = await waitForPdfDownload(serviceWorker, downloadId);
+  expect(download.state).toBe("complete");
+  expect(download.filename.toLowerCase()).toMatch(/\.pdf$/);
   const bytes = await readFile(download.filename);
   expect(bytes.byteLength).toBeGreaterThan(5);
   expect(bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-");
