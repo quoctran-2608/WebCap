@@ -23,6 +23,8 @@ export interface StoredVisibleCapture {
 export interface VisibleCaptureCoordinatorPort {
   start(requestId: string): Promise<VisibleCaptureMetadata>;
   cancel(requestId: string): boolean;
+  waitForIdle(requestId: string): Promise<void>;
+  releaseCapture(captureId: string): boolean;
 }
 
 export interface VisibleCaptureCoordinatorOptions {
@@ -174,6 +176,14 @@ export class VisibleCaptureCoordinator implements VisibleCaptureCoordinatorPort 
 
     rememberSetBounded(this.preCancelledRequests, requestId, this.preCancelledRequestLimit);
     return true;
+  }
+
+  async waitForIdle(requestId: string): Promise<void> {
+    const active = this.inFlight;
+    if (active?.requestId !== requestId) {
+      return;
+    }
+    await active.promise.catch(() => undefined);
   }
 
   getCapture(captureId: string): StoredVisibleCapture | undefined {

@@ -148,6 +148,8 @@ class MemoryJobCoordinator implements PersistentJobCoordinatorPort {
       failedJobs: 0,
       deletedTiles: 0,
       deletedArtifacts: 0,
+      deletedManifests: 0,
+      clearedSessions: 0,
     });
   }
 }

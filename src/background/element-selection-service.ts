@@ -1,8 +1,10 @@
 import { PAGE_PREPARATION_CONTENT_SCRIPT_FILE } from "@shared/contracts/page-preparation";
 import type { CaptureJob, Rect } from "@shared/contracts/domain";
 import {
+  createElementSelectionCloseMessage,
   createElementSelectionOpenMessage,
   createElementTargetRevalidateMessage,
+  parseElementSelectionCloseResponse,
   parseElementSelectionOpenResponse,
   parseElementTargetRevalidateResponse,
 } from "@shared/contracts/element-selection";
@@ -19,6 +21,7 @@ export interface ElementSelectionPort {
     jobId: string,
     captureKind: "visible-bounds" | "full-scroll-content",
   ): Promise<void>;
+  cancel(tabId: number, jobId: string): Promise<boolean>;
 }
 
 export interface ElementTargetValidationPort {
@@ -67,6 +70,24 @@ export class ElementSelectionService implements ElementSelectionPort, ElementTar
     if (parsed.value.payload.jobId !== jobId) {
       throw new Error("Element selection response did not match the capture job.");
     }
+  }
+
+  async cancel(tabId: number, jobId: string): Promise<boolean> {
+    await this.browser.injectContentScript(tabId);
+    const requestId = this.requestId();
+    const response = await this.browser.sendMessage(
+      tabId,
+      createElementSelectionCloseMessage({
+        requestId,
+        jobId,
+        sentAt: this.now().toISOString(),
+      }),
+    );
+    const parsed = parseElementSelectionCloseResponse(response, requestId);
+    if (!parsed.ok) {
+      throw createWebCapRuntimeError(parsed.error);
+    }
+    return parsed.value.payload.closed;
   }
 
   async revalidate(job: CaptureJob): Promise<Rect> {

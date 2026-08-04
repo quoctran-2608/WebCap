@@ -242,6 +242,14 @@ export class FullPageCaptureCoordinator {
     return job;
   }
 
+  async waitForIdle(jobId: string): Promise<void> {
+    const run = this.active.get(jobId);
+    if (run === undefined) {
+      return;
+    }
+    await run.promise.catch(() => undefined);
+  }
+
   isRunning(jobId: string): boolean {
     return this.active.has(jobId);
   }

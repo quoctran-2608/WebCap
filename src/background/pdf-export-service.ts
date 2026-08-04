@@ -6,6 +6,7 @@ import type { CaptureJob, CaptureSettings } from "@shared/contracts/domain";
 import type { PdfEditorPage } from "@shared/contracts/pdf-editor";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
+import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
 import type { PdfEditManifestRepositoryPort } from "@storage/pdf-edit-manifest-repository";
 import type { TileRepositoryPort } from "@storage/tile-repository";
 
@@ -20,6 +21,7 @@ export interface PdfExportServiceOptions {
   tiles: TileRepositoryPort;
   offscreen: PdfOffscreenPort;
   manifests?: PdfEditManifestRepositoryPort;
+  artifacts?: Pick<ArtifactRepositoryPort, "delete">;
   now?: () => Date;
   createId?: () => string;
   artifactTtlMs?: number;
@@ -71,6 +73,7 @@ export class PdfExportService {
   private readonly tiles: TileRepositoryPort;
   private readonly offscreen: PdfOffscreenPort;
   private readonly manifests: PdfEditManifestRepositoryPort | undefined;
+  private readonly artifacts: Pick<ArtifactRepositoryPort, "delete"> | undefined;
   private readonly now: () => Date;
   private readonly createId: () => string;
   private readonly artifactTtlMs: number;
@@ -82,6 +85,7 @@ export class PdfExportService {
     this.tiles = options.tiles;
     this.offscreen = options.offscreen;
     this.manifests = options.manifests;
+    this.artifacts = options.artifacts;
     this.now = options.now ?? (() => new Date());
     this.createId = options.createId ?? (() => crypto.randomUUID());
     this.artifactTtlMs = options.artifactTtlMs ?? DEFAULT_ARTIFACT_TTL_MS;
@@ -160,6 +164,10 @@ export class PdfExportService {
     });
   }
 
+  async waitForIdle(jobId: string): Promise<void> {
+    await this.operations.get(jobId)?.catch(() => undefined);
+  }
+
   async handleProgress(progress: PdfExportProgress): Promise<CaptureJob | undefined> {
     if (this.cancelledJobs.has(progress.jobId)) {
       return undefined;
@@ -221,6 +229,7 @@ export class PdfExportService {
       });
       const latest = await this.jobs.get(job.id);
       if (latest?.state !== "exporting" || this.cancelledJobs.has(job.id)) {
+        await this.artifacts?.delete(artifact.artifactId).catch(() => false);
         return;
       }
       await this.jobs.transition(job.id, "completed", {

@@ -1,5 +1,7 @@
 import { FOUNDATION_CAPABILITIES, type CaptureCapabilities } from "@shared/capabilities";
 import type { ArtifactMetadata } from "@shared/contracts/artifact";
+import { isCaptureResetMessageType } from "@shared/contracts/capture-reset";
+import { isElementSelectionEventType } from "@shared/contracts/element-selection";
 import {
   createArtifactDownloadStartedMessage,
   createCapabilitiesResponseMessage,
@@ -22,7 +24,14 @@ import type {
 import { isRegionSelectionEventType } from "@shared/contracts/region-selection";
 import type { WebCapErrorData } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
-import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
+import {
+  IndexedDbArtifactRepository,
+  type ArtifactRepositoryPort,
+} from "@storage/artifact-repository";
+import {
+  IndexedDbJobArtifactCleanupRepository,
+  type JobArtifactCleanupPort,
+} from "@storage/job-artifact-cleanup-repository";
 import {
   VisibleSessionRepository,
   type VisibleSessionRepositoryPort,
@@ -46,6 +55,7 @@ export interface ImageExportCoordinatorPort {
     quality: number;
   }): Promise<ArtifactMetadata>;
   downloadArtifact(artifactId: string): Promise<number>;
+  cancelBySourceArtifactId(sourceArtifactId: string): Promise<void>;
 }
 
 export interface MessageRouterDependencies {
@@ -55,6 +65,8 @@ export interface MessageRouterDependencies {
   visibleCapture: VisibleCaptureCoordinatorPort;
   imageExport: ImageExportCoordinatorPort;
   visibleSessions?: VisibleSessionRepositoryPort;
+  artifacts?: Pick<ArtifactRepositoryPort, "delete">;
+  artifactsByJob?: JobArtifactCleanupPort;
   now: () => Date;
 }
 
@@ -71,7 +83,7 @@ interface SessionTransitionOptions {
 
 let sharedDependencies: MessageRouterDependencies | undefined;
 
-function defaultDependencies(): MessageRouterDependencies {
+export function getMessageRouterDependencies(): MessageRouterDependencies {
   if (sharedDependencies !== undefined) {
     return sharedDependencies;
   }
@@ -88,6 +100,8 @@ function defaultDependencies(): MessageRouterDependencies {
     visibleCapture: new VisibleCaptureCoordinator({ tabs, artifacts }),
     imageExport,
     visibleSessions: new VisibleSessionRepository(),
+    artifacts,
+    artifactsByJob: new IndexedDbJobArtifactCleanupRepository(),
     now: () => new Date(),
   };
   void artifacts.deleteExpired(new Date().toISOString()).catch(() => undefined);
@@ -125,7 +139,9 @@ function targetsBackground(value: unknown): boolean {
     (value as { target?: unknown }).target === "background" &&
     !isPersistentJobMessageType(value) &&
     !isOffscreenPdfExportProgressMessage(value) &&
-    !isRegionSelectionEventType(value)
+    !isRegionSelectionEventType(value) &&
+    !isElementSelectionEventType(value) &&
+    !isCaptureResetMessageType(value)
   );
 }
 
@@ -151,6 +167,23 @@ function transitionSession(
     ...(options.downloadId === undefined ? {} : { downloadId: options.downloadId }),
     ...(options.error === undefined ? {} : { error: options.error }),
   };
+}
+
+async function saveSessionIfCurrent(
+  repository: VisibleSessionRepositoryPort | undefined,
+  expected: VisibleSessionSnapshot,
+  next: VisibleSessionSnapshot,
+): Promise<boolean> {
+  if (repository === undefined) return false;
+  const current = await repository.load();
+  if (
+    current?.sessionId !== expected.sessionId ||
+    current.captureRequestId !== expected.captureRequestId
+  ) {
+    return false;
+  }
+  await repository.save(next);
+  return true;
 }
 
 async function persistSessionFailure(
@@ -239,7 +272,9 @@ export async function routeRuntimeMessage(
         await dependencies.visibleSessions?.save(session);
 
         const metadata = await dependencies.visibleCapture.start(parsed.value.requestId);
-        await dependencies.visibleSessions?.save(
+        await saveSessionIfCurrent(
+          dependencies.visibleSessions,
+          session,
           transitionSession(session, {
             status: "captured",
             updatedAt: dependencies.now().toISOString(),
@@ -280,7 +315,9 @@ export async function routeRuntimeMessage(
       case "IMAGE_EXPORT_START": {
         const session = await dependencies.visibleSessions?.load();
         if (session !== undefined) {
-          await dependencies.visibleSessions?.save(
+          await saveSessionIfCurrent(
+            dependencies.visibleSessions,
+            session,
             transitionSession(session, {
               status: "processing",
               updatedAt: dependencies.now().toISOString(),
@@ -299,7 +336,9 @@ export async function routeRuntimeMessage(
         });
 
         if (session !== undefined) {
-          await dependencies.visibleSessions?.save(
+          await saveSessionIfCurrent(
+            dependencies.visibleSessions,
+            session,
             transitionSession(session, {
               status: "ready",
               updatedAt: dependencies.now().toISOString(),
@@ -319,7 +358,9 @@ export async function routeRuntimeMessage(
       case "ARTIFACT_DOWNLOAD_START": {
         const session = await dependencies.visibleSessions?.load();
         if (session !== undefined) {
-          await dependencies.visibleSessions?.save(
+          await saveSessionIfCurrent(
+            dependencies.visibleSessions,
+            session,
             transitionSession(session, {
               status: "downloading",
               updatedAt: dependencies.now().toISOString(),
@@ -331,7 +372,9 @@ export async function routeRuntimeMessage(
           parsed.value.payload.artifactId,
         );
         if (session !== undefined) {
-          await dependencies.visibleSessions?.save(
+          await saveSessionIfCurrent(
+            dependencies.visibleSessions,
+            session,
             transitionSession(session, {
               status: "completed",
               updatedAt: dependencies.now().toISOString(),
@@ -389,7 +432,7 @@ export function registerMessageRouter(): void {
         return false;
       }
 
-      void routeRuntimeMessage(message, defaultDependencies()).then((response) => {
+      void routeRuntimeMessage(message, getMessageRouterDependencies()).then((response) => {
         if (response !== undefined) {
           sendResponse(response);
         }

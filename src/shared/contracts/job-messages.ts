@@ -2,6 +2,10 @@ import { z } from "zod";
 
 import { PROTOCOL_VERSION } from "@shared/constants";
 import {
+  CaptureResetRequestSchema,
+  type CaptureResetRequest,
+} from "@shared/contracts/capture-reset";
+import {
   CaptureEngineKindSchema,
   CaptureJobSchema,
   CaptureModeSchema,
@@ -108,6 +112,7 @@ export const PersistentJobRequestSchema = z.discriminatedUnion("type", [
   JobGetActiveMessageSchema,
   JobCancelMessageSchema,
   PdfExportStartMessageSchema,
+  CaptureResetRequestSchema,
 ]);
 
 export type JobCreateMessage = z.infer<typeof JobCreateMessageSchema>;
@@ -117,7 +122,13 @@ export type JobCancelMessage = z.infer<typeof JobCancelMessageSchema>;
 export type PdfExportStartMessage = z.infer<typeof PdfExportStartMessageSchema>;
 export type JobResponseMessage = z.infer<typeof JobResponseMessageSchema>;
 export type JobActiveResponseMessage = z.infer<typeof JobActiveResponseMessageSchema>;
-export type PersistentJobRequest = z.infer<typeof PersistentJobRequestSchema>;
+export type PersistentJobRequest =
+  | z.infer<typeof JobCreateMessageSchema>
+  | z.infer<typeof JobGetMessageSchema>
+  | z.infer<typeof JobGetActiveMessageSchema>
+  | z.infer<typeof JobCancelMessageSchema>
+  | z.infer<typeof PdfExportStartMessageSchema>
+  | CaptureResetRequest;
 
 export interface JobMessageCreationOptions {
   requestId: string;

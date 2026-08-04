@@ -26,6 +26,21 @@ export interface ExportCaptureOptions {
 
 const DEFAULT_ARTIFACT_TTL_MS = 30 * 60 * 1000;
 
+function exportCancelledError(sourceArtifactId: string): Error {
+  return createWebCapRuntimeError(
+    createWebCapError({
+      code: "E_CANCELLED",
+      stage: "process",
+      message: "The image export was cancelled because the capture was reset.",
+      userMessageKey: "errors.cancelled",
+      retryable: true,
+      fallbackAllowed: false,
+      causeCode: "CaptureReset",
+      safeContext: { sourceArtifactId: sourceArtifactId.slice(0, 24) },
+    }),
+  );
+}
+
 function sourceMissingError(sourceArtifactId: string): Error {
   return createWebCapRuntimeError(
     createWebCapError({
@@ -59,8 +74,12 @@ export class ImageExportService {
   private readonly createId: () => string;
   private readonly artifactTtlMs: number;
   private readonly completedRequestLimit: number;
-  private readonly inFlight = new Map<string, Promise<ArtifactMetadata>>();
+  private readonly inFlight = new Map<
+    string,
+    { sourceArtifactId: string; promise: Promise<ArtifactMetadata> }
+  >();
   private readonly completed = new Map<string, ArtifactMetadata>();
+  private readonly cancelledSources = new Set<string>();
 
   constructor(options: ImageExportServiceOptions) {
     this.artifacts = options.artifacts;
@@ -80,13 +99,20 @@ export class ImageExportService {
 
     const active = this.inFlight.get(options.requestId);
     if (active !== undefined) {
-      return active;
+      return active.promise;
+    }
+
+    if (this.cancelledSources.has(options.sourceArtifactId)) {
+      return Promise.reject(exportCancelledError(options.sourceArtifactId));
     }
 
     const operation = this.process(options).finally(() => {
       this.inFlight.delete(options.requestId);
     });
-    this.inFlight.set(options.requestId, operation);
+    this.inFlight.set(options.requestId, {
+      sourceArtifactId: options.sourceArtifactId,
+      promise: operation,
+    });
     return operation;
   }
 
@@ -94,7 +120,27 @@ export class ImageExportService {
     return this.downloads.download(artifactId);
   }
 
+  async cancelBySourceArtifactId(sourceArtifactId: string): Promise<void> {
+    this.cancelledSources.add(sourceArtifactId);
+
+    const completedArtifacts = [...this.completed.entries()].filter(
+      ([, artifact]) => artifact.sourceArtifactId === sourceArtifactId,
+    );
+    for (const [requestId, artifact] of completedArtifacts) {
+      this.completed.delete(requestId);
+      await this.artifacts.delete(artifact.artifactId).catch(() => false);
+    }
+
+    const active = [...this.inFlight.values()]
+      .filter((operation) => operation.sourceArtifactId === sourceArtifactId)
+      .map((operation) => operation.promise.catch(() => undefined));
+    await Promise.all(active);
+  }
+
   private async process(options: ExportCaptureOptions): Promise<ArtifactMetadata> {
+    if (this.cancelledSources.has(options.sourceArtifactId)) {
+      throw exportCancelledError(options.sourceArtifactId);
+    }
     const source = await this.artifacts.get(options.sourceArtifactId);
     if (source === undefined || source.role !== "source") {
       throw sourceMissingError(options.sourceArtifactId);
@@ -116,6 +162,10 @@ export class ImageExportService {
       createdAt: createdAt.toISOString(),
       expiresAt: expiresAt.toISOString(),
     });
+    if (this.cancelledSources.has(options.sourceArtifactId)) {
+      await this.artifacts.delete(artifact.artifactId).catch(() => false);
+      throw exportCancelledError(options.sourceArtifactId);
+    }
     rememberBounded(this.completed, options.requestId, artifact, this.completedRequestLimit);
     return artifact;
   }

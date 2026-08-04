@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -19,31 +19,8 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Check out S21 branch
+      - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: agent/s21-capture-reset
-          fetch-depth: 0
-
-      - name: Apply S21 implementation and restore read-only CI
-        run: |
-          cat .github/s21.patch.part* > /tmp/s21.patch.gz.b64
-          test "$(wc -c < /tmp/s21.patch.gz.b64)" = "27112"
-          echo "a332a27aa47b1ae3258f6bfd9490cbad59fc5e79b4754f4f2a12f7aa828f54a4  /tmp/s21.patch.gz.b64" | sha256sum --check
-          base64 --decode /tmp/s21.patch.gz.b64 | gzip --decompress > /tmp/s21.patch
-          echo "24457a5b7c3167d29c6a8c155c1fe8b021c7fa0be99ec87f8e06a8031afffddf  /tmp/s21.patch" | sha256sum --check
-          git apply --index /tmp/s21.patch
-          git apply --check .github/s21.fix.patch
-          git apply --index .github/s21.fix.patch
-          rm -f \
-            .github/s21.patch.gz.b64 \
-            .github/s21.patch.part* \
-            .github/s21.fix.patch \
-            .github/s21.fix.patch.b64 \
-            .github/workflows/apply-s21-once.yml \
-            .github/workflows/s21-source-snapshot.yml
-          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
-          git add -A
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -60,25 +37,56 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Format implementation
-        run: pnpm format
-
-      - name: Typecheck
-        run: pnpm typecheck
+      - name: Check formatting
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint
 
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Privacy, dependency, and release audit
+        run: pnpm run audit
+
+      - name: Critical dependency audit
+        run: pnpm audit:security
+
       - name: Unit tests
         run: pnpm test:unit
+
+      - name: PDF performance benchmark
+        run: pnpm benchmark:pdf
 
       - name: Build extension
         run: pnpm build
 
-      - name: Commit validated S21 implementation
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Implement S21 capture reset lifecycle"
-          git push origin HEAD:agent/s21-capture-reset
+      - name: Reproduce and verify release ZIP
+        run: node scripts/verify-reproducible-package.mjs
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Full extension E2E
+        run: pnpm test:e2e
+
+      - name: Packaged lifecycle smoke
+        run: pnpm test:release
+
+      - name: Upload release candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webcap-release-candidate-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
