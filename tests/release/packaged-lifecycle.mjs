@@ -120,14 +120,17 @@ async function uninstallSelf(worker) {
     })
     .catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
-      if (!/closed|destroyed|Target page|context/u.test(message)) throw error;
+      if (!/closed|destroyed|Target page|context|Service worker restarted/u.test(message)) {
+        throw error;
+      }
     });
   await Promise.race([
-    Promise.all([uninstall, closed]),
+    uninstall,
     delay(15_000).then(() => {
-      throw new Error("Timed out waiting for the extension to uninstall itself.");
+      throw new Error("Timed out requesting extension self-uninstall.");
     }),
   ]);
+  await Promise.race([closed, delay(2_000)]);
 }
 
 const options = parseArguments(argv.slice(2));
@@ -226,7 +229,6 @@ try {
       throw new Error("chrome.storage.local did not persist across update simulation.");
     }
     await uninstallSelf(worker);
-    uninstallVerified = true;
   } finally {
     await updatedContext.close().catch(() => {});
   }
@@ -246,6 +248,7 @@ try {
     ) {
       throw new Error("An extension service worker remained after uninstall verification.");
     }
+    uninstallVerified = true;
   } finally {
     await verificationContext.close();
   }
