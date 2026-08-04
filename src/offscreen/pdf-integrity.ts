@@ -47,9 +47,7 @@ function hasPdfSignature(bytes: Uint8Array): boolean {
 }
 
 function countMatches(value: string, expression: RegExp): number {
-  let count = 0;
-  for (const _match of value.matchAll(expression)) count += 1;
-  return count;
+  return Array.from(value.matchAll(expression)).length;
 }
 
 function countNonEmptyStreams(value: string): number {
