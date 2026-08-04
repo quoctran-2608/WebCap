@@ -27,11 +27,16 @@ const descriptor = {
 describe("element selection protocol", () => {
   it("creates open and revalidation requests without page content", () => {
     expect(
-      createElementSelectionOpenMessage({ requestId: "open-1", jobId: "job-1", sentAt }),
+      createElementSelectionOpenMessage({
+        requestId: "open-1",
+        jobId: "job-1",
+        captureKind: "visible-bounds",
+        sentAt,
+      }),
     ).toMatchObject({
       protocolVersion: PROTOCOL_VERSION,
       type: "ELEMENT_SELECTION_OPEN",
-      payload: { jobId: "job-1" },
+      payload: { jobId: "job-1", captureKind: "visible-bounds" },
     });
     expect(
       createElementTargetRevalidateMessage({

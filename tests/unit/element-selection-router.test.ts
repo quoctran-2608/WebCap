@@ -26,6 +26,16 @@ const descriptor = {
   captureKind: "visible-bounds" as const,
 };
 
+const scrollDescriptor = {
+  schemaVersion: 1 as const,
+  selectionId: "scroll-selection-1",
+  tagName: "section",
+  id: "scroll-panel",
+  classNames: ["scroll-panel"],
+  scrollable: true,
+  captureKind: "full-scroll-content" as const,
+};
+
 function elementJob(): CaptureJob {
   return {
     schemaVersion: 1,
@@ -45,6 +55,15 @@ function elementJob(): CaptureJob {
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
     expiresAt: "2026-08-03T09:30:00.000Z",
+  };
+}
+
+function scrollAreaJob(): CaptureJob {
+  return {
+    ...elementJob(),
+    id: "scroll-area-job",
+    mode: "scroll-area",
+    preferredEngine: "scroll",
   };
 }
 
@@ -116,18 +135,16 @@ class ElementJobs implements PersistentJobCoordinatorPort {
 }
 
 function dependencies(jobs: ElementJobs, start = vi.fn(() => Promise.resolve())) {
-  return {
-    value: {
-      jobs,
-      captures: {
-        start,
-        cancel: vi.fn(() => Promise.resolve(elementJob())),
-      },
-      dedupe: new MemoryDedupe(),
-      now: () => now,
-    } satisfies PersistentJobRouterDependencies,
-    start,
+  const value: PersistentJobRouterDependencies = {
+    jobs,
+    captures: {
+      start,
+      cancel: vi.fn(() => Promise.resolve(elementJob())),
+    },
+    dedupe: new MemoryDedupe(),
+    now: () => now,
   };
+  return { value, start };
 }
 
 const sender = { id: "extension-id", tab: { id: 7 } } as chrome.runtime.MessageSender;
@@ -158,6 +175,37 @@ describe("element selection routing", () => {
       targetDescriptor: descriptor,
     });
     expect(current.start).toHaveBeenCalledWith("element-job");
+  });
+
+  it("routes a full-scroll target to the dedicated scroll-area coordinator", async () => {
+    const jobs = new ElementJobs();
+    jobs.current = scrollAreaJob();
+    const scrollStart = vi.fn(() => Promise.resolve());
+    const current = dependencies(jobs);
+    current.value.scrollAreaCaptures = {
+      start: scrollStart,
+      cancel: vi.fn(() => Promise.resolve(scrollAreaJob())),
+    };
+    const rect = { x: 0, y: 0, width: 900, height: 1800 };
+    const message = ElementSelectionCommitMessageSchema.parse({
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: "scroll-commit-1",
+      source: "content",
+      target: "background",
+      type: "ELEMENT_SELECTION_COMMIT",
+      payload: { jobId: "scroll-area-job", rect, descriptor: scrollDescriptor },
+      sentAt: now.toISOString(),
+    });
+
+    const response = await routeElementSelectionMessage(message, sender, current.value);
+
+    expect(response).toMatchObject({ type: "ELEMENT_SELECTION_EVENT_ACK" });
+    expect(jobs.updateCall).toHaveBeenCalledWith({
+      targetRect: rect,
+      targetDescriptor: scrollDescriptor,
+    });
+    expect(scrollStart).toHaveBeenCalledWith("scroll-area-job");
+    expect(current.start).not.toHaveBeenCalled();
   });
 
   it("cancels a created element job from the overlay", async () => {

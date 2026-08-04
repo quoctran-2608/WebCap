@@ -18,7 +18,7 @@ export const FOUNDATION_CAPABILITIES: CaptureCapabilities = Object.freeze({
     "full-page": true,
     region: true,
     element: true,
-    "scroll-area": false,
+    "scroll-area": true,
   }),
   outputFormats: Object.freeze({
     png: true,

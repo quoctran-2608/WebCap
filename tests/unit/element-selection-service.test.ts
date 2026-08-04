@@ -71,12 +71,15 @@ describe("ElementSelectionService", () => {
       () => "request-1",
     );
 
-    await service.start(7, "job-1");
+    await service.start(7, "job-1", "visible-bounds");
 
     expect(current.inject).toHaveBeenCalledWith(7);
     expect(current.send).toHaveBeenCalledWith(
       7,
-      expect.objectContaining({ type: "ELEMENT_SELECTION_OPEN", payload: { jobId: "job-1" } }),
+      expect.objectContaining({
+        type: "ELEMENT_SELECTION_OPEN",
+        payload: { jobId: "job-1", captureKind: "visible-bounds" },
+      }),
     );
   });
 

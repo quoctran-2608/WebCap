@@ -204,8 +204,9 @@ async function renderPdfPageThumbnail(options: PdfThumbnailOptions): Promise<Pdf
       }
       const decoded = await environment.decode(record.blob);
       try {
-        const tileScaleX = decoded.width / tile.sourceRectCss.width;
-        const tileScaleY = decoded.height / tile.sourceRectCss.height;
+        const captureViewport = tile.captureViewportCss ?? tile.sourceRectCss;
+        const tileScaleX = decoded.width / captureViewport.width;
+        const tileScaleY = decoded.height / captureViewport.height;
         const sourceX = roundRange(
           intersection.sourceCropCss.x * tileScaleX,
           (intersection.sourceCropCss.x + intersection.sourceCropCss.width) * tileScaleX,

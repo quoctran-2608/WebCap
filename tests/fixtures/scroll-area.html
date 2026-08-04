@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebCap scroll area fixture</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        background: #e2e8f0;
+      }
+      body {
+        margin: 0;
+        min-height: 2200px;
+        color: #0f172a;
+        font-family: Arial, sans-serif;
+        background: linear-gradient(#e2e8f0, #cbd5e1);
+      }
+      .hero {
+        height: 520px;
+        display: grid;
+        place-items: center;
+        background: #0f172a;
+        color: white;
+      }
+      main {
+        width: min(820px, calc(100% - 48px));
+        margin: 64px auto 900px;
+      }
+      .card {
+        margin: 48px 0;
+        padding: 24px;
+        border-radius: 20px;
+        background: white;
+        box-shadow: 0 20px 50px rgba(15, 23, 42, 0.16);
+      }
+      .outer-scroll {
+        width: 620px;
+        height: 360px;
+        overflow: auto;
+        padding: 34px;
+        border: 8px solid #1e293b;
+        background: #f8fafc;
+      }
+      #nested-scroll {
+        width: 480px;
+        height: 240px;
+        overflow: auto;
+        border: 4px solid #0f766e;
+        background: #14b8a6;
+        scroll-behavior: auto;
+      }
+      .chat-content {
+        width: 100%;
+        min-height: 1100px;
+        background: #14b8a6;
+      }
+      .sticky-chat-header {
+        position: sticky;
+        top: 0;
+        height: 52px;
+        display: flex;
+        align-items: center;
+        padding: 0 18px;
+        background: #0f766e;
+        color: white;
+        z-index: 2;
+      }
+      .message {
+        width: 78%;
+        min-height: 82px;
+        margin: 24px;
+        padding: 18px;
+        border-radius: 16px;
+        background: #ccfbf1;
+      }
+      .message:nth-child(odd) {
+        margin-left: auto;
+        background: #fef3c7;
+      }
+      #wide-scroll {
+        width: 520px;
+        height: 250px;
+        overflow: auto;
+        border: 5px solid #7c3aed;
+        background: #ede9fe;
+      }
+      .wide-canvas {
+        width: 1320px;
+        height: 680px;
+        display: grid;
+        grid-template-columns: repeat(12, 110px);
+        grid-template-rows: repeat(10, 68px);
+      }
+      .wide-cell {
+        display: grid;
+        place-items: center;
+        border: 1px solid rgba(76, 29, 149, 0.35);
+        background: #ddd6fe;
+        font-weight: 700;
+      }
+      .wide-cell:nth-child(4n) {
+        background: #c4b5fd;
+      }
+      .modal-shell {
+        position: fixed;
+        right: 22px;
+        bottom: 18px;
+        width: 390px;
+        padding: 14px;
+        border-radius: 18px;
+        background: #111827;
+        box-shadow: 0 25px 60px rgba(0, 0, 0, 0.35);
+        z-index: 5;
+      }
+      #modal-scroll {
+        height: 210px;
+        overflow: auto;
+        border-radius: 12px;
+        background: #f8fafc;
+      }
+      .modal-content {
+        min-height: 860px;
+        padding: 18px;
+        background: #f8fafc;
+      }
+      .modal-row {
+        height: 74px;
+        margin-bottom: 14px;
+        border-radius: 10px;
+        background: #fecdd3;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="hero"><h1>Scrollable container validation</h1></header>
+    <main>
+      <section class="card">
+        <h2>Nested chat panel</h2>
+        <div class="outer-scroll" id="outer-scroll">
+          <div id="nested-scroll" data-testid="nested-scroll">
+            <div class="chat-content">
+              <div class="sticky-chat-header">Sticky chat header</div>
+              <div class="message">Tin nhắn 1</div>
+              <div class="message">Tin nhắn 2</div>
+              <div class="message">Tin nhắn 3</div>
+              <div class="message">Tin nhắn 4</div>
+              <div class="message">Tin nhắn 5</div>
+              <div class="message">Tin nhắn 6</div>
+              <div class="message">Tin nhắn 7</div>
+              <div class="message">Tin nhắn 8</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Wide table panel</h2>
+        <div id="wide-scroll" data-testid="wide-scroll">
+          <div class="wide-canvas" id="wide-canvas"></div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="modal-shell" id="modal-shell">
+      <div id="modal-scroll" data-testid="modal-scroll">
+        <div class="modal-content">
+          <div class="modal-row"></div>
+          <div class="modal-row"></div>
+          <div class="modal-row"></div>
+          <div class="modal-row"></div>
+          <div class="modal-row"></div>
+          <div class="modal-row"></div>
+          <div class="modal-row"></div>
+          <div class="modal-row"></div>
+          <div class="modal-row"></div>
+        </div>
+      </div>
+    </aside>
+
+    <script>
+      const canvas = document.querySelector("#wide-canvas");
+      for (let index = 0; index < 120; index += 1) {
+        const cell = document.createElement("div");
+        cell.className = "wide-cell";
+        cell.textContent = `C${index + 1}`;
+        canvas.append(cell);
+      }
+      document.querySelector("#nested-scroll").scrollTop = 128;
+      document.querySelector("#outer-scroll").scrollTop = 18;
+      document.querySelector("#wide-scroll").scrollLeft = 84;
+      document.querySelector("#wide-scroll").scrollTop = 72;
+      document.querySelector("#modal-scroll").scrollTop = 96;
+      window.scrollTo(0, 420);
+    </script>
+  </body>
+</html>

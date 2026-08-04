@@ -6,7 +6,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 ## Current status
 
-**S15 — PDF benchmarks, integrity validation, and memory guards are implemented.** The page-at-a-time exporter now estimates the live working set before allocating a PDF document or page canvas, blocks unsafe jobs with retryable `E_MEMORY_GUARD`, and offers lower-quality, A4/Letter multi-page, or smaller-batch alternatives without deleting source tiles. Every completed PDF is checked before persistence for signature, loadability, page count, page dimensions, image backing, and non-empty streams. A dedicated repeatable benchmark command covers 1,440 × 10k, 30k, and 100k CSS-pixel pages plus a 4,096 × 30k wide scenario; the clean reference run kept decoded-tile concurrency at one and all estimates below the active heap threshold. S16 is next: full capture of scrollable containers.
+**S16 — full scrollable-area capture is implemented.** WebCap can now select an overflow container and capture its complete internal `scrollWidth` × `scrollHeight` through a deterministic two-dimensional visible-tab crop grid. The content runtime keeps the selected DOM identity opaque, revalidates it before every internal scroll, crops each viewport screenshot to the container content box, suppresses local sticky descendants without mutating unrelated ancestors, and restores container/document scroll and styles on success, cancellation, stale-target failure, or capture error. Stored tiles carry explicit viewport-crop metadata so previews and PDF export consume only the intended container pixels. The clean reference gate passes 248 unit tests, four PDF benchmarks, and 23 Playwright E2E cases covering nested scroll, wide tables, stale modal/chat targets, exact restoration, and all previous selector/region/capture regressions. S17 is next: PDF source detection and original-byte passthrough.
 
 ## Requirements
 
@@ -33,7 +33,8 @@ pnpm lint          # Run ESLint with zero warnings allowed.
 pnpm format:check  # Verify formatting without modifying files.
 pnpm format        # Format tracked source/configuration files.
 pnpm test:unit     # Run the unit-test suite once.
-pnpm benchmark:pdf    # Run repeatable long-page PDF reference benchmarks.
+pnpm benchmark:pdf # Run repeatable long-page PDF reference benchmarks.
+pnpm test:e2e       # Run the persistent-Chromium extension regression suite.
 pnpm test:smoke    # Smoke-test the built popup ↔ service-worker handshake in Chrome.
 pnpm test          # Run Vitest in watch mode.
 pnpm package       # Build and verify the unpacked extension; ZIP packaging comes later.

@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Full scrollable-area selection using computed overflow, client/scroll dimensions, sanitized candidate labels, and explicit visible-bounds versus full-scroll-content intent.
+- Opaque content-runtime scroll-target snapshots with same-node revalidation, stale-target rejection, bounded settle checks, and exact restoration of container/document scroll and WebCap-owned inline mutations.
+- Dedicated two-dimensional internal-scroll capture engine using rate-limited `captureVisibleTab`, container content-box crop metadata, overlap-aware logical output rectangles, and immediate local Blob persistence.
+- Local sticky-descendant suppression scoped to the selected container, with compare-before-restore cleanup and no implicit scrolling of parent containers.
+- Crop-aware PDF and thumbnail composition so full-viewport screenshots contribute only the selected scroll-area pixels.
+- Nested vertical container, wide table, and removable modal/chat fixtures; the S16 reference gate passes 248 unit tests across 69 files, four PDF benchmarks, the Manifest V3 build, and 23 Playwright E2E cases.
 - Pre-allocation PDF memory guard using total pixels, tile count, stored tile bytes, one-page RGBA, one decoded tile, encoded-page estimate, fixed overhead, and best-effort runtime heap limits.
 - Retryable `E_MEMORY_GUARD` guidance for lower JPEG quality, A4/Letter multi-page output, or smaller page batches while preserving every source tile.
 - PDF integrity validation before artifact persistence for signature, non-empty bytes, pdf-lib loadability, exact page count, page dimensions within 0.5 points, image backing, and non-empty streams.

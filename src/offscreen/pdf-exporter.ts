@@ -447,8 +447,9 @@ export class PdfExporter {
             maxDecodedTiles = Math.max(maxDecodedTiles, activeDecodedTiles);
             sampleHeap();
             try {
-              const tileScaleX = positiveScale(decoded.width / tile.sourceRectCss.width, "x");
-              const tileScaleY = positiveScale(decoded.height / tile.sourceRectCss.height, "y");
+              const captureViewport = tile.captureViewportCss ?? tile.sourceRectCss;
+              const tileScaleX = positiveScale(decoded.width / captureViewport.width, "x");
+              const tileScaleY = positiveScale(decoded.height / captureViewport.height, "y");
               const sourceX = roundRange(
                 intersection.sourceCropCss.x * tileScaleX,
                 (intersection.sourceCropCss.x + intersection.sourceCropCss.width) * tileScaleX,

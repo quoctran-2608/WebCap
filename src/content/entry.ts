@@ -1,11 +1,17 @@
 import {
   openElementSelector,
+  isScrollableElement,
   readElementDocumentRect,
+  readElementScrollContentRect,
   type ElementSelection,
   type ElementSelectorController,
 } from "./element-selector";
 import { openRegionSelector, type RegionSelectorController } from "./region-selector";
-import type { ElementTargetDescriptor } from "@shared/contracts/domain";
+import type { ElementTargetDescriptor, FixedElementMode, Rect } from "@shared/contracts/domain";
+import type {
+  ScrollAreaCleanupMessage,
+  ScrollAreaScrollMessage,
+} from "@shared/contracts/scroll-area";
 
 export const PAGE_PREPARATION_PROTOCOL_VERSION = 1 as const;
 export const PAGE_PREPARATION_SNAPSHOT_VERSION = 1 as const;
@@ -1103,7 +1109,10 @@ interface ElementSelectionOpenRequest {
   source: "background";
   target: "content";
   type: "ELEMENT_SELECTION_OPEN";
-  payload: { jobId: string };
+  payload: {
+    jobId: string;
+    captureKind: ElementTargetDescriptor["captureKind"];
+  };
   sentAt: string;
 }
 
@@ -1119,10 +1128,25 @@ interface ElementTargetRevalidateRequest {
 
 type ElementSelectionRequest = ElementSelectionOpenRequest | ElementTargetRevalidateRequest;
 
+interface ScrollAreaStyleMutation {
+  element: HTMLElement;
+  beforeStyle: string | null;
+  appliedStyle: string | null;
+}
+
+interface ScrollAreaTargetSnapshot {
+  originalScrollLeft: number;
+  originalScrollTop: number;
+  originalDocumentScrollX: number;
+  originalDocumentScrollY: number;
+  mutations: ScrollAreaStyleMutation[];
+}
+
 interface StoredElementTarget {
   jobId: string;
   element: Element;
   descriptor: ElementTargetDescriptor;
+  scrollAreaSnapshot?: ScrollAreaTargetSnapshot;
 }
 
 interface ElementSelectionRuntimeState {
@@ -1150,7 +1174,7 @@ function isElementTargetDescriptor(value: unknown): value is ElementTargetDescri
     Array.isArray(value.classNames) &&
     value.classNames.every((item) => typeof item === "string") &&
     typeof value.scrollable === "boolean" &&
-    value.captureKind === "visible-bounds"
+    (value.captureKind === "visible-bounds" || value.captureKind === "full-scroll-content")
   );
 }
 
@@ -1168,7 +1192,9 @@ function isElementSelectionRequest(value: unknown): value is ElementSelectionReq
     return false;
   }
   return (
-    value.type === "ELEMENT_SELECTION_OPEN" ||
+    (value.type === "ELEMENT_SELECTION_OPEN" &&
+      (value.payload.captureKind === "visible-bounds" ||
+        value.payload.captureKind === "full-scroll-content")) ||
     (value.type === "ELEMENT_TARGET_REVALIDATE" &&
       isElementTargetDescriptor(value.payload.descriptor))
   );
@@ -1223,6 +1249,381 @@ async function sendElementSelectionEvent(
   });
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isScrollAreaScrollRequest(value: unknown): value is ScrollAreaScrollMessage {
+  if (!isRecord(value) || value.type !== "SCROLL_AREA_SCROLL" || !isRecord(value.payload)) {
+    return false;
+  }
+  const payload = value.payload;
+  return (
+    value.protocolVersion === PAGE_PREPARATION_PROTOCOL_VERSION &&
+    value.source === "background" &&
+    value.target === "content" &&
+    hasString(value, "requestId") &&
+    hasString(value, "sentAt") &&
+    hasString(payload, "jobId") &&
+    isElementTargetDescriptor(payload.descriptor) &&
+    payload.descriptor.captureKind === "full-scroll-content" &&
+    isFiniteNumber(payload.scrollLeft) &&
+    payload.scrollLeft >= 0 &&
+    isFiniteNumber(payload.scrollTop) &&
+    payload.scrollTop >= 0 &&
+    Number.isInteger(payload.row) &&
+    isFiniteNumber(payload.row) &&
+    payload.row >= 0 &&
+    Number.isInteger(payload.column) &&
+    isFiniteNumber(payload.column) &&
+    payload.column >= 0 &&
+    Number.isInteger(payload.rows) &&
+    isFiniteNumber(payload.rows) &&
+    payload.rows > 0 &&
+    Number.isInteger(payload.columns) &&
+    isFiniteNumber(payload.columns) &&
+    payload.columns > 0 &&
+    (payload.fixedElementMode === "preserve" ||
+      payload.fixedElementMode === "remove" ||
+      payload.fixedElementMode === "smart") &&
+    Number.isInteger(payload.settleMs) &&
+    isFiniteNumber(payload.settleMs) &&
+    payload.settleMs >= 0 &&
+    (payload.expectedScrollWidth === undefined ||
+      (isFiniteNumber(payload.expectedScrollWidth) && payload.expectedScrollWidth > 0)) &&
+    (payload.expectedScrollHeight === undefined ||
+      (isFiniteNumber(payload.expectedScrollHeight) && payload.expectedScrollHeight > 0)) &&
+    (payload.expectedClientWidth === undefined ||
+      (isFiniteNumber(payload.expectedClientWidth) && payload.expectedClientWidth > 0)) &&
+    (payload.expectedClientHeight === undefined ||
+      (isFiniteNumber(payload.expectedClientHeight) && payload.expectedClientHeight > 0))
+  );
+}
+
+function isScrollAreaCleanupRequest(value: unknown): value is ScrollAreaCleanupMessage {
+  return (
+    isRecord(value) &&
+    value.type === "SCROLL_AREA_CLEANUP" &&
+    value.protocolVersion === PAGE_PREPARATION_PROTOCOL_VERSION &&
+    value.source === "background" &&
+    value.target === "content" &&
+    hasString(value, "requestId") &&
+    hasString(value, "sentAt") &&
+    isRecord(value.payload) &&
+    hasString(value.payload, "jobId") &&
+    isElementTargetDescriptor(value.payload.descriptor) &&
+    value.payload.descriptor.captureKind === "full-scroll-content"
+  );
+}
+
+function scrollAreaResponse(
+  request: ScrollAreaScrollMessage | ScrollAreaCleanupMessage,
+  type: "SCROLL_AREA_SCROLLED" | "SCROLL_AREA_CLEANED" | "SCROLL_AREA_ERROR",
+  payload: unknown,
+): Record<string, unknown> {
+  return {
+    protocolVersion: PAGE_PREPARATION_PROTOCOL_VERSION,
+    requestId: request.requestId,
+    source: "content",
+    target: "background",
+    type,
+    payload,
+    sentAt: new Date().toISOString(),
+  };
+}
+
+function scrollAreaFailure(
+  request: ScrollAreaScrollMessage | ScrollAreaCleanupMessage,
+  options: {
+    code?: "E_PROTOCOL_MESSAGE" | "E_TARGET_STALE" | "E_LAYOUT_UNSTABLE" | "E_CLEANUP_PARTIAL";
+    stage?: "capture" | "cleanup" | "protocol";
+    message: string;
+    causeCode: string;
+    retryable?: boolean;
+  },
+): Record<string, unknown> {
+  return scrollAreaResponse(request, "SCROLL_AREA_ERROR", {
+    code: options.code ?? "E_PROTOCOL_MESSAGE",
+    stage: options.stage ?? "capture",
+    message: options.message,
+    userMessageKey:
+      options.code === "E_TARGET_STALE" ? "errors.targetStale" : "errors.scrollAreaCapture",
+    retryable: options.retryable ?? true,
+    fallbackAllowed: false,
+    causeCode: options.causeCode,
+    safeContext: { jobId: request.payload.jobId },
+  });
+}
+
+function restoreScrollAreaMutations(snapshot: ScrollAreaTargetSnapshot): {
+  restored: number;
+  skipped: number;
+} {
+  let restored = 0;
+  let skipped = 0;
+  for (const mutation of snapshot.mutations.splice(0)) {
+    if (!mutation.element.isConnected) {
+      skipped += 1;
+      continue;
+    }
+    if (mutation.element.getAttribute("style") === mutation.appliedStyle) {
+      if (mutation.beforeStyle === null) mutation.element.removeAttribute("style");
+      else mutation.element.setAttribute("style", mutation.beforeStyle);
+      restored += 1;
+    } else {
+      skipped += 1;
+    }
+  }
+  return { restored, skipped };
+}
+
+function applyScrollAreaStickyPolicy(
+  target: HTMLElement,
+  snapshot: ScrollAreaTargetSnapshot,
+  fixedElementMode: FixedElementMode,
+  row: number,
+  column: number,
+  rows: number,
+  columns: number,
+): number {
+  restoreScrollAreaMutations(snapshot);
+  if (fixedElementMode === "preserve") return 0;
+  const targetRect = target.getBoundingClientRect();
+  let hidden = 0;
+  for (const element of Array.from(target.querySelectorAll<HTMLElement>("*"))) {
+    const style = getComputedStyle(element);
+    if (style.position !== "sticky") continue;
+    const rect = element.getBoundingClientRect();
+    const visible =
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      Number.parseFloat(style.opacity || "1") > 0 &&
+      rect.width > 0 &&
+      rect.height > 0 &&
+      rect.right > targetRect.left &&
+      rect.bottom > targetRect.top &&
+      rect.left < targetRect.right &&
+      rect.top < targetRect.bottom;
+    if (!visible) continue;
+    const touchesTop = rect.top <= targetRect.top + target.clientTop + 1;
+    const touchesBottom =
+      rect.bottom >= targetRect.top + target.clientTop + target.clientHeight - 1;
+    const touchesLeft = rect.left <= targetRect.left + target.clientLeft + 1;
+    const touchesRight = rect.right >= targetRect.left + target.clientLeft + target.clientWidth - 1;
+    const shouldHide =
+      fixedElementMode === "remove" ||
+      (fixedElementMode === "smart" &&
+        ((touchesTop && row > 0) ||
+          (touchesBottom && row < rows - 1) ||
+          (touchesLeft && column > 0) ||
+          (touchesRight && column < columns - 1)));
+    if (!shouldHide) continue;
+    const beforeStyle = element.getAttribute("style");
+    element.style.setProperty("visibility", "hidden", "important");
+    snapshot.mutations.push({
+      element,
+      beforeStyle,
+      appliedStyle: element.getAttribute("style"),
+    });
+    hidden += 1;
+  }
+  return hidden;
+}
+
+function requireScrollAreaTarget(
+  state: ElementSelectionRuntimeState,
+  request: ScrollAreaScrollMessage | ScrollAreaCleanupMessage,
+): StoredElementTarget | undefined {
+  const stored = state.targets.get(request.payload.descriptor.selectionId);
+  if (
+    stored === undefined ||
+    stored.jobId !== request.payload.jobId ||
+    stored.descriptor.selectionId !== request.payload.descriptor.selectionId ||
+    stored.descriptor.captureKind !== "full-scroll-content" ||
+    !stored.element.isConnected ||
+    !isScrollableElement(stored.element)
+  ) {
+    return undefined;
+  }
+  return stored;
+}
+
+async function handleScrollAreaScroll(
+  state: ElementSelectionRuntimeState,
+  request: ScrollAreaScrollMessage,
+): Promise<Record<string, unknown>> {
+  const stored = requireScrollAreaTarget(state, request);
+  if (stored === undefined || !(stored.element instanceof HTMLElement)) {
+    return scrollAreaFailure(request, {
+      code: "E_TARGET_STALE",
+      message: "The selected scrollable container is no longer available.",
+      causeCode: "ScrollAreaTargetUnavailable",
+    });
+  }
+  const target = stored.element;
+  const snapshot =
+    stored.scrollAreaSnapshot ??
+    ({
+      originalScrollLeft: target.scrollLeft,
+      originalScrollTop: target.scrollTop,
+      originalDocumentScrollX: window.scrollX,
+      originalDocumentScrollY: window.scrollY,
+      mutations: [],
+    } satisfies ScrollAreaTargetSnapshot);
+  stored.scrollAreaSnapshot = snapshot;
+
+  restoreScrollAreaMutations(snapshot);
+  target.scrollLeft = Math.max(0, request.payload.scrollLeft);
+  target.scrollTop = Math.max(0, request.payload.scrollTop);
+  await waitForFrames(2);
+
+  let mutationCount = 0;
+  let stableSamples = 0;
+  let previous = "";
+  const observer = new MutationObserver(() => {
+    mutationCount += 1;
+  });
+  observer.observe(target, { attributes: true, childList: true, subtree: true });
+  try {
+    for (let index = 0; index < 4; index += 1) {
+      await waitForDelay(Math.min(5_000, Math.max(0, request.payload.settleMs)));
+      await waitForFrames(2);
+      const sample = `${target.scrollWidth}:${target.scrollHeight}:${target.clientWidth}:${target.clientHeight}:${mutationCount}`;
+      stableSamples = sample === previous ? stableSamples + 1 : 0;
+      previous = sample;
+      if (stableSamples >= 1) break;
+    }
+  } finally {
+    observer.disconnect();
+  }
+
+  if (!target.isConnected || !isScrollableElement(target)) {
+    return scrollAreaFailure(request, {
+      code: "E_TARGET_STALE",
+      message: "The selected scrollable container changed before capture.",
+      causeCode: "ScrollAreaTargetDisconnected",
+    });
+  }
+
+  const hiddenStickyElements = applyScrollAreaStickyPolicy(
+    target,
+    snapshot,
+    request.payload.fixedElementMode,
+    request.payload.row,
+    request.payload.column,
+    request.payload.rows,
+    request.payload.columns,
+  );
+  await waitForFrames(2);
+
+  const rect = target.getBoundingClientRect();
+  const captureCropCss: Rect = {
+    x: rect.left + target.clientLeft,
+    y: rect.top + target.clientTop,
+    width: target.clientWidth,
+    height: target.clientHeight,
+  };
+  const tolerance = 1;
+  if (
+    captureCropCss.x < -tolerance ||
+    captureCropCss.y < -tolerance ||
+    captureCropCss.x + captureCropCss.width > window.innerWidth + tolerance ||
+    captureCropCss.y + captureCropCss.height > window.innerHeight + tolerance
+  ) {
+    return scrollAreaFailure(request, {
+      code: "E_LAYOUT_UNSTABLE",
+      message: "The selected scrollable container cannot be fully exposed inside the viewport.",
+      causeCode: "ScrollAreaNotFullyVisible",
+    });
+  }
+
+  const scrollWidth = Math.max(1, target.scrollWidth);
+  const scrollHeight = Math.max(1, target.scrollHeight);
+  const clientWidth = Math.max(1, target.clientWidth);
+  const clientHeight = Math.max(1, target.clientHeight);
+  const actualScrollLeft = Math.max(0, target.scrollLeft);
+  const actualScrollTop = Math.max(0, target.scrollTop);
+  const scrollSnapped =
+    Math.abs(actualScrollLeft - request.payload.scrollLeft) > 1 ||
+    Math.abs(actualScrollTop - request.payload.scrollTop) > 1;
+  const layoutChanged =
+    (request.payload.expectedScrollWidth !== undefined &&
+      Math.abs(scrollWidth - request.payload.expectedScrollWidth) > 2) ||
+    (request.payload.expectedScrollHeight !== undefined &&
+      Math.abs(scrollHeight - request.payload.expectedScrollHeight) > 2) ||
+    (request.payload.expectedClientWidth !== undefined &&
+      Math.abs(clientWidth - request.payload.expectedClientWidth) > 2) ||
+    (request.payload.expectedClientHeight !== undefined &&
+      Math.abs(clientHeight - request.payload.expectedClientHeight) > 2);
+
+  return scrollAreaResponse(request, "SCROLL_AREA_SCROLLED", {
+    jobId: stored.jobId,
+    descriptor: stored.descriptor,
+    requestedScrollLeft: request.payload.scrollLeft,
+    requestedScrollTop: request.payload.scrollTop,
+    actualScrollLeft,
+    actualScrollTop,
+    scrollWidth,
+    scrollHeight,
+    clientWidth,
+    clientHeight,
+    viewportWidth: Math.max(1, window.innerWidth),
+    viewportHeight: Math.max(1, window.innerHeight),
+    devicePixelRatio: Math.max(0.01, window.devicePixelRatio || 1),
+    captureCropCss,
+    hiddenStickyElements,
+    stableSamples,
+    mutationCount,
+    scrollSnapped,
+    layoutChanged,
+  });
+}
+
+async function handleScrollAreaCleanup(
+  state: ElementSelectionRuntimeState,
+  request: ScrollAreaCleanupMessage,
+): Promise<Record<string, unknown>> {
+  const stored = state.targets.get(request.payload.descriptor.selectionId);
+  const snapshot = stored?.scrollAreaSnapshot;
+  if (stored === undefined || snapshot === undefined || !(stored.element instanceof HTMLElement)) {
+    return scrollAreaResponse(request, "SCROLL_AREA_CLEANED", {
+      jobId: request.payload.jobId,
+      restoredElements: 0,
+      skippedElements: 0,
+      scrollRestored: true,
+      documentScrollRestored: true,
+    });
+  }
+  const mutations = restoreScrollAreaMutations(snapshot);
+  let scrollRestored = false;
+  let documentScrollRestored = false;
+  if (stored.element.isConnected) {
+    stored.element.scrollLeft = snapshot.originalScrollLeft;
+    stored.element.scrollTop = snapshot.originalScrollTop;
+    await waitForFrames(2);
+    scrollRestored =
+      Math.abs(stored.element.scrollLeft - snapshot.originalScrollLeft) <= 1 &&
+      Math.abs(stored.element.scrollTop - snapshot.originalScrollTop) <= 1;
+  }
+  window.scrollTo({
+    left: snapshot.originalDocumentScrollX,
+    top: snapshot.originalDocumentScrollY,
+    behavior: "auto",
+  });
+  await waitForFrames(2);
+  documentScrollRestored =
+    Math.abs(window.scrollX - snapshot.originalDocumentScrollX) <= 1 &&
+    Math.abs(window.scrollY - snapshot.originalDocumentScrollY) <= 1;
+  delete stored.scrollAreaSnapshot;
+  return scrollAreaResponse(request, "SCROLL_AREA_CLEANED", {
+    jobId: stored.jobId,
+    restoredElements: mutations.restored,
+    skippedElements: mutations.skipped,
+    scrollRestored,
+    documentScrollRestored,
+  });
+}
+
 function installElementSelectionRuntime(): { installed: boolean; reused: boolean } {
   const carrier = globalThis as typeof globalThis & ElementSelectionStateCarrier;
   const existing = carrier[ELEMENT_SELECTION_GLOBAL_KEY];
@@ -1238,9 +1639,40 @@ function installElementSelectionRuntime(): { installed: boolean; reused: boolean
   };
 
   state.listener = (message, sender, sendResponse) => {
-    if (!isElementSelectionRequest(message) || sender.id !== chrome.runtime.id) {
-      return false;
+    if (sender.id !== chrome.runtime.id) return false;
+
+    if (isScrollAreaScrollRequest(message)) {
+      void handleScrollAreaScroll(state, message)
+        .then(sendResponse)
+        .catch((error: unknown) =>
+          sendResponse(
+            scrollAreaFailure(message, {
+              code: "E_LAYOUT_UNSTABLE",
+              message:
+                error instanceof Error ? error.message : "Scrollable container capture failed.",
+              causeCode: error instanceof Error ? error.name : "ScrollAreaCaptureFailure",
+            }),
+          ),
+        );
+      return true;
     }
+    if (isScrollAreaCleanupRequest(message)) {
+      void handleScrollAreaCleanup(state, message)
+        .then(sendResponse)
+        .catch((error: unknown) =>
+          sendResponse(
+            scrollAreaFailure(message, {
+              code: "E_CLEANUP_PARTIAL",
+              stage: "cleanup",
+              message:
+                error instanceof Error ? error.message : "Scrollable container cleanup failed.",
+              causeCode: error instanceof Error ? error.name : "ScrollAreaCleanupFailure",
+            }),
+          ),
+        );
+      return true;
+    }
+    if (!isElementSelectionRequest(message)) return false;
 
     if (message.type === "ELEMENT_TARGET_REVALIDATE") {
       const stored = state.targets.get(message.payload.descriptor.selectionId);
@@ -1259,7 +1691,10 @@ function installElementSelectionRuntime(): { installed: boolean; reused: boolean
         );
         return false;
       }
-      const rect = readElementDocumentRect(stored.element);
+      const rect =
+        stored.descriptor.captureKind === "full-scroll-content"
+          ? readElementScrollContentRect(stored.element)
+          : readElementDocumentRect(stored.element);
       if (rect.width < 1 || rect.height < 1) {
         sendResponse(
           elementSelectionFailure(message, {
@@ -1303,6 +1738,7 @@ function installElementSelectionRuntime(): { installed: boolean; reused: boolean
     try {
       state.controller = openElementSelector({
         jobId: message.payload.jobId,
+        captureKind: message.payload.captureKind,
         onCommit: async (selection: ElementSelection) => {
           delete state.controller;
           state.targets.set(selection.descriptor.selectionId, {
@@ -1343,6 +1779,20 @@ function installElementSelectionRuntime(): { installed: boolean; reused: boolean
   state.pageHideListener = () => {
     state.controller?.dispose();
     delete state.controller;
+    for (const target of state.targets.values()) {
+      if (target.scrollAreaSnapshot !== undefined) {
+        restoreScrollAreaMutations(target.scrollAreaSnapshot);
+        if (target.element instanceof HTMLElement && target.element.isConnected) {
+          target.element.scrollLeft = target.scrollAreaSnapshot.originalScrollLeft;
+          target.element.scrollTop = target.scrollAreaSnapshot.originalScrollTop;
+        }
+        window.scrollTo({
+          left: target.scrollAreaSnapshot.originalDocumentScrollX,
+          top: target.scrollAreaSnapshot.originalDocumentScrollY,
+          behavior: "auto",
+        });
+      }
+    }
     state.targets.clear();
   };
   chrome.runtime.onMessage.addListener(state.listener);
