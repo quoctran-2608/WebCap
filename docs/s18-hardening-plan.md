@@ -1,5 +1,9 @@
 # S18 Capture Hardening Plan
 
+## Completion
+
+S18 is complete on PR #22. The validated implementation commit is `79398f7040f6ef6fd9ea5ee5a9e7d07a34e440bd`; the atomic implementation gate `30889381904` passed format, lint, strict typecheck, 268 unit tests across 75 files, four PDF benchmarks, the verified Manifest V3 build, and 33 Playwright E2E cases. The final merge gate must run through the repository's read-only CI after every temporary workflow and staging payload has been removed.
+
 ## Goal
 
 Make the existing capture engines deterministic and honest across the MVP edge-case fixture matrix without expanding into S19 diagnostics/i18n or unsupported protected-content work.
