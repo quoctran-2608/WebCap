@@ -14,6 +14,7 @@ function parseArguments(arguments_) {
     executablePath: null,
     browserLabel: "playwright",
     reportPath: null,
+    headed: false,
   };
   for (let index = 0; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
@@ -37,6 +38,10 @@ function parseArguments(arguments_) {
       index += 1;
       continue;
     }
+    if (argument === "--headed") {
+      options.headed = true;
+      continue;
+    }
     throw new Error(`Unknown lifecycle argument: ${argument}`);
   }
   return options;
@@ -57,14 +62,20 @@ async function extractArchive(archivePath, destination) {
   }
 }
 
-async function launchProfile({ profilePath, extensionPath, executablePath, loadExtension = true }) {
+async function launchProfile({
+  profilePath,
+  extensionPath,
+  executablePath,
+  loadExtension = true,
+  headless = true,
+}) {
   const args = ["--no-sandbox", "--disable-dev-shm-usage"];
   if (loadExtension) {
     args.push(`--disable-extensions-except=${extensionPath}`, `--load-extension=${extensionPath}`);
   }
   return chromium.launchPersistentContext(profilePath, {
     ...(executablePath === null ? { channel: "chromium" } : { executablePath }),
-    headless: true,
+    headless,
     viewport: { width: 900, height: 600 },
     args,
   });
@@ -169,6 +180,7 @@ try {
     profilePath: cleanProfilePath,
     extensionPath: cleanExtensionPath,
     executablePath: options.executablePath,
+    headless: !options.headed,
   });
   try {
     browserVersion = cleanContext.browser()?.version() ?? "unknown";
@@ -201,6 +213,7 @@ try {
     profilePath: updateProfilePath,
     extensionPath: updateExtensionPath,
     executablePath: options.executablePath,
+    headless: !options.headed,
   });
   const marker = `release-${packagedManifest.version}`;
   try {
@@ -217,6 +230,7 @@ try {
     profilePath: updateProfilePath,
     extensionPath: updateExtensionPath,
     executablePath: options.executablePath,
+    headless: !options.headed,
   });
   try {
     const worker = await getExtensionWorker(updatedContext);
@@ -238,6 +252,7 @@ try {
     extensionPath: updateExtensionPath,
     executablePath: options.executablePath,
     loadExtension: false,
+    headless: !options.headed,
   });
   try {
     await delay(1_500);
