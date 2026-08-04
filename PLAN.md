@@ -1,141 +1,343 @@
 ---
 product: WebCap
-document: Completed Implementation Plan
-version: 1.0
+document: Active Implementation Plan
+version: 1.1
 date: 2026-08-04
-status: Complete
+status: Planned
 repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
-prd: ./PRD_WebCap_v1.0.md
-spec: ./SPEC.md
-current_session: COMPLETE
+prd: ./PRD_WebCap_v1.1.md
+spec: ./docs/spec-0.2.0.md
+audit: ./docs/audits/0.1.0-gap-audit.md
+release_target: 0.2.0
+current_session: S21
 ---
 
-# WebCap — Completed implementation plan
+# WebCap — Implementation plan 0.2.0
 
-Kế hoạch MVP `S00–S20` đã hoàn thành. Tài liệu này là sổ điều phối cuối cùng: ghi lại trạng thái từng session, release gate của S20 và những thao tác chỉ được thực hiện khi có quyết định sản phẩm/phát hành mới.
+Roadmap `S00–S20` đã tạo release candidate 0.1.0. Roadmap mới `S21–S26` xử lý các khoảng trống thực tế: reset/chụp mới, region drawing có thể nhìn thấy và sử dụng được, adaptive auto-scroll, auto-PDF/output routing, settings/UI/progress và hardening release.
 
-Bản kế hoạch chi tiết trước khi đóng roadmap vẫn được bảo toàn trong Git history tại commit `aaf41ff63f141510ddde890d1dad366395b0fe2c`; việc rút gọn file hiện tại không xóa lịch sử session, acceptance criteria hay ghi chú kỹ thuật đã commit.
+PR kế hoạch chỉ cập nhật tài liệu. Không thay source, manifest, package version hoặc artifact 0.1.0.
 
 # 1. Nguồn sự thật
 
-- `PRD_WebCap_v1.0.md`: phạm vi và acceptance criteria sản phẩm.
-- `SPEC.md`: kiến trúc, contract, guardrail và Definition of Done.
-- `PLAN.md`: trạng thái thực thi cuối cùng của roadmap MVP.
-- `CHANGELOG.md`: nội dung release candidate 0.1.0.
-- `docs/release-checklist.md`: automated evidence và owner action còn mở trước Chrome Web Store.
-- `docs/release/acceptance-criteria-0.1.0.md`: traceability của toàn bộ MUST acceptance criteria.
+- `PRD_WebCap_v1.0.md`: baseline AC-01–AC-18.
+- `PRD_WebCap_v1.1.md`: delta 0.2.0, AC-19–AC-40.
+- `SPEC.md`: baseline architecture/contracts.
+- `docs/spec-0.2.0.md`: region, adaptive scroll, output, reset, settings, events và recovery.
+- `docs/audits/0.1.0-gap-audit.md`: inventory vấn đề và disposition.
+- `PLAN.md`: session, dependency, validation và exit criteria.
+- `CHANGELOG.md`: chỉ cập nhật khi behavior thực sự đổi.
 
-# 2. Nguyên tắc sau khi hoàn thành
+# 2. Nguyên tắc triển khai
 
-- Không tự động bắt đầu session hoặc capability mới.
-- Mọi thay đổi code/package sau RC 0.1.0 phải có phạm vi riêng; cập nhật PRD/SPEC khi quyết định sản phẩm thay đổi.
-- Nếu artifact đã được upload lên Chrome Web Store, mọi package thay thế phải tăng manifest/package version.
-- Không thêm telemetry, backend, account, cloud sync, remote executable code, default host permission hoặc required permission mới nếu chưa có quyết định và review riêng.
-- Không tạo tag, GitHub Release, submit store hoặc bật automatic publication chỉ vì roadmap kỹ thuật đã hoàn thành.
-- Generated ZIP, browser profile, test report và browser binary chỉ tồn tại dưới dạng CI artifact; không commit vào repo.
+- Mỗi PR hoàn thành một session có thể kiểm thử.
+- Contract/storage trước UI sử dụng contract.
+- Behavior và tests trong cùng PR.
+- Không tuyên bố unlimited; bỏ CSS-height hard stop nhưng giữ resource budgets.
+- Không backend, telemetry, account, cloud sync, remote code, required permission hoặc default host permission mới.
+- Không full-page canvas; PDF page-at-a-time, image output chỉ dưới guard.
+- Success/error/cancel/reset/recovery đều cleanup và restore trong finally-equivalent.
+- Không thay artifact 0.1.0. Version 0.2.0 chỉ bump ở S26.
 
-# 3. Roadmap hoàn tất
+# 3. Baseline phải giữ xanh
 
-| Session | Capability | Status | Reference evidence |
+- 279 unit tests / 79 files.
+- 4 PDF benchmark scenarios.
+- 38 Playwright E2E cases.
+- Verified Manifest V3 build.
+- Privacy, dependency/license, release metadata và critical-security audits.
+- DPR `1/1.5/2` × zoom `80/100/125/150%` release matrix.
+- Zero accepted P0/P1.
+
+# 4. Roadmap 0.2.0
+
+| Session | Capability | Status | Depends on |
 | --- | --- | --- | --- |
-| S00 | Bootstrap workspace và quality toolchain | DONE | `44757499ab7f` |
-| S01 | Manifest V3 multi-entry và popup ↔ worker handshake | DONE | `461a6b8560d3` |
-| S02 | Shared contracts, settings, errors và CI | DONE | `6e6a76659173` |
-| S03 | Visible capture coordinator và Chrome adapter | DONE | PR #7 / `710ce8d` |
-| S04 | Offscreen processing, artifact storage và download | DONE | PR #8 / `a4eeaa5` |
-| S05 | Preview UI và visible-capture E2E | DONE | PR #9 / `579f5b6` |
-| S06 | Persistent job state machine và repositories | DONE | PR #10 / `58fbc61` |
-| S07 | Debugger client, page metrics và 2D tile planner | DONE | PR #11 / `fb03138` / squash `15b4ec6` |
-| S08 | Page preparation, lazy settle và restoration | DONE | PR #12 / `b1f07eb` |
-| S09 | CDP tiled full-page capture, progress và cancel | DONE | PR #13 / CI `30787032374` |
-| S10 | Scroll fallback, fixed policy và long-page validation | DONE | PR #14 / CI `30791809060` |
-| S11 | CoordinateSpace và region selector | DONE | PR #15 / CI `30799895160` |
-| S12 | Element selector và target capture | DONE | PR #16 / CI `30805006996` |
-| S13 | PDF page slicing và page-at-a-time exporter | DONE | PR #17 / CI `30810848147` |
-| S14 | Editor, PDF options và export retry | DONE | PR #18 |
-| S15 | PDF benchmarks, integrity và memory guards | DONE | PR #19 / CI `30871783639` |
-| S16 | Scrollable-container detection và capture | DONE | PR #20 / CI `30876338727` |
-| S17 | PDF source detection và original passthrough | DONE | PR #21 / CI `30882436209` |
-| S18 | Hardening lazy/infinite/iframe/canvas/WebGL | DONE | PR #22 / CI `30889381904` |
-| S19 | Diagnostics, i18n, privacy và permissions | DONE | PR #23 / CI `30899360894` |
-| S20 | Release candidate, packaging và store readiness | DONE | PR #24 / validation `3fb083fc` / CI `30909732983` / RC `30909732939` |
+| S21 | Reset lifecycle và “Chụp mới” | PLANNED | S20 |
+| S22 | Region drawing launch, interaction và accessibility | BLOCKED | S21 cleanup primitive |
+| S23 | Adaptive auto-scroll và resumable frontier | BLOCKED | S21 |
+| S24 | Auto-PDF và mode-aware image/PDF output | BLOCKED | S23 |
+| S25 | Stored settings, event-driven progress và simplified popup | BLOCKED | S21–S24 stable contracts |
+| S26 | Gap closure hardening, migration, docs và RC 0.2.0 | BLOCKED | S21–S25 |
 
-# 4. S20 — final release evidence
+# 5. S21 — Reset lifecycle và “Chụp mới”
 
-## 4.1 Artifact
+## Mục tiêu
 
-- Version: `0.1.0` trong `package.json` và packaged `manifest.json`.
-- Minimum Chrome: `116`.
-- Package: `webcap-0.1.0.zip`.
-- Entry count: `24`.
-- Size: `1.097.035` byte.
-- SHA-256: `630c44c07e72da0d5edc1c82c013ecf6caf995e0542ee19679380081e7b0cb7a`.
-- Hai lần package từ cùng source tạo ZIP byte-identical.
-- `manifest.json` nằm ở archive root; không source map, profile, test report hoặc development file trong ZIP.
+Cho phép bỏ capture hiện tại và bắt đầu lại ở mọi state; tạo cleanup primitive dùng chung cho reset, expiry và selector launch failure.
 
-## 4.2 Quality gate
+## Phạm vi
 
-- Format, ESLint và strict TypeScript: PASS.
-- Privacy, dependency/license, release metadata và critical-security audit: PASS.
-- Unit: `279/279` tests trên `79` files.
-- PDF benchmark: `4/4` scenarios.
-- Manifest V3 production build: PASS.
-- Playwright: `38/38` E2E cases.
-- DPR/zoom release matrix: DPR `1`, `1,5`, `2` × zoom `80%`, `100%`, `125%`, `150%`.
-- Open P0/P1: `0`.
-- Critical dependency advisory: `0`.
-- Unresolved review thread: `0`.
+- `CAPTURE_RESET` contract và report versioned.
+- `CaptureResetService` ở background.
+- Delete theo capture ownership: job, tiles, source/output artifacts, thumbnails, edit manifest, summary, lock, visible session.
+- Terminal reset: cleanup local data và unlock tab.
+- Active reset: confirm → cancel → restore → discard.
+- Dedupe theo requestId; missing record success idempotent.
+- Reuse primitive trong expiry cleanup.
+- Nút “Chụp mới” tối thiểu trong UI hiện tại.
+- Command riêng để reset settings; không trộn với capture reset.
 
-## 4.3 Packaged lifecycle
+## Validation
 
-Các môi trường sau đều xác thực clean install, optional host permission không được cấp mặc định, update fixture `0.0.9 → 0.1.0`, extension ID và `chrome.storage.local` được giữ, self-uninstall và relaunch cùng profile không còn extension:
+- Contract/parser/router/service/repository unit tests.
+- Terminal, active, missing, duplicate, partial cleanup, isolation.
+- E2E visible và tiled reset, capture lần hai cùng tab.
+- No stale lock/job/tile/artifact.
 
-- Linux.
-- Windows.
-- macOS.
-- Chrome for Testing `116.0.5845.96`.
-- Chrome for Testing stable `151.0.7922.71`.
+## Exit
 
-## 4.4 Acceptance và security disposition
+- AC-25–AC-27 pass.
+- Không còn dead-end terminal.
+- Settings, locale và downloaded files được giữ.
 
-- Toàn bộ MUST acceptance criteria AC-01–AC-18: PASS.
-- Local-first/no content upload claim khớp privacy audit và browser network assertion.
-- Không remote executable code, analytics SDK, backend, account hoặc cloud sync.
-- Không default host permission; optional host permissions chỉ chạy sau user intent.
-- Không thêm required permission trong S20.
-- Mọi boundary còn lại là P2/known limitation có workaround trong `docs/known-limitations.md`.
+# 6. S22 — Region drawing launch và reliability
 
-## 4.5 Publication boundary
+## Mục tiêu
 
-S20 chỉ chuẩn bị và kiểm thử release candidate. Chưa thực hiện:
+Bấm “Vẽ vùng chọn” phải tạo một hành trình rõ ràng: popup đóng, overlay xuất hiện ngay, pointer/keyboard tạo rectangle được và kết quả không chứa UI selector.
 
-- Git tag.
-- GitHub Release.
-- Chrome Web Store upload.
-- Store review submission.
-- Public publication hoặc automatic publication.
+## Phạm vi
 
-# 5. Exit criteria M6
+- Ready handshake chỉ success sau root attach, stage focus, listeners và first render.
+- Popup `window.close()` sau ready ACK.
+- Launch timeout/error dùng S21 cleanup; zero orphan job/root/lock.
+- Copy hướng dẫn ngắn và visible crosshair/dim mask.
+- Pointer create/move/eight-handle resize/auto-scroll.
+- Handle hit target ≥24 CSS px.
+- Keyboard creation bằng Space hoặc toolbar fallback; move/resize shortcuts.
+- Enter commit, Escape cancel.
+- Duplicate open atomic và một selector root duy nhất.
+- Selector removed + two RAF before capture.
+- Region result default PNG; output implementation hoàn tất trong S24.
 
-- [x] Toàn bộ MUST acceptance criteria pass.
-- [x] Không có P0/P1.
-- [x] Không có critical dependency advisory.
-- [x] ZIP reproducible và checksum được ghi nhận.
-- [x] Manifest/version/permissions/locales/icons được audit.
-- [x] Packaged install/update/uninstall được xác thực trên clean profile.
-- [x] Chrome minimum và stable được kiểm thử.
-- [x] Linux/Windows/macOS lifecycle pass.
-- [x] Release checklist, known limitations, privacy/store copy, release notes và CHANGELOG hoàn chỉnh.
-- [x] Workflow release chỉ đọc source và upload artifact; không publish store.
+## Fixtures
 
-# 6. Quyết định tiếp theo
+- Standard region page.
+- Long region beyond viewport.
+- Wide region with horizontal auto-scroll.
+- Launch injection failure.
+- Duplicate start.
+- Focus/keyboard fixture.
+- DPR/zoom fixture.
 
-Chỉ tiếp tục khi có yêu cầu rõ ràng thuộc một trong các nhóm sau:
+## Validation
 
-1. **Submit Chrome Web Store:** hoàn tất các owner action còn mở trong `docs/release-checklist.md`, dùng đúng ZIP/checksum đã xác thực và chỉ submit sau phê duyệt phát hành cụ thể.
-2. **Thay đổi sản phẩm/code/package:** mở session/version mới có mục tiêu, phạm vi, validation và rollback riêng; cập nhật PRD/SPEC nếu quyết định khóa thay đổi; chạy lại toàn bộ release gate.
-3. **Tạo tag hoặc GitHub Release:** dùng commit đã merge và artifact tái tạo từ workflow read-only; không gắn tag vào artifact chưa qua gate.
-4. **Phát hành công khai:** review lại privacy policy URL, support/homepage URL, store assets, privacy-practices declaration, permission warnings và distribution audience trước khi submit.
+- Unit coordinate/keyboard/handshake/timeout cleanup.
+- Headed/package E2E từ action popup: click → popup closed → overlay visible ≤500 ms.
+- Pointer and keyboard complete flows.
+- Exact CSS document rectangle.
+- Overlay pixel exclusion.
+- Restore scroll/focus/styles on confirm/cancel/error.
 
-Không có session triển khai kế tiếp được lên lịch trong tài liệu này.
+## Exit
+
+- AC-31–AC-34 pass.
+- User không cần click ra ngoài popup hoặc đoán bước tiếp theo.
+- No orphan selector/job.
+
+# 7. S23 — Adaptive auto-scroll và resumable frontier
+
+## Mục tiêu
+
+Chụp finite page từ đầu đến stable end, kể cả >100k và lazy growth; worker restart không làm mất prefix đã lưu.
+
+## Phạm vi
+
+- `AdaptiveScrollCaptureEngine`.
+- Adaptive frontier planner và stable-end detector.
+- Persist frontier sau mỗi stored tile.
+- Start `y=0`, remeasure sau mỗi scroll/settle.
+- Height growth expected; width/DPR/pixel-scale drift fail.
+- Bottom + 3 stable rounds + final probe.
+- Resource budgets: duration, tile, stored bytes/quota, storage pressure, memory.
+- User stop giữ contiguous prefix; cancel/reset discard.
+- Resume service revalidate document token/viewport/DPR/frontier.
+- Valid restart resumes; invalid restart gives Keep/Restart/Reset partial flow.
+- Existing CDP engine giữ nguyên; routing chọn adaptive khi cần visible scrolling/lazy growth hoặc fallback.
+
+## Fixtures
+
+- Static 30k, 100k, >100k.
+- Finite lazy growth nhiều đợt.
+- Infinite guard.
+- Fixed/sticky seam.
+- Restart after N tiles.
+- Navigation/document/DPR drift negative cases.
+
+## Validation
+
+- Stable detector and frontier unit matrix.
+- No gap/duplicate/recapture prefix.
+- Actual browser capture for 30k/100k/>100k.
+- Restart resume/partial disposition.
+- Exact restoration on all exits.
+
+## Exit
+
+- AC-19–AC-21 và AC-38 pass.
+- Không silent truncation.
+- Không full-page canvas/multi-tile decode.
+
+# 8. S24 — Auto-PDF và mode-aware output
+
+## Mục tiêu
+
+Mỗi capture mode kết thúc bằng output hợp lý mà không bắt người dùng hiểu tile/editor.
+
+## Output defaults
+
+- Full-page: PDF, auto export.
+- Scroll-area: PDF; image option khi dưới guard.
+- Region: PNG; JPEG/WebP; PDF fallback nếu quá lớn.
+- Element: PNG; JPEG/WebP; PDF fallback nếu quá lớn.
+- Visible: existing image flow.
+
+## Phạm vi
+
+- `CaptureCompletionPolicy` + migration.
+- Coordinator auto export từ durable `ready` checkpoint.
+- Auto-export idempotent after restart.
+- `TiledImageExportService` bounded by pixel/canvas/memory guard.
+- PDF exporter consume adaptive logical crop/overlap.
+- Seam integrity: no gap, no duplicate strip, exact bottom.
+- Partial output only after explicit keep.
+- Result contract: artifact ID/type/size, Download, Edit when supported, New capture.
+- Typed `E_IMAGE_OUTPUT_TOO_LARGE` → “Xuất PDF”.
+
+## Validation
+
+- State orchestration and exactly-once auto export.
+- Export failure preserves tiles; retry no recapture.
+- PDF signature/page count/dimensions/image backing.
+- PNG/JPEG/WebP guarded image output.
+- Seam fingerprint fixture.
+- Memory metrics: PDF decoded concurrency ≤1; image canvas only after guard.
+
+## Exit
+
+- AC-22–AC-24 và AC-36 pass.
+- Region/element có result ảnh trực tiếp trong safe cases.
+- Basic full-page completes without editor.
+
+# 9. S25 — Settings, events và simplified popup
+
+## Mục tiêu
+
+Biến stored settings thành nguồn sự thật, bỏ polling ngắn và tập trung popup vào mục tiêu người dùng.
+
+## Settings
+
+- Load/migrate settings before create job.
+- `startTiledCapture` nhận validated settings, không override bằng defaults.
+- Persist per-mode output, image quality, PDF size/orientation/margin/quality, fixed/sticky policy.
+- Advanced options collapsed.
+- “Đặt lại tùy chọn” riêng.
+
+## Event-driven progress
+
+- Subscribe `JOB_PROGRESS`, `JOB_STATE_CHANGED`, `VISIBLE_SESSION_CHANGED`, `SELECTOR_STATE_CHANGED`, `CAPTURE_RESET_COMPLETED`.
+- Authoritative fetch on initial open, missed revision, reconnect.
+- Busy reconciliation 5–10 seconds; không 350 ms polling liên tục.
+
+## Information architecture
+
+1. Header + Help.
+2. Conditional support/permission notice.
+3. Goal selector: Full page → PDF; Specific area; Current screen.
+4. Target picker: Draw rectangle; Select element; Select scroll area.
+5. Primary CTA.
+6. Phase progress/result.
+7. Advanced options.
+8. Help & diagnostics.
+
+Move out of main flow: worker/version, engine, raw tiles, checksum, milestones, permission inventory, copy diagnostics. PDF inspection không gây checking-card flicker trên non-PDF tab.
+
+## Validation
+
+- Settings persistence/migration/default reset.
+- Event revision/reconciliation tests.
+- Component/view-model unit tests.
+- Keyboard capture/reset/download/help/settings.
+- Main popup assertions exclude technical copy.
+- Restricted page/permission guidance remains explicit.
+
+## Exit
+
+- AC-28, AC-29, AC-35, AC-37 pass.
+- Main CTA rõ ở idle/result.
+- Không mất capability 0.1.0.
+
+# 10. S26 — Hardening, gap closure và release candidate
+
+## Mục tiêu
+
+Khóa behavior, đóng audit items đã chọn, cập nhật docs và tạo RC 0.2.0 reproducible.
+
+## Phạm vi
+
+- Review `docs/audits/0.1.0-gap-audit.md`: mọi MUST/SHOULD có evidence hoặc disposition.
+- Bump package/manifest lên 0.2.0 chỉ tại đây.
+- Update README, PRD/SPEC refs, CHANGELOG, privacy, permissions, known limitations, manual testing, release checklist/notes/acceptance traceability.
+- Benchmark và khóa adaptive budgets.
+- Upgrade 0.1.0 → 0.2.0 giữ settings/locale hợp lệ.
+- Full audits và regression.
+- Deterministic ZIP/checksum.
+- Packaged lifecycle Linux/Windows/macOS.
+- Chrome minimum, current stable và previous stable.
+- Không upload/submit/publish Store nếu chưa approval.
+
+## Release matrix
+
+- Static 30k/100k/>100k actual-browser.
+- Finite lazy growth và infinite partial.
+- Region popup-to-overlay pointer/keyboard.
+- Element/scroll-area/visible regressions.
+- PDF original passthrough.
+- Reset terminal/active/interrupted.
+- Worker restart resume/partial.
+- DPR/zoom critical flows.
+
+## Exit
+
+- AC-01–AC-40 pass hoặc non-MUST disposition được owner chấp thuận.
+- Zero P0/P1, critical advisory và unresolved review thread.
+- Reproducible package và lifecycle pass.
+- Platform limitations được Help/docs mô tả trung thực.
+
+# 11. Defer và platform boundaries
+
+Không kéo vào core 0.2.0 trừ khi S21–S25 hoàn tất sớm:
+
+- advanced crop editor;
+- original PDF page range;
+- one-long-page PDF;
+- annotation/OCR/search;
+- batch/cloud integrations/history.
+
+Không workaround trái nền tảng cho restricted surfaces, DRM, cross-origin DOM, closed shadow root, file permission hoặc source-tab-active requirement.
+
+# 12. Dependency graph
+
+```text
+S21 Reset/cleanup
+ ├─→ S22 Region selector launch
+ └─→ S23 Adaptive/resume
+       ↓
+     S24 Auto output
+       ↓
+     S25 Settings/events/UI
+       ↓
+     S26 Hardening/release
+```
+
+# 13. Current session handoff
+
+**Current session: S21 — Reset lifecycle và “Chụp mới”.**
+
+1. Merge PR kế hoạch sau review.
+2. Tạo `agent/s21-capture-reset` từ `main`.
+3. Viết contract/service/tests trước UI.
+4. Không triển khai selector/adaptive/export/redesign ngoài scope S21.
+5. Draft PR; mark ready chỉ sau clean read-only CI.
