@@ -41,10 +41,11 @@ describe("inspectPdfIntegrity", () => {
     expect(report.byteLength).toBeGreaterThan(0);
     expect(report.imageObjectCount).toBeGreaterThanOrEqual(1);
     expect(report.nonEmptyStreamCount).toBeGreaterThanOrEqual(report.imageObjectCount);
-    expect(report.pages).toEqual([
-      { index: 0, widthPt: expect.closeTo(595.28, 2), heightPt: expect.closeTo(841.89, 2) },
-      { index: 1, widthPt: 612, heightPt: 792 },
-    ]);
+    expect(report.pages).toHaveLength(2);
+    expect(report.pages[0]?.index).toBe(0);
+    expect(report.pages[0]?.widthPt).toBeCloseTo(595.28, 2);
+    expect(report.pages[0]?.heightPt).toBeCloseTo(841.89, 2);
+    expect(report.pages[1]).toEqual({ index: 1, widthPt: 612, heightPt: 792 });
   });
 
   it("reports signature and expectation mismatches without throwing", async () => {
