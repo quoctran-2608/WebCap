@@ -4,6 +4,7 @@ import {
   PdfExporter,
   type PdfDocumentPort,
   type PdfExportEnvironment,
+  type PdfIntegrityInspector,
 } from "@offscreen/pdf-exporter";
 import type { ArtifactRecord } from "@shared/contracts/artifact";
 import type { CaptureTile } from "@shared/contracts/domain";
@@ -115,6 +116,25 @@ function environment(pageWidths: number[], released: { count: number }): PdfExpo
   };
 }
 
+const acceptTestPdf: PdfIntegrityInspector = (input, expectations = {}) => {
+  const bytes = input instanceof Uint8Array ? input : new Uint8Array(input);
+  const pages = (expectations.pageSizes ?? []).map((page, index) => ({
+    index,
+    widthPt: page.widthPt,
+    heightPt: page.heightPt,
+  }));
+  return Promise.resolve({
+    valid: true,
+    byteLength: bytes.byteLength,
+    signatureValid: true,
+    pageCount: expectations.pageCount ?? pages.length,
+    pages,
+    imageObjectCount: 1,
+    nonEmptyStreamCount: 1,
+    errors: [],
+  });
+};
+
 describe("edited PdfExporter pages", () => {
   it("exports only the selected pages in manifest order", async () => {
     const source = input();
@@ -125,6 +145,7 @@ describe("edited PdfExporter pages", () => {
       tiles: repository.tiles,
       artifacts: repository.artifacts,
       environment: environment(pageWidths, released),
+      inspectIntegrity: acceptTestPdf,
     });
 
     const result = await exporter.export({
@@ -142,6 +163,7 @@ describe("edited PdfExporter pages", () => {
     expect(pageWidths).toEqual([700, 600]);
     expect(released.count).toBe(2);
     expect(result.artifact.pageCount).toBe(2);
+    expect(result.diagnostics.integrity).toMatchObject({ valid: true, pageCount: 2 });
     expect(repository.stored()).toMatchObject({
       artifactId: "pdf-edited",
       pageCount: 2,
@@ -157,6 +179,7 @@ describe("edited PdfExporter pages", () => {
       tiles: repository.tiles,
       artifacts: repository.artifacts,
       environment: environment(pageWidths, released),
+      inspectIntegrity: acceptTestPdf,
     });
 
     await expect(
