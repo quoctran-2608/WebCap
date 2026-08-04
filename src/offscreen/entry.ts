@@ -23,14 +23,13 @@ import { IndexedDbTileRepository } from "@storage/tile-repository";
 
 import { ImageProcessor } from "./image-processor";
 import { ObjectUrlRegistry } from "./object-url-registry";
-import { PdfExportSupervisor } from "./pdf-export-supervisor";
 import { PdfExporter, type PdfExportPayload, type PdfExportProgress } from "./pdf-exporter";
 
 export type OffscreenRouterResponse = OffscreenResponse | OffscreenPdfThumbnailCreatedMessage;
 
 export interface OffscreenRouterDependencies {
   processor: ImageProcessor;
-  pdfExporter: Pick<PdfExportSupervisor, "export">;
+  pdfExporter: Pick<PdfExporter, "export">;
   reportPdfProgress: (progress: PdfExportProgress) => Promise<boolean>;
   objectUrls: ObjectUrlRegistry;
   now: () => Date;
@@ -40,11 +39,7 @@ const artifacts = new IndexedDbArtifactRepository();
 const tiles = new IndexedDbTileRepository();
 const defaultDependencies: OffscreenRouterDependencies = {
   processor: new ImageProcessor({ artifacts }),
-  pdfExporter: new PdfExportSupervisor({
-    exporter: new PdfExporter({ artifacts, tiles }),
-    artifacts,
-    tiles,
-  }),
+  pdfExporter: new PdfExporter({ artifacts, tiles }),
   reportPdfProgress: async (progress) => {
     const request = createOffscreenPdfExportProgressMessage({
       requestId: crypto.randomUUID(),
