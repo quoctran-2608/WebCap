@@ -27,10 +27,15 @@ jobs:
 
       - name: Apply S21 implementation and restore read-only CI
         run: |
-          base64 --decode .github/s21.patch.gz.b64 | gzip --decompress > /tmp/s21.patch
+          cat .github/s21.patch.part* > /tmp/s21.patch.gz.b64
+          test "$(wc -c < /tmp/s21.patch.gz.b64)" = "27112"
+          echo "a332a27aa47b1ae3258f6bfd9490cbad59fc5e79b4754f4f2a12f7aa828f54a4  /tmp/s21.patch.gz.b64" | sha256sum --check
+          base64 --decode /tmp/s21.patch.gz.b64 | gzip --decompress > /tmp/s21.patch
+          echo "24457a5b7c3167d29c6a8c155c1fe8b021c7fa0be99ec87f8e06a8031afffddf  /tmp/s21.patch" | sha256sum --check
           git apply --index /tmp/s21.patch
           rm -f \
             .github/s21.patch.gz.b64 \
+            .github/s21.patch.part* \
             .github/workflows/apply-s21-once.yml \
             .github/workflows/s21-source-snapshot.yml
           git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
