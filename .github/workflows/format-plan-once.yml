@@ -1,0 +1,58 @@
+name: Format planning docs once
+
+on:
+  push:
+    branches:
+      - agent/0.2.0-upgrade-plan
+    paths:
+      - .github/workflows/format-plan-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out planning branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/0.2.0-upgrade-plan
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format planning documents
+        run: >-
+          pnpm exec prettier --write
+          PRD_WebCap_v1.1.md
+          docs/spec-0.2.0.md
+          docs/audits/0.1.0-gap-audit.md
+
+      - name: Remove one-shot workflow and commit
+        run: |
+          rm .github/workflows/format-plan-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PRD_WebCap_v1.1.md docs/spec-0.2.0.md docs/audits/0.1.0-gap-audit.md .github/workflows/format-plan-once.yml
+          if git diff --cached --quiet; then
+            echo "No formatting changes were required."
+            exit 0
+          fi
+          git commit -m "Format 0.2.0 planning docs"
+          git push origin HEAD:agent/0.2.0-upgrade-plan
