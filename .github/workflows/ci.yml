@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -21,8 +21,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -38,16 +36,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Format PDF integrity test
-        if: github.event_name == 'pull_request' && github.head_ref == 'agent/s15-pdf-benchmarks'
-        run: |
-          pnpm exec prettier --write tests/unit/pdf-integrity.test.ts
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add tests/unit/pdf-integrity.test.ts
-          git diff --cached --quiet || git commit -m "Format PDF integrity tests"
-          git push origin HEAD:${GITHUB_HEAD_REF}
 
       - name: Check formatting
         run: pnpm format:check
