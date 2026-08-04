@@ -114,7 +114,9 @@ const browserEnvironment: ThumbnailEnvironment = {
     };
   },
   createCanvas(width, height) {
-    const canvas = new OffscreenCanvas(width, height);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
     const context = canvas.getContext("2d");
     if (context === null) throw new Error("PDF thumbnail canvas is unavailable.");
     return {
@@ -149,10 +151,24 @@ const browserEnvironment: ThumbnailEnvironment = {
           destinationHeight,
         );
       },
-      encodeJpeg: (quality) => canvas.convertToBlob({ type: "image/jpeg", quality }),
+      encodeJpeg: (quality) =>
+        new Promise((resolve, reject) => {
+          canvas.toBlob(
+            (blob) => {
+              if (blob === null) {
+                reject(new Error("PDF thumbnail encoding returned an empty Blob."));
+                return;
+              }
+              resolve(blob);
+            },
+            "image/jpeg",
+            quality,
+          );
+        }),
       release() {
         canvas.width = 1;
         canvas.height = 1;
+        canvas.remove();
       },
     };
   },
