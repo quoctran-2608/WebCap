@@ -6,7 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-No unreleased changes.
+### Added
+
+- Versioned `CAPTURE_RESET` flow for visible sessions, persistent jobs and active-tab scope with request deduplication and idempotent missing-record behavior.
+- Shared capture-owned cleanup covering source/output artifacts, tiles, PDF edit manifests, job records, session summaries and exact tab locks.
+- User-facing “New capture” actions for preview and every terminal tiled state, plus confirmation before discarding an active capture.
+- Reset-safe selector close commands and active capture/PDF/image-export quiescence so late callbacks cannot recreate deleted state.
+- S21 unit and browser coverage for terminal reset, active reset, partial cleanup, replay safety, late image output, page restoration and immediate second capture on the same tab.
 
 ## [0.1.0] - 2026-08-04
 

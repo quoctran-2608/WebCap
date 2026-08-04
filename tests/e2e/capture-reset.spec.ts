@@ -130,7 +130,9 @@ test("@smoke resets terminal and active full-page jobs without stale local data"
   const popup = await openPopup();
   await selectFullPage(popup);
   await popup.getByRole("button", { name: "Bắt đầu chụp toàn trang" }).click();
-  await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({ timeout: 45_000 });
+  await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({
+    timeout: 45_000,
+  });
 
   const first = await readTiledResetState(serviceWorker);
   expect(first.job).toMatchObject({ state: "ready" });
