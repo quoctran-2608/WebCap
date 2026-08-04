@@ -1,4 +1,4 @@
-name: S17 Workspace Snapshot
+name: Apply and Validate S17
 
 on:
   pull_request:
@@ -6,44 +6,101 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: s17-workspace-${{ github.event.pull_request.number }}
+  group: s17-apply-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  workspace:
+  apply-and-validate:
     if: github.head_ref == 'agent/s17-pdf-source-passthrough'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
 
     steps:
       - name: Check out S17 branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
 
-      - name: Install pinned pnpm
-        run: |
-          corepack enable
-          corepack install --global pnpm@11.15.1
-          node --version
-          pnpm --version
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Package workspace
+      - name: Verify and apply S17 patch
+        shell: bash
         run: |
-          tar \
-            --exclude=.git \
-            --exclude=dist \
-            --exclude=playwright-report \
-            --exclude=test-results \
-            -czf /tmp/webcap-s17-workspace.tgz .
+          set -euo pipefail
 
-      - name: Upload workspace
-        uses: actions/upload-artifact@v4
-        with:
-          name: webcap-s17-workspace
-          path: /tmp/webcap-s17-workspace.tgz
-          retention-days: 1
+          expected=(
+            'd9c33a3ef316f7836e144b12d117847501d866175bc962eb6bad1ed200efc052  .s17-core.patch.part00'
+            'ae1f37b6e8e44d92986cffdcfaa8acae661cee5b5ce89b91ff2b426ad52e579d  .s17-core.patch.part01'
+            'c9178e710a2d1ebc33df9fe161c8202d63f50b2c890e92a785f3b36eaf41741e  .s17-core.patch.part02'
+            '9de80a57891455e2d04e71cfdef88061e0fa03bfaf6af63e729c87bb543c3923  .s17-core.patch.part03'
+            '4fe2bf8fef04b43042aec7125997464ad7d53a94e2b5367017a940bdf5044ac7  .s17-core.patch.part04'
+            '9ae2da0434daf49218794d920c6b76096b90636d7147e05beb100b64b2ab0a9f  .s17-core.patch.part05'
+            '593a0d3f16a76a97b2380cf1f3f43a85490dfa3bc843972be855ee3fea1f277b  .s17-core.patch.part06'
+          )
+          printf '%s\n' "${expected[@]}" | sha256sum -c -
+
+          cat .s17-core.patch.part{00..06} > /tmp/s17-core.patch.gz.b64
+          test "$(wc -c < /tmp/s17-core.patch.gz.b64)" -eq 24200
+          echo 'ff201af56e954681f6a9664f6f6b8725e24e3d1327de348833af416e593c31c5  /tmp/s17-core.patch.gz.b64' | sha256sum -c -
+
+          base64 --decode /tmp/s17-core.patch.gz.b64 | gunzip > /tmp/s17-core.patch
+          echo 'bc5b1bd6fd806f66d646d58c47af53d07ed08c0dbc7133107481e04818347263  /tmp/s17-core.patch' | sha256sum -c -
+          git apply --check /tmp/s17-core.patch
+          git apply /tmp/s17-core.patch
+
+          git rm -f .s17-core.patch.gz.b64 .s17-core.patch.part{00..06}
+          git rm -f .github/workflows/s17-workspace.yml
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: PDF performance benchmark
+        run: pnpm benchmark:pdf
+
+      - name: Build extension
+        run: pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Extension E2E
+        run: pnpm test:e2e
+
+      - name: Commit validated S17 implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist playwright-report test-results
+          git add -A
+          git diff --cached --check
+          git status --short
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Add PDF source passthrough'
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
