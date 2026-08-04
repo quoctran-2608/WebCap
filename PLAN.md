@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S16
+current_session: S17
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -114,8 +114,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | S13 | M4 | PDF page slicing và page-at-a-time exporter | S12 | 20k–28k | DONE |
 | S14 | M4 | Editor, PDF options và export retry | S13 | 20k–28k | DONE |
 | S15 | M4 | PDF benchmarks, integrity và memory guards | S14 | 18k–26k | DONE |
-| S16 | M5 | Scrollable-container detection và capture | S15 | 22k–30k | NEXT |
-| S17 | M5 | PDF source detection và original passthrough | S16 | 18k–26k | READY |
+| S16 | M5 | Scrollable-container detection và capture | S15 | 22k–30k | DONE |
+| S17 | M5 | PDF source detection và original passthrough | S16 | 18k–26k | NEXT |
 | S18 | M6 | Hardening lazy/infinite/iframe/canvas/WebGL | S17 | 22k–30k | READY |
 | S19 | M6 | Diagnostics, i18n, privacy và permissions | S18 | 18k–26k | READY |
 | S20 | M6 | Release candidate, packaging và store readiness | S19 | 18k–26k | READY |
@@ -826,20 +826,20 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S13 | DONE | 2026-08-03 | PR #17 / a4b0aba / CI 30810848147 | format, lint, typecheck, 215 unit, build, 19 Playwright E2E | Unit conversion, continuous slicing, exact pixel residuals, tile intersections, one-page/one-decoded-tile lifecycle, pdf-lib artifact, persistent progress và real PDF browser smoke đã được xác thực. |
 | S14 | DONE | 2026-08-04 | PR #18 | format, lint, typecheck, 230 unit, build, 20 Playwright E2E | Editor theo job ID, manifest non-destructive, thumbnail bounded/lazy, remove/reorder, PDF options, progress/cancel/retry và download không recapture đã được xác thực. |
 | S15 | DONE | 2026-08-04 | PR #19 / CI 30871783639 | format, lint, typecheck, 239 unit, 4 PDF benchmarks, build, 20 Playwright E2E | Guard trước allocation, PDF integrity trước persistence, diagnostics heap best-effort và reference 10k/30k/100k/wide đã xác thực page-at-a-time với decoded concurrency bằng 1; source tiles được giữ để retry. |
-| S16 | NEXT | — | — | — | Sẵn sàng detection/revalidation, 2D internal-scroll capture và exact restore cho scrollable container. |
-| S17 | READY | — | — | — | — |
+| S16 | DONE | 2026-08-04 | PR #20 / CI 30876338727 | format, lint, typecheck, 248 unit, 4 PDF benchmarks, build, 23 Playwright E2E | Candidate detection, opaque target revalidation, 2D visible-tab crop capture, sticky-child cleanup, crop-aware PDF/thumbnail và exact restore đã được xác thực trên nested scroll, wide table và stale modal/chat. |
+| S17 | NEXT | — | — | — | Sẵn sàng phát hiện nguồn PDF và passthrough byte nguyên bản khi truy cập an toàn. |
 | S18 | READY | — | — | — | — |
 | S19 | READY | — | — | — | — |
 | S20 | READY | — | — | — | — |
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S16 — Scrollable-container detection và capture**.
+Session kế tiếp là **S17 — PDF source detection và original passthrough**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S16.
-2. Đọc SPEC §19–21, TV-06 và acceptance criteria scroll-area trong PRD.
-3. Kiểm tra repo/branch và kết quả CI S15.
-4. Chỉ triển khai S16.
-5. Kết thúc với scrollable-container candidate detection, stable target revalidation, 2D internal-scroll tile capture, sticky-child policy, exact restore và E2E success/cancel/stale/wide-table.
+1. Đọc `PLAN.md` phần S17.
+2. Đọc PRD PDF source scope, SPEC M5 và các phần privacy/permission liên quan.
+3. Kiểm tra repo/branch và kết quả CI S16.
+4. Chỉ triển khai S17.
+5. Kết thúc với PDF source detection, capability routing, original-byte passthrough khi an toàn, permission-denied/auth-like fallback trung thực và fixtures public/local.

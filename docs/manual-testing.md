@@ -168,3 +168,16 @@ Run `pnpm test:unit` for the coordinate matrix, protocol, selector service, rout
 8. For a valid PDF, verify `%PDF-`, non-zero bytes, pdf-lib loadability, exact page count, dimensions within 0.5 PDF points, at least one image object, and non-empty streams before artifact persistence.
 9. Inspect diagnostics: duration, artifact bytes, decoded count/concurrency, maximum page-canvas area, released canvas count, working-set estimate, threshold, integrity counts, and heap peak when the runtime exposes it. No diagnostic may contain page content or image bytes.
 10. Run `pnpm test:unit`, `pnpm benchmark:pdf`, and `pnpm test:e2e`. The S15 clean reference gate contains 239 unit tests across 66 files, four benchmark cases, and 20 Playwright cases.
+
+## S16 scrollable-area capture and restoration validation
+
+1. Build and load the extension, serve `tests/fixtures/scroll-area.html`, open WebCap, choose **Vùng cuộn**, and start selection. Hover the nested vertical container and confirm the selector identifies it as scrollable without exposing page text or DOM markup.
+2. Confirm the target and observe progress. The document scroll position and every ancestor scroll position must remain stable while only the selected container moves through its internal row-major tile plan.
+3. Inspect stored tiles. Each tile must be a non-empty Blob with `captureViewportCss` and `captureCropCss`; the crop must match the selected container content box while logical output rectangles cover the complete `scrollWidth` × `scrollHeight` exactly once after overlap resolution.
+4. Verify the nested fixture output includes the first and last logical rows, contains no repeated local sticky header, and restores the original `scrollTop`, `scrollLeft`, focus, document scroll, and WebCap-owned inline style values after completion.
+5. Repeat with the wide table container. Confirm the engine creates a two-dimensional internal grid, reaches the far-right and bottom edges, and does not silently truncate when the tile guard would be exceeded.
+6. Open the modal/chat-like fixture, begin full-scroll selection, remove the selected node before capture, and confirm retryable `E_TARGET_STALE`, zero stored tiles, no replacement-node capture, and complete cleanup.
+7. Cancel during internal capture. Confirm the job settles as cancelled, stored partial tiles follow the existing job cleanup policy, and all container/document scroll and style snapshots are restored.
+8. Export or thumbnail a captured scroll-area tile set. Confirm PDF/thumbnail composition uses only `captureCropCss`, not unrelated pixels from the full viewport screenshot.
+9. Inspect runtime/storage boundaries: messages contain opaque target IDs and geometry metadata only; screenshots remain local IndexedDB Blob values; no new permission, remote service, analytics event, or schema migration is introduced.
+10. Run `pnpm test:unit`, `pnpm benchmark:pdf`, and `pnpm test:e2e`. The S16 clean reference gate contains 248 unit tests across 69 files, four PDF benchmark cases, and 23 Playwright extension cases including nested scroll, wide table, stale modal/chat, open Shadow DOM, stale element, region, DPR/zoom, PDF, and full-page regressions.
