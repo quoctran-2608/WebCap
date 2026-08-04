@@ -2,11 +2,20 @@
 
 WebCap is a local-first Chrome extension for capturing everything a web page presents: the visible viewport, a full page, a selected region, a DOM element, or a scrollable area. Long captures are processed in tiles and can be exported as images or multi-page PDF files without uploading page content to a server.
 
-> The MVP implementation plan `S00–S20` is complete. Product scope is defined in [`PRD_WebCap_v1.0.md`](./PRD_WebCap_v1.0.md), technical contracts in [`SPEC.md`](./SPEC.md), and the completed session record in [`PLAN.md`](./PLAN.md). Chrome Web Store publication remains a separate release-owner action.
+> The 0.1.0 MVP implementation plan `S00–S20` is complete. WebCap 0.2.0 is now planned in `S21–S25` around adaptive auto-scroll, automatic PDF creation, capture reset/new-capture lifecycle, and a simplified popup. The baseline product scope remains in [`PRD_WebCap_v1.0.md`](./PRD_WebCap_v1.0.md); the 0.2.0 delta is in [`PRD_WebCap_v1.1.md`](./PRD_WebCap_v1.1.md). Technical contracts are defined by [`SPEC.md`](./SPEC.md) plus [`docs/spec-0.2.0.md`](./docs/spec-0.2.0.md), and execution status is tracked in [`PLAN.md`](./PLAN.md).
 
 ## Current status
 
-**S20 — release candidate, packaging, and store readiness is complete.** WebCap 0.1.0 now has a deterministic, verified 24-entry Chrome Web Store ZIP (`webcap-0.1.0.zip`, 1,097,035 bytes, SHA-256 `630c44c07e72da0d5edc1c82c013ecf6caf995e0542ee19679380081e7b0cb7a`), synchronized manifest/package versions, release metadata and permission audits, release notes, known limitations, privacy/store copy, and acceptance-criteria traceability. The final release gate passes formatting, ESLint, strict TypeScript, privacy/license/release/critical-security audits, 279 unit tests across 79 files, four PDF benchmarks, a verified Manifest V3 build, and 38 Playwright E2E cases including DPR 1/1.5/2 at 80/100/125/150% zoom. The packaged extension installs, updates from 0.0.9 to 0.1.0 while retaining its ID and local storage, and uninstalls cleanly on Linux, Windows, and macOS; the same lifecycle passes Chrome for Testing 116.0.5845.96 and 151.0.7922.71. No tag, GitHub Release, Chrome Web Store upload, review submission, or publication has been performed.
+**0.1.0 release candidate remains complete and unchanged.** It has a deterministic, verified 24-entry Chrome Web Store ZIP (`webcap-0.1.0.zip`, 1,097,035 bytes, SHA-256 `630c44c07e72da0d5edc1c82c013ecf6caf995e0542ee19679380081e7b0cb7a`). The final gate passed formatting, ESLint, strict TypeScript, privacy/license/release/critical-security audits, 279 unit tests across 79 files, four PDF benchmarks, a verified Manifest V3 build, and 38 Playwright E2E cases including DPR 1/1.5/2 at 80/100/125/150% zoom. No tag, GitHub Release, Chrome Web Store upload, review submission, or publication has been performed.
+
+**0.2.0 is planned, not implemented.** The active roadmap begins with S21 capture reset, followed by adaptive auto-scroll to a stable page end, automatic PDF export, popup simplification, and a full 0.2.0 release gate. “Capture to the end” removes the arbitrary 100,000 CSS-pixel stopping behavior for adaptive mode, while retaining explicit time, storage, tile, and memory safeguards for truly infinite or device-exhausting pages.
+
+## Planned 0.2.0 outcomes
+
+- One-click **Full page → PDF**: scroll from document start, continue through finite lazy growth, restore the page, and automatically create a PDF.
+- A clear **New capture** action that safely cancels or discards the current local job and allows another capture on the same tab.
+- A simpler default popup focused on capture goals, progress, download, edit, and new capture; worker/version/tile/checksum details move to help and diagnostics.
+- No backend, telemetry, remote executable code, new required permission, or default host permission.
 
 ## Requirements
 
@@ -39,7 +48,7 @@ pnpm benchmark:pdf   # Run repeatable long-page PDF reference benchmarks.
 pnpm test:e2e        # Run the persistent-Chromium extension regression suite.
 pnpm test:smoke      # Smoke-test the built popup ↔ service-worker handshake in Chrome.
 pnpm test:release    # Test packaged clean install, update, storage retention, and uninstall.
-pnpm package         # Build, create, and verify webcap-0.1.0.zip plus release metadata.
+pnpm package         # Build, create, and verify the current release ZIP plus metadata.
 pnpm package:verify  # Rebuild twice and require byte-for-byte ZIP reproducibility.
 pnpm release:verify  # Run critical audit, reproducible package, and packaged lifecycle gates.
 pnpm test            # Run Vitest in watch mode.
@@ -52,7 +61,7 @@ pnpm test            # Run Vitest in watch mode.
 3. Enable **Developer mode**.
 4. Choose **Load unpacked**.
 5. Select the generated `dist/` directory.
-6. Open the WebCap action popup and confirm that **Service worker** shows **Đã kết nối**.
+6. Open the WebCap action popup and confirm that the service worker is connected.
 
 The `dist/` output contains `manifest.json`, `popup.html`, `editor.html`, `service-worker.js`, `content-script.js`, `offscreen.html`, `offscreen.js`, hashed popup/editor assets, and the four extension icons. Generated output, dependency directories, test reports, and local browser profiles must not be committed.
 
@@ -62,14 +71,14 @@ The `dist/` output contains `manifest.json`, `popup.html`, `editor.html`, `servi
 public/                 Manifest and static extension assets copied as-is.
 assets/                 Internal build-time icon sources.
 src/background/         Manifest V3 service worker, job routing, capture coordination, and Chrome adapters.
-src/capture/            Page measurement, deterministic tile planning, and capture engines.
-src/content/            On-demand page preparation, lazy settle, and restoration runtime.
+src/capture/            Page measurement, deterministic/adaptive tile planning, and capture engines.
+src/content/            On-demand page preparation, lazy settle, selection, and restoration runtime.
 src/editor/             React PDF editor, persistent manifest client, and lazy thumbnail rendering.
 src/popup/              React popup entry, capture controls, progress UI, and runtime clients.
 src/shared/contracts/   Typed cross-context message envelopes.
 src/storage/            IndexedDB and chrome.storage repositories.
 tests/unit/             Fast deterministic contract, engine, coordinator, and router tests.
-tests/performance/        Repeatable PDF benchmark scenarios and metric output.
+tests/performance/      Repeatable PDF and long-page benchmark scenarios and metric output.
 tests/e2e/              Playwright unpacked-extension integration tests.
 tests/smoke/            Real-Chrome unpacked-extension smoke tests.
 tests/release/          Packaged install/update/uninstall lifecycle validation.
@@ -83,18 +92,21 @@ scripts/                Build, audit, packaging, browser-install, and repository
 - Add or update tests in the same change as behavior.
 - Do not add Chrome permissions, remote scripts, analytics, or backend calls outside the approved PRD/SPEC scope.
 - Complete only the active session in `PLAN.md`; defer unrelated work instead of expanding the current change.
+- Preserve the 0.1.0 release artifact boundary until S25 deliberately creates a 0.2.0 package.
 - Run the final merge gate through the repository's read-only CI workflow after every temporary write-enabled workflow and staging file has been removed.
 
 ## Documentation
 
-- [Product requirements](./PRD_WebCap_v1.0.md)
-- [Engineering specification](./SPEC.md)
-- [Implementation plan](./PLAN.md)
+- [0.1.0 product requirements](./PRD_WebCap_v1.0.md)
+- [0.2.0 product requirements delta](./PRD_WebCap_v1.1.md)
+- [Baseline engineering specification](./SPEC.md)
+- [0.2.0 engineering specification addendum](./docs/spec-0.2.0.md)
+- [Active implementation plan](./PLAN.md)
 - [Changelog](./CHANGELOG.md)
 - [PDF benchmark and integrity reference](./docs/benchmarks.md)
 - [Privacy baseline](./docs/privacy.md)
 - [Known capture limitations](./docs/known-limitations.md)
-- [Release checklist](./docs/release-checklist.md)
+- [0.1.0 release checklist](./docs/release-checklist.md)
 - [0.1.0 release notes](./docs/release/0.1.0.md)
 - [0.1.0 acceptance-criteria evidence](./docs/release/acceptance-criteria-0.1.0.md)
 - [Chrome Web Store assets handoff](./docs/store-assets.md)
