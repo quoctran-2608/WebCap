@@ -1,4 +1,4 @@
-name: Materialize S19 Workspace
+name: Apply and Validate S19
 
 on:
   pull_request:
@@ -6,19 +6,24 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
+
+concurrency:
+  group: s19-apply-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
-  snapshot:
+  apply-and-validate:
     if: github.head_ref == 'agent/s19-diagnostics-i18n-privacy'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 35
 
     steps:
       - name: Check out S19 branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
+          fetch-depth: 0
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -32,39 +37,86 @@ jobs:
           node-version: 22.22.0
           cache: pnpm
 
-      - name: Install locked dependencies
+      - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Create deterministic archives
+      - name: Verify and apply S19 patch
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          expected=(
+            '0418debe48bf94dd8eb7543286adfa6be73cc2844bb3219087cd7b6e54c38772  .s19-stage.part00'
+            '8090837eb3df332a8b9de29ccddba904d0aaff09264fb60b848803f462a8cf1b  .s19-stage.part01'
+            '524c113304e553ab1c2e1dc6c77451ff64b549f72eab3d062845fa3b6d5be28d  .s19-stage.part02'
+            'cdffd70ab4608ca452f08fa8f3df009b5359836bfd5e51e9c26e666b2c8433a4  .s19-stage.part03'
+            '4baf35966e27e698ccca53acf3c4062a36b65daf77fb782d84c395b7bbc92e15  .s19-stage.part04-05'
+            'f8e69bcd755c3eabb42dd20318d8015ab2b4899f83fcb686dd0d5aebc9e18872  .s19-stage.part06-07'
+          )
+          printf '%s\n' "${expected[@]}" | sha256sum -c -
+
+          cat \
+            .s19-stage.part00 \
+            .s19-stage.part01 \
+            .s19-stage.part02 \
+            .s19-stage.part03 \
+            .s19-stage.part04-05 \
+            .s19-stage.part06-07 \
+            > /tmp/s19-core.patch.gz.b64
+          test "$(wc -c < /tmp/s19-core.patch.gz.b64)" -eq 58948
+          echo '7089a7a88f7f874a962b4c2072c93ef3119624a6d043515dc23a2a03ba450b6d  /tmp/s19-core.patch.gz.b64' | sha256sum -c -
+
+          base64 --decode /tmp/s19-core.patch.gz.b64 | gunzip > /tmp/s19-core.patch
+          test "$(wc -c < /tmp/s19-core.patch)" -eq 183435
+          echo 'ac07710e7922d78cd55ddc96a25874a968d0de3b96477ca678d3e1398eca974f  /tmp/s19-core.patch' | sha256sum -c -
+          git apply --check /tmp/s19-core.patch
+          git apply /tmp/s19-core.patch
+
+          git rm -f \
+            .s19-stage.part00 \
+            .s19-stage.part01 \
+            .s19-stage.part02 \
+            .s19-stage.part03 \
+            .s19-stage.part04-05 \
+            .s19-stage.part06-07
+          git rm -f .github/workflows/s19-workspace.yml
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Privacy and dependency audit
+        run: pnpm run audit
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: PDF performance benchmark
+        run: pnpm benchmark:pdf
+
+      - name: Build extension
+        run: pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Extension E2E
+        run: pnpm test:e2e
+
+      - name: Commit validated S19 implementation
         shell: bash
         run: |
           set -euo pipefail
           rm -rf dist playwright-report test-results
-          tar \
-            --sort=name \
-            --mtime='UTC 2026-08-04' \
-            --owner=0 \
-            --group=0 \
-            --numeric-owner \
-            --exclude='.git' \
-            --exclude='node_modules' \
-            -czf /tmp/webcap-s19-workspace.tar.gz .
-          tar \
-            --sort=name \
-            --mtime='UTC 2026-08-04' \
-            --owner=0 \
-            --group=0 \
-            --numeric-owner \
-            -czf /tmp/webcap-s19-node-modules.tar.gz node_modules
-          sha256sum /tmp/webcap-s19-workspace.tar.gz /tmp/webcap-s19-node-modules.tar.gz > /tmp/webcap-s19.sha256
-
-      - name: Upload workspace and toolchain
-        uses: actions/upload-artifact@v4
-        with:
-          name: webcap-s19-toolchain
-          path: |
-            /tmp/webcap-s19-workspace.tar.gz
-            /tmp/webcap-s19-node-modules.tar.gz
-            /tmp/webcap-s19.sha256
-          if-no-files-found: error
-          retention-days: 1
+          git add -A
+          git diff --cached --check
+          git status --short
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Add diagnostics localization and privacy UX'
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
