@@ -145,15 +145,18 @@ test("@smoke edits, restores, exports, and downloads PDF without recapture", asy
   await cards.last().getByRole("button", { name: "Xóa" }).click();
   await expect(cards).toHaveCount(countBeforeDelete - 1);
   const editedCount = await cards.count();
-  const editedFirstSource = await cards.first().getByText(/^Nguồn #\d+$/).textContent();
+  const sourceLabel = cards.first().getByText(/^Nguồn #\d+$/);
+  const editedFirstSource = await sourceLabel.textContent();
 
   await editor.reload();
   await editor.bringToFront();
   await expect(editor.getByRole("heading", { name: "Trình biên tập PDF" })).toBeVisible();
   await expect(editor.locator(".page-card")).toHaveCount(editedCount);
-  await expect(editor.locator(".page-card").first().getByText(/^Nguồn #\d+$/)).toHaveText(
-    editedFirstSource ?? "Nguồn #2",
-  );
+  const restoredSourceLabel = editor
+    .locator(".page-card")
+    .first()
+    .getByText(/^Nguồn #\d+$/);
+  await expect(restoredSourceLabel).toHaveText(editedFirstSource ?? "Nguồn #2");
   const restored = await readEditorState(editor, jobId);
   expect(restored.manifestRevision).toBeGreaterThanOrEqual(3);
   expect(restored.manifestPageIds).toHaveLength(editedCount);
