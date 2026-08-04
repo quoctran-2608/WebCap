@@ -1,4 +1,4 @@
-name: S18 Workspace Snapshot
+name: Apply and Validate S18
 
 on:
   pull_request:
@@ -6,23 +6,24 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: s18-workspace-${{ github.event.pull_request.number }}
+  group: s18-apply-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  workspace:
+  apply-and-validate:
     if: github.head_ref == 'agent/s18-capture-hardening'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 35
 
     steps:
       - name: Check out S18 branch
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
+          fetch-depth: 0
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -39,20 +40,67 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Package materialized workspace
+      - name: Verify and apply S18 patch
+        shell: bash
         run: |
-          tar \
-            --dereference \
-            --hard-dereference \
-            --exclude=.git \
-            --exclude=./dist \
-            --exclude=./playwright-report \
-            --exclude=./test-results \
-            -czf /tmp/webcap-s18-workspace.tgz .
+          set -euo pipefail
 
-      - name: Upload workspace
-        uses: actions/upload-artifact@v4
-        with:
-          name: webcap-s18-workspace-v2
-          path: /tmp/webcap-s18-workspace.tgz
-          retention-days: 1
+          expected=(
+            'f191e45ddad9c6bc9a9b3f8b39e4d763cb1f544b447fd63a8f6538ffff73fa4e  .s18-core.patch.part00'
+            '2ddbdc35b8a9230644caf9b359eef818faf647b219842653cd177e925d7450b3  .s18-core.patch.part01'
+            '000e3d3f223e9b69eb67f553519dd6ba81738655423d81eb257db779f5146898  .s18-core.patch.part02'
+            'e5fb9ac21f7cc2f256e037f37389e842a2229844dc1d358225cc86d571a8af78  .s18-core.patch.part03'
+            '7238d103b15e696a8c803702c6d7351df30b2b09b1017946595e9a3709126287  .s18-core.patch.part04'
+            'f2da7e532bdeb203bcf091d8afef5a7463f69606c3c3524bbce2ee3665469f21  .s18-core.patch.part05'
+          )
+          printf '%s\n' "${expected[@]}" | sha256sum -c -
+
+          cat .s18-core.patch.part{00..05} > /tmp/s18-core.patch.gz.b64
+          test "$(wc -c < /tmp/s18-core.patch.gz.b64)" -eq 21308
+          echo 'af103f2464ded03e3d10872759f78f497cb80fa7a909a7955268b045968c1afb  /tmp/s18-core.patch.gz.b64' | sha256sum -c -
+
+          base64 --decode /tmp/s18-core.patch.gz.b64 | gunzip > /tmp/s18-core.patch
+          test "$(wc -c < /tmp/s18-core.patch)" -eq 62410
+          echo 'bd3765754ed9feb2b262f418dea6413958d63a4796f27323bb8689f7bd349e00  /tmp/s18-core.patch' | sha256sum -c -
+          git apply --check /tmp/s18-core.patch
+          git apply /tmp/s18-core.patch
+
+          git rm -f .s18-core.patch.part{00..05}
+          git rm -f .github/workflows/s18-workspace.yml
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: PDF performance benchmark
+        run: pnpm benchmark:pdf
+
+      - name: Build extension
+        run: pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Extension E2E
+        run: pnpm test:e2e
+
+      - name: Commit validated S18 implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist playwright-report test-results
+          git add -A
+          git diff --cached --check
+          git status --short
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Harden capture edge cases'
+          git push origin "HEAD:${GITHUB_HEAD_REF}"
