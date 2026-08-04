@@ -29,16 +29,16 @@ Bản 0.1.0 có nền tảng capture tile, selector, scroll fallback và PDF exp
 
 # 2. Mục tiêu 0.2.0
 
-| Mã | Mục tiêu | Kết quả người dùng |
-| --- | --- | --- |
-| G-06 | Tự động chụp cuộn đến cuối nội dung ổn định | Không phải cuộn hoặc ghép ảnh thủ công. |
-| G-07 | Tự động tạo PDF sau capture dài | Full-page hoàn tất mà không bắt buộc mở editor. |
-| G-08 | Cho phép bắt đầu lại rõ ràng | Có “Chụp mới” ở mọi trạng thái. |
-| G-09 | Đơn giản hóa popup | Chỉ giữ lựa chọn, tiến trình và hành động hữu ích. |
-| G-10 | Giữ local-first và quyền tối thiểu | Không thêm backend, telemetry, remote code hay quyền mặc định mới. |
-| G-11 | Khôi phục trải nghiệm vẽ vùng chọn | Bấm chọn vùng là thấy overlay ngay, kéo-vẽ được và chụp đúng vùng. |
-| G-12 | Làm rõ output và settings | Mỗi mode có output mặc định hợp lý; lựa chọn được ghi nhớ và áp dụng. |
-| G-13 | Tăng độ bền của job dài | Progress theo event và recovery/resume không làm mất tile đã lưu. |
+| Mã   | Mục tiêu                                    | Kết quả người dùng                                                    |
+| ---- | ------------------------------------------- | --------------------------------------------------------------------- |
+| G-06 | Tự động chụp cuộn đến cuối nội dung ổn định | Không phải cuộn hoặc ghép ảnh thủ công.                               |
+| G-07 | Tự động tạo PDF sau capture dài             | Full-page hoàn tất mà không bắt buộc mở editor.                       |
+| G-08 | Cho phép bắt đầu lại rõ ràng                | Có “Chụp mới” ở mọi trạng thái.                                       |
+| G-09 | Đơn giản hóa popup                          | Chỉ giữ lựa chọn, tiến trình và hành động hữu ích.                    |
+| G-10 | Giữ local-first và quyền tối thiểu          | Không thêm backend, telemetry, remote code hay quyền mặc định mới.    |
+| G-11 | Khôi phục trải nghiệm vẽ vùng chọn          | Bấm chọn vùng là thấy overlay ngay, kéo-vẽ được và chụp đúng vùng.    |
+| G-12 | Làm rõ output và settings                   | Mỗi mode có output mặc định hợp lý; lựa chọn được ghi nhớ và áp dụng. |
+| G-13 | Tăng độ bền của job dài                     | Progress theo event và recovery/resume không làm mất tile đã lưu.     |
 
 # 3. Phạm vi sản phẩm
 
@@ -169,30 +169,30 @@ Bấm Chụp mới → cleanup dữ liệu capture cũ → quay về goal select
 
 # 6. Acceptance criteria mới
 
-| Mã | Acceptance criterion |
-| --- | --- |
-| AC-19 | Lazy-growth hữu hạn được chụp đến stable end mà không restart job. |
-| AC-20 | Trang hữu hạn >100.000 CSS px không dừng chỉ vì ngưỡng 100.000 px. |
-| AC-21 | Logical coverage không gap/duplicate; integrity fixture phải phát hiện sai lệch. |
-| AC-22 | Full-page thành công tự bắt đầu PDF export không cần mở editor. |
-| AC-23 | Auto-PDF không tạo full-page canvas; decoded-tile concurrency bị giới hạn. |
-| AC-24 | Export lỗi giữ source tiles và retry không recapture. |
-| AC-25 | Chụp mới trên terminal job xóa local capture data và cho phép job mới cùng tab. |
-| AC-26 | Reset active cancel/cleanup/discard sau xác nhận và phục hồi page state. |
-| AC-27 | Reset idempotent, isolated và giữ settings/downloaded files. |
-| AC-28 | Popup mặc định không hiển thị version, milestone, raw tile count, engine hay checksum. |
-| AC-29 | Help, diagnostics và advanced settings dùng được bằng keyboard. |
-| AC-30 | Toàn bộ regression 0.1.0, privacy, permission và packaged lifecycle vẫn pass. |
-| AC-31 | Bấm Vẽ vùng chọn đóng popup sau ready ACK và overlay xuất hiện trên active tab trong 500 ms trên fixture. |
-| AC-32 | Pointer có thể create/move/resize/auto-scroll; kết quả khớp rectangle và không chứa selector pixels. |
-| AC-33 | Keyboard-only có thể tạo, move, resize, confirm và cancel vùng chọn. |
-| AC-34 | Selector launch failure không để orphan job, root, tab lock, tile hoặc artifact. |
-| AC-35 | Stored format/quality/PDF/fixed-sticky settings được dùng khi tạo job và tồn tại qua popup reopen. |
+| Mã    | Acceptance criterion                                                                                                |
+| ----- | ------------------------------------------------------------------------------------------------------------------- |
+| AC-19 | Lazy-growth hữu hạn được chụp đến stable end mà không restart job.                                                  |
+| AC-20 | Trang hữu hạn >100.000 CSS px không dừng chỉ vì ngưỡng 100.000 px.                                                  |
+| AC-21 | Logical coverage không gap/duplicate; integrity fixture phải phát hiện sai lệch.                                    |
+| AC-22 | Full-page thành công tự bắt đầu PDF export không cần mở editor.                                                     |
+| AC-23 | Auto-PDF không tạo full-page canvas; decoded-tile concurrency bị giới hạn.                                          |
+| AC-24 | Export lỗi giữ source tiles và retry không recapture.                                                               |
+| AC-25 | Chụp mới trên terminal job xóa local capture data và cho phép job mới cùng tab.                                     |
+| AC-26 | Reset active cancel/cleanup/discard sau xác nhận và phục hồi page state.                                            |
+| AC-27 | Reset idempotent, isolated và giữ settings/downloaded files.                                                        |
+| AC-28 | Popup mặc định không hiển thị version, milestone, raw tile count, engine hay checksum.                              |
+| AC-29 | Help, diagnostics và advanced settings dùng được bằng keyboard.                                                     |
+| AC-30 | Toàn bộ regression 0.1.0, privacy, permission và packaged lifecycle vẫn pass.                                       |
+| AC-31 | Bấm Vẽ vùng chọn đóng popup sau ready ACK và overlay xuất hiện trên active tab trong 500 ms trên fixture.           |
+| AC-32 | Pointer có thể create/move/resize/auto-scroll; kết quả khớp rectangle và không chứa selector pixels.                |
+| AC-33 | Keyboard-only có thể tạo, move, resize, confirm và cancel vùng chọn.                                                |
+| AC-34 | Selector launch failure không để orphan job, root, tab lock, tile hoặc artifact.                                    |
+| AC-35 | Stored format/quality/PDF/fixed-sticky settings được dùng khi tạo job và tồn tại qua popup reopen.                  |
 | AC-36 | Output mặc định theo mode đúng; region/element có ảnh trực tiếp khi dưới guard và fallback PDF rõ ràng khi quá lớn. |
-| AC-37 | Progress event cập nhật UI; reconciliation polling không chạy với chu kỳ 350 ms liên tục. |
-| AC-38 | Restart giữa adaptive capture resume an toàn hoặc giữ partial minh bạch, không duplicate prefix. |
-| AC-39 | Actual-browser matrix có static 30k, 100k, >100k, lazy-growth, region launch và critical DPR/zoom flows. |
-| AC-40 | Release compatibility chạy minimum Chrome, current stable và previous stable trên các OS đã hỗ trợ. |
+| AC-37 | Progress event cập nhật UI; reconciliation polling không chạy với chu kỳ 350 ms liên tục.                           |
+| AC-38 | Restart giữa adaptive capture resume an toàn hoặc giữ partial minh bạch, không duplicate prefix.                    |
+| AC-39 | Actual-browser matrix có static 30k, 100k, >100k, lazy-growth, region launch và critical DPR/zoom flows.            |
+| AC-40 | Release compatibility chạy minimum Chrome, current stable và previous stable trên các OS đã hỗ trợ.                 |
 
 # 7. Chỉ số nghiệm thu nội bộ
 

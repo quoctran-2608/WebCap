@@ -16,18 +16,18 @@ audit: ./audits/0.1.0-gap-audit.md
 
 # 1. Quyết định kiến trúc mới
 
-| ID | Quyết định | Lý do |
-| --- | --- | --- |
-| ADR-0015 | Auto-scroll dùng adaptive capture frontier | Document height có thể tăng sau mỗi lần cuộn. |
-| ADR-0016 | Stable end cần bottom + nhiều vòng ổn định + final probe | `scrollHeight` đơn lẻ không chứng minh đã hết nội dung. |
-| ADR-0017 | Auto-PDF là completion policy mặc định của full-page | Editor không còn là bước bắt buộc. |
-| ADR-0018 | Reset là domain command | Phải cleanup job/tile/artifact/session/lock nhất quán. |
-| ADR-0019 | Popup dùng progressive disclosure | Technical data không cạnh tranh với CTA. |
-| ADR-0020 | Region selector dùng ready handshake trước khi đóng popup | Tránh người dùng bấm nhưng không thấy overlay và tránh orphan job. |
-| ADR-0021 | Settings repository là nguồn sự thật của job | Không tạo capture từ hard-coded defaults khi đã có lựa chọn lưu. |
-| ADR-0022 | Progress ưu tiên event, polling chỉ reconciliation fallback | Giảm request liên tục và đơn giản hóa UI state. |
-| ADR-0023 | Output policy theo mode | Region/element cần ảnh trực tiếp; full-page cần PDF; unsafe image phải fallback rõ. |
-| ADR-0024 | Adaptive capture có resumable frontier | Long job không nên mất prefix đã lưu khi worker restart. |
+| ID       | Quyết định                                                  | Lý do                                                                               |
+| -------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| ADR-0015 | Auto-scroll dùng adaptive capture frontier                  | Document height có thể tăng sau mỗi lần cuộn.                                       |
+| ADR-0016 | Stable end cần bottom + nhiều vòng ổn định + final probe    | `scrollHeight` đơn lẻ không chứng minh đã hết nội dung.                             |
+| ADR-0017 | Auto-PDF là completion policy mặc định của full-page        | Editor không còn là bước bắt buộc.                                                  |
+| ADR-0018 | Reset là domain command                                     | Phải cleanup job/tile/artifact/session/lock nhất quán.                              |
+| ADR-0019 | Popup dùng progressive disclosure                           | Technical data không cạnh tranh với CTA.                                            |
+| ADR-0020 | Region selector dùng ready handshake trước khi đóng popup   | Tránh người dùng bấm nhưng không thấy overlay và tránh orphan job.                  |
+| ADR-0021 | Settings repository là nguồn sự thật của job                | Không tạo capture từ hard-coded defaults khi đã có lựa chọn lưu.                    |
+| ADR-0022 | Progress ưu tiên event, polling chỉ reconciliation fallback | Giảm request liên tục và đơn giản hóa UI state.                                     |
+| ADR-0023 | Output policy theo mode                                     | Region/element cần ảnh trực tiếp; full-page cần PDF; unsafe image phải fallback rõ. |
+| ADR-0024 | Adaptive capture có resumable frontier                      | Long job không nên mất prefix đã lưu khi worker restart.                            |
 
 # 2. Baseline và khoảng trống cần đóng
 
@@ -162,10 +162,10 @@ Complete khi đồng thời:
 Hằng số đề xuất:
 
 ```ts
-AUTO_SCROLL_STABLE_ROUNDS = 3
-AUTO_SCROLL_BOTTOM_EPSILON_CSS = 2
-AUTO_SCROLL_GROWTH_SETTLE_MS = 500
-AUTO_SCROLL_FINAL_PROBE_MS = 750
+AUTO_SCROLL_STABLE_ROUNDS = 3;
+AUTO_SCROLL_BOTTOM_EPSILON_CSS = 2;
+AUTO_SCROLL_GROWTH_SETTLE_MS = 500;
+AUTO_SCROLL_FINAL_PROBE_MS = 750;
 ```
 
 ## 4.4 Guardrails
