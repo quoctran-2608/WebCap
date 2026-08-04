@@ -38,7 +38,12 @@ const ContentToBackgroundSchema = z
 
 export const ElementSelectionOpenMessageSchema = BackgroundToContentSchema.extend({
   type: z.literal("ELEMENT_SELECTION_OPEN"),
-  payload: z.object({ jobId: IdentifierSchema }).strict(),
+  payload: z
+    .object({
+      jobId: IdentifierSchema,
+      captureKind: ElementTargetDescriptorSchema.shape.captureKind,
+    })
+    .strict(),
 }).strict();
 
 export const ElementSelectionOpenedMessageSchema = ContentToBackgroundSchema.extend({
@@ -117,6 +122,7 @@ export type ElementTargetValidatedMessage = z.infer<typeof ElementTargetValidate
 export function createElementSelectionOpenMessage(options: {
   requestId: string;
   jobId: string;
+  captureKind: ElementTargetDescriptor["captureKind"];
   sentAt: string;
 }): ElementSelectionOpenMessage {
   return ElementSelectionOpenMessageSchema.parse({
@@ -125,7 +131,7 @@ export function createElementSelectionOpenMessage(options: {
     source: "background",
     target: "content",
     type: "ELEMENT_SELECTION_OPEN",
-    payload: { jobId: options.jobId },
+    payload: { jobId: options.jobId, captureKind: options.captureKind },
     sentAt: options.sentAt,
   });
 }

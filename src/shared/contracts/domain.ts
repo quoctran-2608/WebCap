@@ -56,7 +56,7 @@ export const ElementTargetDescriptorSchema = z
     id: z.string().min(1).max(60).optional(),
     classNames: z.array(z.string().min(1).max(40)).max(3),
     scrollable: z.boolean(),
-    captureKind: z.literal("visible-bounds"),
+    captureKind: z.enum(["visible-bounds", "full-scroll-content"]),
   })
   .strict();
 
@@ -81,6 +81,8 @@ export const CaptureTileSchema = z
     column: NonNegativeIntegerSchema,
     sourceRectCss: RectSchema,
     outputRectCss: RectSchema.optional(),
+    captureViewportCss: RectSchema.optional(),
+    captureCropCss: RectSchema.optional(),
     scrollXCss: NonNegativeFiniteNumberSchema.optional(),
     scrollYCss: NonNegativeFiniteNumberSchema.optional(),
     expectedPixelWidth: PositiveIntegerSchema,

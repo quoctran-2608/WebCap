@@ -28,6 +28,7 @@ export interface ElementSelectorController {
 
 export interface OpenElementSelectorOptions {
   jobId: string;
+  captureKind: ElementTargetDescriptor["captureKind"];
   onCommit(selection: ElementSelection): Promise<void> | void;
   onCancel(reason: string): Promise<void> | void;
 }
@@ -63,7 +64,7 @@ export function summarizeElementDescriptor(options: {
   return `${tagName}${id.length > 0 ? `#${id}` : ""}${classes.map((name) => `.${name}`).join("")}`;
 }
 
-function isScrollable(element: Element): boolean {
+export function isScrollableElement(element: Element): element is HTMLElement {
   if (!(element instanceof HTMLElement)) {
     return false;
   }
@@ -98,10 +99,23 @@ export function isSelectableElement(element: Element): boolean {
   return style.display !== "none" && style.visibility !== "hidden";
 }
 
-function candidateFromComposedPath(path: readonly EventTarget[]): Element | undefined {
+function matchesCaptureKind(
+  element: Element,
+  captureKind: ElementTargetDescriptor["captureKind"],
+): boolean {
+  return (
+    isSelectableElement(element) &&
+    (captureKind === "visible-bounds" || isScrollableElement(element))
+  );
+}
+
+function candidateFromComposedPath(
+  path: readonly EventTarget[],
+  captureKind: ElementTargetDescriptor["captureKind"],
+): Element | undefined {
   return path.find(
     (candidate): candidate is Element =>
-      candidate instanceof Element && isSelectableElement(candidate),
+      candidate instanceof Element && matchesCaptureKind(candidate, captureKind),
   );
 }
 
@@ -119,6 +133,7 @@ function deepestOpenShadowCandidate(
   root: Document | ShadowRoot,
   clientX: number,
   clientY: number,
+  captureKind: ElementTargetDescriptor["captureKind"],
 ): Element | undefined {
   for (const candidate of candidatesAtPoint(root, clientX, clientY)) {
     if (isSelectorNode(candidate)) {
@@ -126,29 +141,36 @@ function deepestOpenShadowCandidate(
     }
     const shadowRoot = candidate.shadowRoot;
     if (shadowRoot?.mode === "open") {
-      const nested = deepestOpenShadowCandidate(shadowRoot, clientX, clientY);
+      const nested = deepestOpenShadowCandidate(shadowRoot, clientX, clientY, captureKind);
       if (nested !== undefined) {
         return nested;
       }
     }
-    if (isSelectableElement(candidate)) {
+    if (matchesCaptureKind(candidate, captureKind)) {
       return candidate;
     }
   }
   return undefined;
 }
 
-function candidateFromPoint(clientX: number, clientY: number): Element | undefined {
-  return deepestOpenShadowCandidate(document, clientX, clientY);
+function candidateFromPoint(
+  clientX: number,
+  clientY: number,
+  captureKind: ElementTargetDescriptor["captureKind"],
+): Element | undefined {
+  return deepestOpenShadowCandidate(document, clientX, clientY, captureKind);
 }
 
-function parentCandidate(element: Element): Element | undefined {
+function parentCandidate(
+  element: Element,
+  captureKind: ElementTargetDescriptor["captureKind"],
+): Element | undefined {
   let candidate: Element | null = element.parentElement;
   if (candidate === null) {
     const root = element.getRootNode();
     candidate = root instanceof ShadowRoot ? root.host : null;
   }
-  while (candidate !== null && !isSelectableElement(candidate)) {
+  while (candidate !== null && !matchesCaptureKind(candidate, captureKind)) {
     const root = candidate.getRootNode();
     candidate = candidate.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
   }
@@ -169,7 +191,22 @@ export function readElementDocumentRect(element: Element): Rect {
   );
 }
 
-function descriptorFor(element: Element): ElementTargetDescriptor {
+export function readElementScrollContentRect(element: Element): Rect {
+  if (!isScrollableElement(element)) {
+    return { x: 0, y: 0, width: 0, height: 0 };
+  }
+  return {
+    x: 0,
+    y: 0,
+    width: Math.max(1, element.scrollWidth),
+    height: Math.max(1, element.scrollHeight),
+  };
+}
+
+function descriptorFor(
+  element: Element,
+  captureKind: ElementTargetDescriptor["captureKind"],
+): ElementTargetDescriptor {
   const classNames = Array.from(element.classList)
     .map((className) => clampText(className, 40))
     .filter((className) => className.length > 0)
@@ -181,8 +218,8 @@ function descriptorFor(element: Element): ElementTargetDescriptor {
     tagName: clampText(element.tagName.toLowerCase(), 40) || "element",
     ...(id.length === 0 ? {} : { id }),
     classNames,
-    scrollable: isScrollable(element),
-    captureKind: "visible-bounds",
+    scrollable: isScrollableElement(element),
+    captureKind,
   };
 }
 
@@ -205,6 +242,13 @@ export function openElementSelector(
   root.style.zIndex = "2147483647";
   root.style.pointerEvents = "none";
   root.style.contain = "layout style paint";
+
+  const isScrollArea = options.captureKind === "full-scroll-content";
+  const dialogLabel = isScrollArea ? "Chọn vùng cuộn cần chụp" : "Chọn phần tử cần chụp";
+  const confirmLabel = isScrollArea ? "Chụp toàn bộ vùng cuộn" : "Chụp phần tử";
+  const instructions = isScrollArea
+    ? "Di chuột để tìm khung cuộn · nhấp để chọn · ↑ khung cuộn cha · ↓ quay lại · Enter xác nhận · Esc hủy"
+    : "Di chuột để xem · nhấp để chọn · ↑ cha · ↓ phần tử con trước · Enter xác nhận · Esc hủy";
 
   const shadow = root.attachShadow({ mode: "open" });
   shadow.innerHTML = `
@@ -278,11 +322,11 @@ export function openElementSelector(
     <div class="highlight" data-highlight aria-hidden="true">
       <span class="label" data-label></span>
     </div>
-    <div class="toolbar" role="dialog" aria-label="Chọn phần tử cần chụp" data-toolbar>
-      <p class="instructions">Di chuột để xem · nhấp để chọn · ↑ cha · ↓ phần tử con trước · Enter xác nhận · Esc hủy <span class="selection-copy" data-selection-copy></span></p>
+    <div class="toolbar" role="dialog" aria-label="${dialogLabel}" data-toolbar>
+      <p class="instructions">${instructions} <span class="selection-copy" data-selection-copy></span></p>
       <div class="actions">
         <button type="button" data-cancel>Hủy</button>
-        <button type="button" data-confirm disabled>Chụp phần tử</button>
+        <button type="button" data-confirm disabled>${confirmLabel}</button>
       </div>
     </div>
   `;
@@ -315,7 +359,11 @@ export function openElementSelector(
 
   const render = () => {
     const element = activeElement();
-    if (element === undefined || !element.isConnected || !isSelectableElement(element)) {
+    if (
+      element === undefined ||
+      !element.isConnected ||
+      !matchesCaptureKind(element, options.captureKind)
+    ) {
       highlight.style.display = "none";
       confirmButton.disabled = true;
       selectionCopy.textContent = selected === undefined ? "" : " · mục đã chọn không còn tồn tại";
@@ -332,7 +380,11 @@ export function openElementSelector(
       ...(element.id.length === 0 ? {} : { id: element.id }),
       classNames: Array.from(element.classList),
     });
-    label.textContent = `${summary} · ${Math.round(rect.width)} × ${Math.round(rect.height)}`;
+    const dimensions =
+      isScrollArea && element instanceof HTMLElement
+        ? `${element.scrollWidth} × ${element.scrollHeight} nội dung`
+        : `${Math.round(rect.width)} × ${Math.round(rect.height)}`;
+    label.textContent = `${summary} · ${dimensions}`;
     selectionCopy.textContent = selected === undefined ? "" : ` · đã chọn ${summary}`;
     confirmButton.disabled = selected === undefined;
   };
@@ -378,8 +430,12 @@ export function openElementSelector(
         ? undefined
         : {
             element: target,
-            rect: selectedRect ?? readElementDocumentRect(target),
-            descriptor: descriptorFor(target),
+            rect:
+              selectedRect ??
+              (options.captureKind === "full-scroll-content"
+                ? readElementScrollContentRect(target)
+                : readElementDocumentRect(target)),
+            descriptor: descriptorFor(target, options.captureKind),
           };
     disposeInternal();
     await waitForFrames(2);
@@ -399,8 +455,8 @@ export function openElementSelector(
       return;
     }
     const candidate =
-      candidateFromPoint(event.clientX, event.clientY) ??
-      candidateFromComposedPath(event.composedPath());
+      candidateFromPoint(event.clientX, event.clientY, options.captureKind) ??
+      candidateFromComposedPath(event.composedPath(), options.captureKind);
     if (selected === undefined && candidate !== hovered) {
       hovered = candidate;
       render();
@@ -412,8 +468,8 @@ export function openElementSelector(
       return;
     }
     const candidate =
-      candidateFromPoint(event.clientX, event.clientY) ??
-      candidateFromComposedPath(event.composedPath());
+      candidateFromPoint(event.clientX, event.clientY, options.captureKind) ??
+      candidateFromComposedPath(event.composedPath(), options.captureKind);
     if (candidate === undefined) {
       return;
     }
@@ -443,11 +499,15 @@ export function openElementSelector(
     }
     if (event.key === "ArrowUp") {
       const current = activeElement();
-      const parent = current === undefined ? undefined : parentCandidate(current);
+      const parent =
+        current === undefined ? undefined : parentCandidate(current, options.captureKind);
       if (current !== undefined && parent !== undefined) {
         rememberedChildren.set(parent, current);
         selected = parent;
-        selectedRect = readElementDocumentRect(parent);
+        selectedRect =
+          options.captureKind === "full-scroll-content"
+            ? readElementScrollContentRect(parent)
+            : readElementDocumentRect(parent);
         hovered = parent;
         render();
       }
@@ -458,9 +518,12 @@ export function openElementSelector(
     if (event.key === "ArrowDown") {
       const current = activeElement();
       const child = current === undefined ? undefined : rememberedChildren.get(current);
-      if (child?.isConnected && isSelectableElement(child)) {
+      if (child?.isConnected && matchesCaptureKind(child, options.captureKind)) {
         selected = child;
-        selectedRect = readElementDocumentRect(child);
+        selectedRect =
+          options.captureKind === "full-scroll-content"
+            ? readElementScrollContentRect(child)
+            : readElementDocumentRect(child);
         hovered = child;
         render();
       }

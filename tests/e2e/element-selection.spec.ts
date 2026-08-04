@@ -255,6 +255,7 @@ test("@smoke selects the deepest target inside an open shadow root", async ({
   await targetPage.bringToFront();
 
   const root = targetPage.locator("[data-webcap-element-selector]");
+  await expect(root).toHaveCount(1);
   const box = await shadowButton.boundingBox();
   if (box === null) throw new Error("Open shadow target is not visible.");
   const documentOffset = await targetPage.evaluate(() => ({
@@ -296,6 +297,7 @@ test("@smoke fails stale target safely instead of capturing a replacement", asyn
   await targetPage.bringToFront();
 
   const root = targetPage.locator("[data-webcap-element-selector]");
+  await expect(root).toHaveCount(1);
   const stale = targetPage.locator("#stale-target");
   const box = await stale.boundingBox();
   if (box === null) throw new Error("Stale target is not visible.");

@@ -100,8 +100,8 @@ export function planPdfTileIntersections(
         tileId: tile.id,
         logicalRectCss,
         sourceCropCss: {
-          x: logicalRectCss.x - tile.sourceRectCss.x,
-          y: logicalRectCss.y - tile.sourceRectCss.y,
+          x: (tile.captureCropCss?.x ?? 0) + logicalRectCss.x - tile.sourceRectCss.x,
+          y: (tile.captureCropCss?.y ?? 0) + logicalRectCss.y - tile.sourceRectCss.y,
           width: logicalRectCss.width,
           height: logicalRectCss.height,
         },

@@ -29,7 +29,8 @@ export interface JobProgressPublisher {
 
 export interface FullPageCaptureCoordinatorOptions {
   jobs: PersistentJobCoordinatorPort;
-  pages: PagePreparationService;
+  pages?: PagePreparationService;
+  preparePage?: boolean;
   engine: CaptureEngine;
   fallbackEngine?: CaptureEngine;
   tiles: TileRepositoryPort;
@@ -120,7 +121,7 @@ function invalidModeError(job: CaptureJob): Error {
     createWebCapError({
       code: "E_PROTOCOL_MESSAGE",
       stage: "protocol",
-      message: "Only full-page and region jobs can use the tiled capture coordinator.",
+      message: "This capture mode cannot use the tiled capture coordinator.",
       userMessageKey: "errors.captureMode",
       retryable: false,
       fallbackAllowed: false,
@@ -166,7 +167,8 @@ function fallbackAllowed(error: unknown): boolean {
 
 export class FullPageCaptureCoordinator {
   private readonly jobs: PersistentJobCoordinatorPort;
-  private readonly pages: PagePreparationService;
+  private readonly pages: PagePreparationService | undefined;
+  private readonly preparePage: boolean;
   private readonly engine: CaptureEngine;
   private readonly fallbackEngine: CaptureEngine | undefined;
   private readonly tiles: TileRepositoryPort;
@@ -179,6 +181,10 @@ export class FullPageCaptureCoordinator {
   constructor(options: FullPageCaptureCoordinatorOptions) {
     this.jobs = options.jobs;
     this.pages = options.pages;
+    this.preparePage = options.preparePage ?? true;
+    if (this.preparePage && this.pages === undefined) {
+      throw new TypeError("Prepared capture coordinator requires a page preparation service.");
+    }
     this.engine = options.engine;
     this.fallbackEngine = options.fallbackEngine;
     this.tiles = options.tiles;
@@ -213,7 +219,7 @@ export class FullPageCaptureCoordinator {
     if (job.state === "ready" || job.state === "failed") {
       return this.jobs.cancel(jobId, reason);
     }
-    if (job.state === "preparing") {
+    if (job.state === "preparing" && this.preparePage && this.pages !== undefined) {
       try {
         await this.pages.cancel(job.tabId, job.id);
       } catch {
@@ -227,8 +233,8 @@ export class FullPageCaptureCoordinator {
     return this.active.has(jobId);
   }
 
-  private async revalidateElementTarget(job: CaptureJob): Promise<CaptureJob> {
-    if (job.mode !== "element") {
+  private async revalidateTarget(job: CaptureJob): Promise<CaptureJob> {
+    if (job.mode !== "element" && job.mode !== "scroll-area") {
       return job;
     }
     if (this.targetValidator === undefined || job.targetDescriptor === undefined) {
@@ -236,11 +242,11 @@ export class FullPageCaptureCoordinator {
         createWebCapError({
           code: "E_TARGET_STALE",
           stage: "capture",
-          message: "The selected element target is unavailable.",
+          message: "The selected capture target is unavailable.",
           userMessageKey: "errors.targetStale",
           retryable: true,
           fallbackAllowed: false,
-          causeCode: "ElementTargetValidatorMissing",
+          causeCode: "CaptureTargetValidatorMissing",
           safeContext: { jobId: job.id },
         }),
       );
@@ -251,10 +257,18 @@ export class FullPageCaptureCoordinator {
 
   private async run(jobId: string, cancellation: MutableCaptureCancellation): Promise<void> {
     let job = await this.requireJob(jobId);
-    if (job.mode !== "full-page" && job.mode !== "region" && job.mode !== "element") {
+    if (
+      job.mode !== "full-page" &&
+      job.mode !== "region" &&
+      job.mode !== "element" &&
+      job.mode !== "scroll-area"
+    ) {
       throw invalidModeError(job);
     }
-    if ((job.mode === "region" || job.mode === "element") && job.targetRect === undefined) {
+    if (
+      (job.mode === "region" || job.mode === "element" || job.mode === "scroll-area") &&
+      job.targetRect === undefined
+    ) {
       throw createWebCapRuntimeError(
         createWebCapError({
           code: "E_PROTOCOL_MESSAGE",
@@ -288,19 +302,22 @@ export class FullPageCaptureCoordinator {
     let activeContext: CaptureEngineContext | undefined;
 
     try {
-      const preparation = await this.pages.prepare({
-        tabId: job.tabId,
-        preparationId: job.id,
-        options: {
-          targetStartX: job.targetRect?.x ?? 0,
-          targetStartY: job.targetRect?.y ?? 0,
-          maxCssHeight: job.settings.limits.maxCssHeight,
-          lazyLoad: job.settings.lazyLoad,
-        },
-      });
-      prepared = true;
+      const preparation =
+        this.preparePage && this.pages !== undefined
+          ? await this.pages.prepare({
+              tabId: job.tabId,
+              preparationId: job.id,
+              options: {
+                targetStartX: job.targetRect?.x ?? 0,
+                targetStartY: job.targetRect?.y ?? 0,
+                maxCssHeight: job.settings.limits.maxCssHeight,
+                lazyLoad: job.settings.lazyLoad,
+              },
+            })
+          : undefined;
+      prepared = preparation !== undefined;
       cancellation.throwIfCancelled("prepare");
-      job = await this.revalidateElementTarget(job);
+      job = await this.revalidateTarget(job);
 
       const preferred =
         job.preferredEngine === "scroll" && this.fallbackEngine !== undefined
@@ -311,7 +328,7 @@ export class FullPageCaptureCoordinator {
 
       for (let attempt = 0; attempt < engines.length; attempt += 1) {
         const selected = engines[attempt] as CaptureEngine;
-        job = await this.revalidateElementTarget(await this.requireJob(job.id));
+        job = await this.revalidateTarget(await this.requireJob(job.id));
         if (attempt > 0) {
           cancellation.throwIfCancelled("capture");
           await this.resetForFallback(job.id);
@@ -331,7 +348,8 @@ export class FullPageCaptureCoordinator {
           windowId: job.windowId,
           settings: job.settings,
           ...(job.targetRect === undefined ? {} : { targetRect: job.targetRect }),
-          preparation,
+          ...(job.targetDescriptor === undefined ? {} : { targetDescriptor: job.targetDescriptor }),
+          ...(preparation === undefined ? {} : { preparation }),
           cancellation,
           onPlan: (metrics, targetRect, tiles) =>
             this.recordPlan(job.id, selected, metrics, targetRect, tiles),
@@ -380,7 +398,7 @@ export class FullPageCaptureCoordinator {
         total: current.totalTiles,
       });
       try {
-        await this.pages.restore(job.tabId, job.id);
+        await this.pages?.restore(job.tabId, job.id);
       } catch (error) {
         restoreError ??= error;
       }

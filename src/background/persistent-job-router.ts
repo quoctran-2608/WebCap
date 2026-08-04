@@ -12,6 +12,10 @@ import { createChromePagePreparationAdapter } from "@background/page-preparation
 import { PagePreparationService } from "@background/page-preparation-service";
 import { OffscreenService } from "@background/offscreen-service";
 import { PdfExportService } from "@background/pdf-export-service";
+import {
+  ChromeScrollAreaPageAdapter,
+  type ScrollAreaPageAdapter,
+} from "@background/scroll-area-page-adapter";
 import { createChromeScrollCapturePageAdapter } from "@background/scroll-capture-page-adapter";
 import {
   RegionSelectionService,
@@ -19,6 +23,7 @@ import {
   type RegionSelectionPort,
 } from "@background/region-selection-service";
 import { CdpCaptureEngine } from "@capture/cdp-capture-engine";
+import { ScrollAreaCaptureEngine } from "@capture/scroll-area-capture-engine";
 import { ScrollCaptureEngine } from "@capture/scroll-capture-engine";
 import { DEDUPE_RECORD_SCHEMA_VERSION, DEDUPE_TTL_MS } from "@shared/constants";
 import type { CaptureJob } from "@shared/contracts/domain";
@@ -91,6 +96,7 @@ export interface PersistentJobRouterDependencies {
   dedupe: DedupeRepositoryPort;
   now: () => Date;
   captures?: FullPageCapturePort;
+  scrollAreaCaptures?: FullPageCapturePort;
   regions?: RegionSelectionPort;
   elements?: ElementSelectionPort & ElementTargetValidationPort;
   pdfExports?: PdfExportPort;
@@ -114,6 +120,7 @@ function defaultDependencies(): PersistentJobRouterDependencies {
     browser: createChromePagePreparationAdapter(),
   });
   const scrollPages = createChromeScrollCapturePageAdapter();
+  const scrollAreaPages: ScrollAreaPageAdapter = new ChromeScrollAreaPageAdapter();
   const tabs = createChromeTabsAdapter();
   const jobs = new PersistentJobCoordinator({
     jobs: jobRepository,
@@ -122,6 +129,11 @@ function defaultDependencies(): PersistentJobRouterDependencies {
     artifacts: new IndexedDbJobArtifactCleanupRepository(),
     cleanup: {
       async cleanup(job) {
+        if (job.mode === "scroll-area") {
+          if (job.targetDescriptor === undefined) return;
+          await scrollAreaPages.cleanup(job.tabId, job.id, job.targetDescriptor);
+          return;
+        }
         if (job.mode !== "full-page" && job.mode !== "region" && job.mode !== "element") {
           return;
         }
@@ -140,12 +152,8 @@ function defaultDependencies(): PersistentJobRouterDependencies {
         } catch (error) {
           pageCleanupError = error;
         }
-        if (scrollCleanupError instanceof Error) {
-          throw scrollCleanupError;
-        }
-        if (pageCleanupError instanceof Error) {
-          throw pageCleanupError;
-        }
+        if (scrollCleanupError instanceof Error) throw scrollCleanupError;
+        if (pageCleanupError instanceof Error) throw pageCleanupError;
       },
     },
   });
@@ -158,6 +166,13 @@ function defaultDependencies(): PersistentJobRouterDependencies {
     fallbackEngine: new ScrollCaptureEngine({ pages: scrollPages, tabs }),
     targetValidator: elements,
   });
+  const scrollAreaCaptures = new FullPageCaptureCoordinator({
+    jobs,
+    tiles,
+    preparePage: false,
+    engine: new ScrollAreaCaptureEngine({ pages: scrollAreaPages, tabs }),
+    targetValidator: elements,
+  });
   const regions = new RegionSelectionService(createChromeRegionSelectionBrowserAdapter());
   const pdfExports = new PdfExportService({
     jobs,
@@ -168,6 +183,7 @@ function defaultDependencies(): PersistentJobRouterDependencies {
   sharedDependencies = {
     jobs,
     captures,
+    scrollAreaCaptures,
     regions,
     elements,
     pdfExports,
@@ -311,9 +327,16 @@ async function executeJobRequest(
         }
       } else if (job.mode === "element" && dependencies.elements !== undefined) {
         try {
-          await dependencies.elements.start(job.tabId, job.id);
+          await dependencies.elements.start(job.tabId, job.id, "visible-bounds");
         } catch (error) {
           await dependencies.jobs.cancel(job.id, "element selector failed to open");
+          throw error;
+        }
+      } else if (job.mode === "scroll-area" && dependencies.elements !== undefined) {
+        try {
+          await dependencies.elements.start(job.tabId, job.id, "full-scroll-content");
+        } catch (error) {
+          await dependencies.jobs.cancel(job.id, "scroll-area selector failed to open");
           throw error;
         }
       }
@@ -355,6 +378,12 @@ async function executeJobRequest(
       const job = await dependencies.jobs.get(request.payload.jobId);
       if (job === undefined) {
         throw jobNotFound(request.payload.jobId);
+      }
+      if (job.mode === "scroll-area" && dependencies.scrollAreaCaptures !== undefined) {
+        return {
+          kind: "job",
+          job: await dependencies.scrollAreaCaptures.cancel(job.id, request.payload.reason),
+        };
       }
       if (
         (job.mode === "full-page" || job.mode === "region" || job.mode === "element") &&
@@ -565,7 +594,7 @@ export async function routeElementSelectionMessage(
     const tabId = senderTabId(sender);
     if (
       job === undefined ||
-      job.mode !== "element" ||
+      (job.mode !== "element" && job.mode !== "scroll-area") ||
       job.state !== "created" ||
       tabId === undefined ||
       tabId !== job.tabId
@@ -587,6 +616,25 @@ export async function routeElementSelectionMessage(
       );
     }
 
+    if (
+      parsed.value.type === "ELEMENT_SELECTION_COMMIT" &&
+      parsed.value.payload.descriptor.captureKind !==
+        (job.mode === "scroll-area" ? "full-scroll-content" : "visible-bounds")
+    ) {
+      throw createWebCapRuntimeError(
+        createWebCapError({
+          code: "E_PROTOCOL_MESSAGE",
+          stage: "protocol",
+          message: "Selected target kind does not match the active capture mode.",
+          userMessageKey: "errors.elementSelection",
+          retryable: false,
+          fallbackAllowed: false,
+          causeCode: "ElementSelectionCaptureKindMismatch",
+          safeContext: { jobId: job.id },
+        }),
+      );
+    }
+
     if (parsed.value.type === "ELEMENT_SELECTION_CANCEL") {
       await dependencies.jobs.cancel(
         job.id,
@@ -597,21 +645,23 @@ export async function routeElementSelectionMessage(
         targetRect: parsed.value.payload.rect,
         targetDescriptor: parsed.value.payload.descriptor,
       });
-      if (dependencies.captures === undefined) {
+      const coordinator =
+        job.mode === "scroll-area" ? dependencies.scrollAreaCaptures : dependencies.captures;
+      if (coordinator === undefined) {
         throw createWebCapRuntimeError(
           createWebCapError({
             code: "E_PROTOCOL_MESSAGE",
             stage: "protocol",
-            message: "The element capture coordinator is unavailable.",
+            message: "The selected-target capture coordinator is unavailable.",
             userMessageKey: "errors.elementSelection",
             retryable: true,
             fallbackAllowed: false,
-            causeCode: "ElementCaptureCoordinatorMissing",
+            causeCode: "SelectedTargetCaptureCoordinatorMissing",
             safeContext: { jobId: job.id },
           }),
         );
       }
-      void dependencies.captures.start(job.id).catch(() => undefined);
+      void coordinator.start(job.id).catch(() => undefined);
     }
 
     return createElementSelectionEventAckMessage({

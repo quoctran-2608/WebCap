@@ -19,6 +19,7 @@ import {
   startElementCapture,
   startFullPageCapture,
   startRegionCapture,
+  startScrollAreaCapture,
 } from "./full-page-client";
 import {
   cancelVisibleCapture,
@@ -107,6 +108,14 @@ function tiledStatusCopy(job: CaptureJob): string {
     if (job.state === "failed") return "Không thể hoàn tất chụp vùng chọn.";
     if (job.state === "cancelled") return "Đã hủy chọn vùng.";
   }
+  if (job.mode === "scroll-area") {
+    if (job.state === "created") return "Chọn một khung có nội dung cuộn trên trang…";
+    if (job.state === "preparing") return "Đang đo toàn bộ nội dung bên trong vùng cuộn…";
+    if (job.state === "capturing") return "Đang cuộn và chụp từng phần bên trong khung…";
+    if (job.state === "ready") return "Tile set toàn bộ vùng cuộn đã sẵn sàng.";
+    if (job.state === "failed") return "Không thể hoàn tất chụp vùng cuộn.";
+    if (job.state === "cancelled") return "Đã hủy chọn vùng cuộn.";
+  }
   return TILED_STATUS_COPY[job.state];
 }
 
@@ -188,7 +197,8 @@ export function App(): React.JSX.Element {
               activeJob !== undefined &&
               (activeJob.mode === "full-page" ||
                 activeJob.mode === "region" ||
-                activeJob.mode === "element")
+                activeJob.mode === "element" ||
+                activeJob.mode === "scroll-area")
             ) {
               setFullPageJob(activeJob);
               setSelectedMode(activeJob.mode);
@@ -215,7 +225,10 @@ export function App(): React.JSX.Element {
   const visibleBusy = status === "capturing" || status === "processing" || status === "downloading";
   const fullPageBusy = isFullPageBusy(fullPageJob);
   const tiledMode =
-    selectedMode === "full-page" || selectedMode === "region" || selectedMode === "element";
+    selectedMode === "full-page" ||
+    selectedMode === "region" ||
+    selectedMode === "element" ||
+    selectedMode === "scroll-area";
   const busy = tiledMode ? fullPageBusy : visibleBusy;
   const terminal = tiledMode
     ? fullPageJob !== undefined &&
@@ -419,6 +432,25 @@ export function App(): React.JSX.Element {
     }
   }, [selectedFormat, tabCapability.tabId, tabCapability.windowId]);
 
+  const handleScrollAreaCapture = useCallback(async (): Promise<void> => {
+    if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
+      setUiError("Không xác định được tab đang hoạt động.");
+      return;
+    }
+    setFullPageJob(undefined);
+    setUiError(undefined);
+    try {
+      const job = await startScrollAreaCapture({
+        tabId: tabCapability.tabId,
+        windowId: tabCapability.windowId,
+        outputFormat: selectedFormat,
+      });
+      setFullPageJob(job);
+    } catch (error) {
+      setUiError(errorMessage(error));
+    }
+  }, [selectedFormat, tabCapability.tabId, tabCapability.windowId]);
+
   const handleCapture = useCallback(async (): Promise<void> => {
     if (!canCapture) {
       return;
@@ -435,19 +467,28 @@ export function App(): React.JSX.Element {
       await handleElementCapture();
       return;
     }
+    if (selectedMode === "scroll-area") {
+      await handleScrollAreaCapture();
+      return;
+    }
     await handleVisibleCapture();
   }, [
     canCapture,
     handleElementCapture,
-    handleElementCapture,
     handleFullPageCapture,
     handleRegionCapture,
+    handleScrollAreaCapture,
     handleVisibleCapture,
     selectedMode,
   ]);
 
   const handleCancel = useCallback(async (): Promise<void> => {
-    if (selectedMode === "full-page" || selectedMode === "region" || selectedMode === "element") {
+    if (
+      selectedMode === "full-page" ||
+      selectedMode === "region" ||
+      selectedMode === "element" ||
+      selectedMode === "scroll-area"
+    ) {
       if (fullPageJob === undefined) {
         return;
       }
@@ -485,7 +526,12 @@ export function App(): React.JSX.Element {
   ]);
 
   const handleRetry = useCallback(async (): Promise<void> => {
-    if (selectedMode === "full-page" || selectedMode === "region" || selectedMode === "element") {
+    if (
+      selectedMode === "full-page" ||
+      selectedMode === "region" ||
+      selectedMode === "element" ||
+      selectedMode === "scroll-area"
+    ) {
       if (fullPageJob !== undefined && fullPageJob.state !== "cancelled") {
         await cancelFullPageCapture(fullPageJob.id).catch(() => undefined);
       }
@@ -493,6 +539,8 @@ export function App(): React.JSX.Element {
         await handleRegionCapture();
       } else if (selectedMode === "element") {
         await handleElementCapture();
+      } else if (selectedMode === "scroll-area") {
+        await handleScrollAreaCapture();
       } else {
         await handleFullPageCapture();
       }
@@ -507,6 +555,7 @@ export function App(): React.JSX.Element {
     fullPageJob,
     handleFullPageCapture,
     handleRegionCapture,
+    handleScrollAreaCapture,
     handleVisibleCapture,
     runExport,
     selectedFormat,
@@ -602,10 +651,14 @@ export function App(): React.JSX.Element {
                   ? "Chụp vùng tự chọn"
                   : selectedMode === "element"
                     ? "Chụp phần tử"
-                    : "Chụp vùng đang xem"}
+                    : selectedMode === "scroll-area"
+                      ? "Chụp toàn bộ vùng cuộn"
+                      : "Chụp vùng đang xem"}
             </h2>
           </div>
-          <span className="planned-badge">{selectedMode === "visible" ? "M1" : "S14"}</span>
+          <span className="planned-badge">
+            {selectedMode === "visible" ? "M1" : selectedMode === "scroll-area" ? "S16" : "S14"}
+          </span>
         </div>
 
         <div className="mode-grid" aria-label="Các chế độ chụp">
@@ -676,7 +729,9 @@ export function App(): React.JSX.Element {
                 ? "Bắt đầu chọn vùng"
                 : selectedMode === "element"
                   ? "Bắt đầu chọn phần tử"
-                  : "Tạo bản xem trước"}
+                  : selectedMode === "scroll-area"
+                    ? "Bắt đầu chọn vùng cuộn"
+                    : "Tạo bản xem trước"}
           </button>
         )}
 
@@ -697,7 +752,9 @@ export function App(): React.JSX.Element {
                     ? "Tiến độ chụp vùng chọn"
                     : selectedMode === "element"
                       ? "Tiến độ chụp phần tử"
-                      : "Tiến độ chụp toàn trang"
+                      : selectedMode === "scroll-area"
+                        ? "Tiến độ chụp vùng cuộn"
+                        : "Tiến độ chụp toàn trang"
                 }
               />
             </div>
@@ -802,7 +859,9 @@ export function App(): React.JSX.Element {
                   ? "Đã lưu tile vùng chọn"
                   : selectedMode === "element"
                     ? "Đã lưu tile phần tử"
-                    : "Đã lưu đầy đủ tile"}
+                    : selectedMode === "scroll-area"
+                      ? "Đã lưu toàn bộ tile vùng cuộn"
+                      : "Đã lưu đầy đủ tile"}
               </h3>
               <p>
                 {fullPageJob.completedTiles} source tile đang được giữ cục bộ. Mở editor để xem
@@ -847,7 +906,9 @@ export function App(): React.JSX.Element {
                   ? "Không thể hoàn tất chụp vùng chọn"
                   : selectedMode === "element"
                     ? "Không thể hoàn tất chụp phần tử"
-                    : "Không thể hoàn tất chụp toàn trang"}
+                    : selectedMode === "scroll-area"
+                      ? "Không thể hoàn tất chụp vùng cuộn"
+                      : "Không thể hoàn tất chụp toàn trang"}
               </h3>
               <p>
                 {fullPageJob.error?.message ??
@@ -855,10 +916,16 @@ export function App(): React.JSX.Element {
                     ? "Không thể chụp vùng đã chọn."
                     : selectedMode === "element"
                       ? "Phần tử đã chọn không còn hợp lệ hoặc không thể chụp."
-                      : "Không thể chụp toàn bộ trang.")}
+                      : selectedMode === "scroll-area"
+                        ? "Khung cuộn đã chọn không còn hợp lệ hoặc không thể chụp toàn bộ nội dung."
+                        : "Không thể chụp toàn bộ trang.")}
               </p>
               {fullPageJob.activeEngine === "scroll" && (
-                <p>Scroll fallback đã dừng an toàn và trang đã được phục hồi.</p>
+                <p>
+                  {selectedMode === "scroll-area"
+                    ? "Vùng cuộn đã dừng an toàn và trạng thái cuộn đã được phục hồi."
+                    : "Scroll fallback đã dừng an toàn và trang đã được phục hồi."}
+                </p>
               )}
               <button
                 className="text-action"
@@ -876,7 +943,9 @@ export function App(): React.JSX.Element {
                     ? "Chọn lại vùng"
                     : selectedMode === "element"
                       ? "Chọn lại phần tử"
-                      : "Thử lại chụp toàn trang"}
+                      : selectedMode === "scroll-area"
+                        ? "Chọn lại vùng cuộn"
+                        : "Thử lại chụp toàn trang"}
               </button>
             </div>
           )}

@@ -64,6 +64,20 @@ describe("PDF tile intersection planner", () => {
     });
   });
 
+  it("offsets source crops into a full-viewport screenshot for scroll areas", () => {
+    const current = tile(0, 0, 0, 200);
+    current.sourceRectCss = { x: 0, y: 0, width: 300, height: 200 };
+    current.outputRectCss = { x: 0, y: 0, width: 300, height: 200 };
+    current.captureViewportCss = { x: 0, y: 0, width: 1200, height: 800 };
+    current.captureCropCss = { x: 150, y: 90, width: 300, height: 200 };
+
+    expect(planPdfTileIntersections({ x: 20, y: 30, width: 100, height: 80 }, [current])).toEqual([
+      expect.objectContaining({
+        sourceCropCss: { x: 170, y: 120, width: 100, height: 80 },
+      }),
+    ]);
+  });
+
   it("rejects a coverage gap instead of producing a white seam", () => {
     const tiles = [tile(0, 0, 0, 200), tile(1, 250, 250, 250)];
     expect(() =>

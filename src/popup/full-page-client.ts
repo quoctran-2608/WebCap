@@ -48,7 +48,7 @@ function startTiledCapture(options: {
   tabId: number;
   windowId: number;
   outputFormat: ImageFormat;
-  mode: "full-page" | "region" | "element";
+  mode: "full-page" | "region" | "element" | "scroll-area";
 }): Promise<CaptureJob> {
   return sendJobRequest(
     createJobCreateMessage({
@@ -57,7 +57,7 @@ function startTiledCapture(options: {
       tabId: options.tabId,
       windowId: options.windowId,
       mode: options.mode,
-      preferredEngine: "cdp",
+      preferredEngine: options.mode === "scroll-area" ? "scroll" : "cdp",
       settings: {
         ...DEFAULT_CAPTURE_SETTINGS,
         outputFormat: options.outputFormat,
@@ -88,6 +88,14 @@ export function startElementCapture(options: {
   outputFormat: ImageFormat;
 }): Promise<CaptureJob> {
   return startTiledCapture({ ...options, mode: "element" });
+}
+
+export function startScrollAreaCapture(options: {
+  tabId: number;
+  windowId: number;
+  outputFormat: ImageFormat;
+}): Promise<CaptureJob> {
+  return startTiledCapture({ ...options, mode: "scroll-area" });
 }
 
 export function getCaptureJob(jobId: string): Promise<CaptureJob> {

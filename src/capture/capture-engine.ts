@@ -1,6 +1,7 @@
 import type {
   CaptureEngineKind,
   CaptureJob,
+  ElementTargetDescriptor,
   CaptureSettings,
   CaptureTile,
   PageMetrics,
@@ -29,6 +30,7 @@ export interface CaptureEngineContext {
   windowId?: number;
   settings: CaptureSettings;
   targetRect?: Rect;
+  targetDescriptor?: ElementTargetDescriptor;
   preparation?: PagePreparationReadyPayload;
   cancellation: CaptureCancellation;
   onPlan(metrics: PageMetrics, targetRect: Rect, tiles: CaptureTile[]): Promise<void>;

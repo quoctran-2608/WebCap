@@ -14,7 +14,11 @@ export interface ElementSelectionBrowserAdapter {
 }
 
 export interface ElementSelectionPort {
-  start(tabId: number, jobId: string): Promise<void>;
+  start(
+    tabId: number,
+    jobId: string,
+    captureKind: "visible-bounds" | "full-scroll-content",
+  ): Promise<void>;
 }
 
 export interface ElementTargetValidationPort {
@@ -40,7 +44,11 @@ export class ElementSelectionService implements ElementSelectionPort, ElementTar
     private readonly requestId: () => string = () => crypto.randomUUID(),
   ) {}
 
-  async start(tabId: number, jobId: string): Promise<void> {
+  async start(
+    tabId: number,
+    jobId: string,
+    captureKind: "visible-bounds" | "full-scroll-content",
+  ): Promise<void> {
     await this.browser.injectContentScript(tabId);
     const requestId = this.requestId();
     const response = await this.browser.sendMessage(
@@ -48,6 +56,7 @@ export class ElementSelectionService implements ElementSelectionPort, ElementTar
       createElementSelectionOpenMessage({
         requestId,
         jobId,
+        captureKind,
         sentAt: this.now().toISOString(),
       }),
     );
@@ -61,7 +70,10 @@ export class ElementSelectionService implements ElementSelectionPort, ElementTar
   }
 
   async revalidate(job: CaptureJob): Promise<Rect> {
-    if (job.mode !== "element" || job.targetDescriptor === undefined) {
+    if (
+      (job.mode !== "element" && job.mode !== "scroll-area") ||
+      job.targetDescriptor === undefined
+    ) {
       throw createWebCapRuntimeError(
         createWebCapError({
           code: "E_TARGET_STALE",
@@ -71,6 +83,23 @@ export class ElementSelectionService implements ElementSelectionPort, ElementTar
           retryable: true,
           fallbackAllowed: false,
           causeCode: "ElementTargetDescriptorMissing",
+          safeContext: { jobId: job.id },
+        }),
+      );
+    }
+
+    const expectedCaptureKind =
+      job.mode === "scroll-area" ? "full-scroll-content" : "visible-bounds";
+    if (job.targetDescriptor.captureKind !== expectedCaptureKind) {
+      throw createWebCapRuntimeError(
+        createWebCapError({
+          code: "E_TARGET_STALE",
+          stage: "capture",
+          message: "The selected target no longer matches the requested capture mode.",
+          userMessageKey: "errors.targetStale",
+          retryable: true,
+          fallbackAllowed: false,
+          causeCode: "ElementTargetCaptureKindMismatch",
           safeContext: { jobId: job.id },
         }),
       );
