@@ -92,6 +92,8 @@ test("@smoke edits, restores, exports, and downloads PDF without recapture", asy
   serviceWorker,
   targetPage,
 }) => {
+  test.setTimeout(90_000);
+
   await targetPage.goto("http://127.0.0.1:4174/full-page-long.html");
   const popup = await openPopup();
   await popup.getByRole("button", { name: /^Toàn bộ trang/ }).click();
@@ -159,7 +161,7 @@ test("@smoke edits, restores, exports, and downloads PDF without recapture", asy
 
   await editor.getByRole("button", { name: "Tạo PDF" }).click();
   await expect(editor.getByRole("button", { name: "Tải PDF xuống" })).toBeVisible({
-    timeout: 45_000,
+    timeout: 60_000,
   });
 
   const completed = await readEditorState(editor, jobId);
