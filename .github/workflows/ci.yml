@@ -39,14 +39,14 @@ jobs:
 
       - name: Package S16 workspace
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/s16-scrollable-container'
-        run: tar --exclude=.git --exclude=s16-workspace.tgz -czf s16-workspace.tgz .
+        run: tar --exclude=.git -czf /tmp/s16-workspace.tgz .
 
       - name: Upload S16 workspace
         if: github.event_name == 'pull_request' && github.head_ref == 'agent/s16-scrollable-container'
         uses: actions/upload-artifact@v4
         with:
           name: s16-workspace
-          path: s16-workspace.tgz
+          path: /tmp/s16-workspace.tgz
           retention-days: 1
 
       - name: Check formatting
