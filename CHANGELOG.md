@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Dedicated React PDF editor routed by persistent job ID, with reload-safe non-destructive edit manifests that never reorder or delete source tiles.
+- Bounded lazy page thumbnails rendered from local tile Blobs, keyboard-accessible logical page reordering/removal, and cache identities tied to manifest revision.
+- A4, Letter, fit-width, portrait/landscape, margin, and JPEG-quality controls with explicitly approximate size estimates.
+- Edited-page PDF export through the page-at-a-time S13 pipeline, including per-page progress, cooperative cancellation, retry, local artifact download, and no recapture.
+- Typed editor/offscreen protocols, IndexedDB read/write race hardening, progress ACK isolation, and browser validation covering reload persistence, thumbnail bounds, immutable source tiles, PDF integrity, and download.
+- The S14 reference suite passes 230 unit tests across 64 files and 20 Playwright E2E cases.
 - Page-size and unit-conversion primitives for A4, Letter, fit-width, portrait/landscape, margins, CSS pixels, millimeters, inches, and PDF points.
 - Continuous PDF source slicing with running fractional pixel residuals so final page coverage reaches the exact source pixel without accumulated seams.
 - Deterministic tile-to-page intersection planning that consumes overlap/output metadata and rejects missing or duplicated logical coverage.

@@ -142,3 +142,16 @@ Run `pnpm test:unit` for the coordinate matrix, protocol, selector service, rout
 8. Remove a stored source tile before export. WebCap must fail before page-canvas allocation with retryable `E_STORAGE_READ`; no partial output artifact may be persisted.
 9. Force JPEG/PDF encoding failure after export starts. The job must become retryable `failed` with `E_EXPORT_FAILED`, while the stored capture tiles remain intact.
 10. Run `pnpm test:unit` and `pnpm test:e2e`. The S13 reference suite contains 215 unit tests across 58 files and 19 Playwright cases, including a real 9,600 CSS-pixel tile-set-to-PDF browser export and all previous capture regressions.
+
+## S14 PDF editor and non-destructive retry validation
+
+1. Build and load the extension, capture `tests/fixtures/full-page-long.html`, and wait until the full-page tile set is ready.
+2. Click **Mở trình biên tập PDF**. Confirm the dedicated editor URL contains the job ID and shows more than two logical pages.
+3. Wait for the first thumbnail. Its longest edge must be at most 320 pixels; thumbnails and PDF bytes remain Blob values in IndexedDB and never cross runtime messages.
+4. Change paper size to Letter, orientation to landscape, margin to 12 mm, and JPEG quality to 0.75. Apply settings and confirm the page list and approximate estimate are recalculated.
+5. Focus the first page card and press Alt+ArrowDown. Confirm the logical source order changes, then remove the last page. Source tile count and total source Blob bytes must remain unchanged.
+6. Reload the editor. Confirm page count, order, settings, and manifest revision are restored from `chrome.storage.local`.
+7. Create the PDF and observe monotonic per-page progress. Cancel during export and retry; the retry must reuse the same source tiles without invoking capture again.
+8. Download the completed artifact. Confirm the file begins with `%PDF-`, page count matches the edited manifest, page dimensions match the selected settings, and every page has a non-empty image stream.
+9. Inspect IndexedDB and session/local storage: binary source tiles, thumbnails, and PDF artifacts are local Blobs; persistent messages and edit manifests contain metadata only.
+10. Run `pnpm test:unit` and `pnpm test:e2e`. The S14 reference gate contains 230 unit tests and 20 Playwright cases, including the full reload–edit–export–download path plus all prior capture regressions.

@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S14
+current_session: S15
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -112,8 +112,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | S11 | M3 | CoordinateSpace và region selector | S10 | 18k–26k | DONE |
 | S12 | M3 | Element selector và target capture | S11 | 18k–26k | DONE |
 | S13 | M4 | PDF page slicing và page-at-a-time exporter | S12 | 20k–28k | DONE |
-| S14 | M4 | Editor, PDF options và export retry | S13 | 20k–28k | NEXT |
-| S15 | M4 | PDF benchmarks, integrity và memory guards | S14 | 18k–26k | READY |
+| S14 | M4 | Editor, PDF options và export retry | S13 | 20k–28k | DONE |
+| S15 | M4 | PDF benchmarks, integrity và memory guards | S14 | 18k–26k | NEXT |
 | S16 | M5 | Scrollable-container detection và capture | S15 | 22k–30k | READY |
 | S17 | M5 | PDF source detection và original passthrough | S16 | 18k–26k | READY |
 | S18 | M6 | Hardening lazy/infinite/iframe/canvas/WebGL | S17 | 22k–30k | READY |
@@ -824,8 +824,8 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S11 | DONE | 2026-08-03 | PR #15 / 798fd47 / CI 30799895160 | format, lint, typecheck, 188 unit, build, 14 Playwright E2E | CoordinateSpace, overlay accessible, auto-scroll, persistent region job, target capture, exact restore và zoom/DPR đã được xác thực. |
 | S12 | DONE | 2026-08-03 | PR #16 / 8a74815 / CI 30805006996 | format, lint, typecheck, 200 unit, build, 18 Playwright E2E | Hover/highlight, sanitized descriptor, parent-child keyboard flow, open Shadow DOM, double revalidation, stale-target safety, exact restore và reselection đã được xác thực. |
 | S13 | DONE | 2026-08-03 | PR #17 / a4b0aba / CI 30810848147 | format, lint, typecheck, 215 unit, build, 19 Playwright E2E | Unit conversion, continuous slicing, exact pixel residuals, tile intersections, one-page/one-decoded-tile lifecycle, pdf-lib artifact, persistent progress và real PDF browser smoke đã được xác thực. |
-| S14 | NEXT | — | — | — | Sẵn sàng triển khai editor, PDF options và export retry không recapture. |
-| S15 | READY | — | — | — | — |
+| S14 | DONE | 2026-08-04 | PR #18 | format, lint, typecheck, 230 unit, build, 20 Playwright E2E | Editor theo job ID, manifest non-destructive, thumbnail bounded/lazy, remove/reorder, PDF options, progress/cancel/retry và download không recapture đã được xác thực. |
+| S15 | NEXT | — | — | — | Sẵn sàng benchmark PDF 10k/30k/100k, kiểm tra integrity và memory guard. |
 | S16 | READY | — | — | — | — |
 | S17 | READY | — | — | — | — |
 | S18 | READY | — | — | — | — |
@@ -834,12 +834,12 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S14 — Editor, PDF options và export retry**.
+Session kế tiếp là **S15 — PDF benchmarks, integrity và memory guards**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S14.
-2. Đọc SPEC UI M4, §22–23 và job artifact behavior.
-3. Kiểm tra repo/branch và kết quả CI S13.
-4. Chỉ triển khai S14.
-5. Kết thúc với editor theo job ID, lazy page thumbnails, remove/reorder manifest, A4/Letter/fit-width options, progress/cancel/retry, reload persistence và export lại không recapture hoặc mutate source tiles.
+1. Đọc `PLAN.md` phần S15.
+2. Đọc SPEC §21–22, §27.5, TV-01/TV-02 và NFR PDF liên quan trong PRD.
+3. Kiểm tra repo/branch và kết quả CI S14.
+4. Chỉ triển khai S15.
+5. Kết thúc với benchmark repeatable 10k/30k/100k, PDF integrity checker, decoded-concurrency/heap evidence, memory guard có phương án thay thế và `docs/benchmarks.md`.
