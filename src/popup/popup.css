@@ -431,3 +431,62 @@ footer {
     animation: none;
   }
 }
+
+.pdf-source-card {
+  display: grid;
+  gap: 11px;
+  border: 1px solid rgb(128 109 55 / 18%);
+  border-radius: 18px;
+  padding: 16px;
+  background: linear-gradient(145deg, rgb(255 252 242 / 96%), rgb(255 255 255 / 92%));
+  box-shadow: 0 12px 32px rgb(23 58 45 / 7%);
+}
+
+.pdf-source-card__detail {
+  margin: 0;
+  color: #52645a;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.pdf-source-metadata {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+}
+
+.pdf-source-metadata div {
+  min-width: 0;
+  border-radius: 10px;
+  padding: 9px;
+  background: rgb(247 241 223 / 72%);
+}
+
+.pdf-source-metadata dt {
+  color: #806d37;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pdf-source-metadata dd {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: #42574c;
+  font-size: 10px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-source-card .feedback strong,
+.pdf-source-card .feedback small {
+  display: block;
+}
+
+.pdf-source-card .feedback small {
+  margin-top: 4px;
+  font-size: 9px;
+}
