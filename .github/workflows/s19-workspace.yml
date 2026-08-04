@@ -1,0 +1,46 @@
+name: Materialize S19 Workspace
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    if: github.head_ref == 'agent/s19-diagnostics-i18n-privacy'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out S19 branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Create deterministic workspace archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf node_modules dist playwright-report test-results
+          tar \
+            --sort=name \
+            --mtime='UTC 2026-08-04' \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            --exclude='.git' \
+            -czf /tmp/webcap-s19-workspace.tar.gz .
+          sha256sum /tmp/webcap-s19-workspace.tar.gz > /tmp/webcap-s19-workspace.sha256
+
+      - name: Upload workspace
+        uses: actions/upload-artifact@v4
+        with:
+          name: webcap-s19-workspace
+          path: |
+            /tmp/webcap-s19-workspace.tar.gz
+            /tmp/webcap-s19-workspace.sha256
+          if-no-files-found: error
+          retention-days: 1
