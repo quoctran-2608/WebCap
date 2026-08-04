@@ -7,47 +7,119 @@ status: Approved for implementation planning
 repository: quoctran-2608/WebCap
 extends: ../SPEC.md
 prd: ../PRD_WebCap_v1.1.md
+audit: ./audits/0.1.0-gap-audit.md
 ---
 
 # WebCap 0.2.0 — Engineering Specification Addendum
 
-Đặc tả này mở rộng `SPEC.md` của 0.1.0. Các quyết định Manifest V3, TypeScript strict, local-first, IndexedDB Blob storage, metadata-only runtime messages, offscreen processing, page-at-a-time PDF và không remote executable code vẫn giữ nguyên.
+Đặc tả này mở rộng `SPEC.md` 0.1.0. Manifest V3, TypeScript strict, local-first, IndexedDB Blob storage, metadata-only messages, offscreen processing, page-at-a-time PDF và không remote executable code vẫn giữ nguyên.
 
 # 1. Quyết định kiến trúc mới
 
 | ID | Quyết định | Lý do |
 | --- | --- | --- |
-| ADR-0015 | Auto-scroll dùng adaptive capture frontier | Chiều cao trang có thể tăng khi cuộn; pre-plan toàn bộ từ một phép đo ban đầu không đủ đúng. |
-| ADR-0016 | “Đến cuối trang” dùng stable-end detector | `scrollHeight` đơn lẻ không chứng minh trang đã tải xong; cần đáy trang + nhiều vòng ổn định. |
-| ADR-0017 | Auto-PDF là orchestration mặc định sau tiled capture | Người dùng phổ thông không phải mở editor để hoàn tất tác vụ cơ bản. |
-| ADR-0018 | Reset là domain command, không chỉ là reset React state | Phải xóa job, tile, artifact, editor manifest, thumbnail, summary và lock một cách nhất quán. |
-| ADR-0019 | Popup dùng progressive disclosure | Thông tin kỹ thuật vẫn tồn tại cho support nhưng không cạnh tranh với hành động chính. |
+| ADR-0015 | Auto-scroll dùng adaptive capture frontier | Document height có thể tăng sau mỗi lần cuộn. |
+| ADR-0016 | Stable end cần bottom + nhiều vòng ổn định + final probe | `scrollHeight` đơn lẻ không chứng minh đã hết nội dung. |
+| ADR-0017 | Auto-PDF là completion policy mặc định của full-page | Editor không còn là bước bắt buộc. |
+| ADR-0018 | Reset là domain command | Phải cleanup job/tile/artifact/session/lock nhất quán. |
+| ADR-0019 | Popup dùng progressive disclosure | Technical data không cạnh tranh với CTA. |
+| ADR-0020 | Region selector dùng ready handshake trước khi đóng popup | Tránh người dùng bấm nhưng không thấy overlay và tránh orphan job. |
+| ADR-0021 | Settings repository là nguồn sự thật của job | Không tạo capture từ hard-coded defaults khi đã có lựa chọn lưu. |
+| ADR-0022 | Progress ưu tiên event, polling chỉ reconciliation fallback | Giảm request liên tục và đơn giản hóa UI state. |
+| ADR-0023 | Output policy theo mode | Region/element cần ảnh trực tiếp; full-page cần PDF; unsafe image phải fallback rõ. |
+| ADR-0024 | Adaptive capture có resumable frontier | Long job không nên mất prefix đã lưu khi worker restart. |
 
-# 2. Hiện trạng cần thay đổi
+# 2. Baseline và khoảng trống cần đóng
 
-`ScrollCaptureEngine` hiện đo trang một lần, clamp target theo `maxCssHeight`, lập toàn bộ tile plan và coi `layoutChanged` là lỗi. Cách này phù hợp fallback của trang tĩnh nhưng không phù hợp auto-scroll qua lazy-growth. Popup hiện vô hiệu hóa start khi tiled job ở `ready/completed`, trong khi không có reset command cho persistent job. PDF export đã có nhưng luồng chính yêu cầu người dùng mở editor sau khi capture đạt `ready`.
+0.1.0 đã có region overlay hỗ trợ pointer create/move/resize, tám handle, auto-scroll, Enter/Escape và overlay removal trước capture. Tuy nhiên popup handler chỉ tạo job/set local state và không đóng popup sau selector-ready ACK. Vì vậy implementation tồn tại nhưng hành trình người dùng không được đảm bảo.
 
-0.2.0 không thay thế CDP engine. “Toàn trang → PDF” vẫn ưu tiên CDP cho trang tĩnh khi nó chứng minh được complete capture; adaptive scroll là đường chính khi trang cần user-visible scrolling, lazy growth hoặc CDP không đáp ứng capability.
+Các khoảng trống khác:
 
-# 3. Adaptive auto-scroll engine
+- scroll fallback clamp theo `maxCssHeight`, pre-plan tile và fail khi layout height thay đổi;
+- tiled job không có reset command;
+- `startTiledCapture()` dùng `DEFAULT_CAPTURE_SETTINGS` thay vì stored settings;
+- region/element/scroll-area không có output routing trực tiếp rõ ràng;
+- popup polling trạng thái theo chu kỳ ngắn;
+- active job restart chuyển failed thay vì resume/keep-partial flow;
+- basic crop, original-PDF page range và one-long-page PDF chưa có, được defer trừ khi core sessions hoàn tất sớm.
 
-## 3.1 Tách engine
+# 3. Region selector launch và interaction
 
-Không mở rộng `ScrollCaptureEngine` hiện tại bằng nhiều nhánh điều kiện. Thêm engine mới:
+## 3.1 Ready handshake
+
+Mở rộng protocol:
+
+```ts
+interface RegionSelectionReadyPayload {
+  jobId: string;
+  selectorInstanceId: string;
+  readyAt: string;
+  capabilities: {
+    pointerCreate: true;
+    keyboardCreate: true;
+    autoScroll: true;
+    resizeHandles: 8;
+  };
+}
+```
+
+`REGION_SELECTION_OPEN` chỉ ACK success sau khi:
+
+1. content script đã inject;
+2. selector root gắn vào `document.documentElement`;
+3. Shadow DOM stage tồn tại;
+4. stage focus thành công;
+5. pointer/keyboard listeners đã đăng ký;
+6. một animation frame đã render overlay.
+
+Popup gọi `window.close()` sau ready ACK. Không close trước ACK để lỗi injection vẫn hiển thị được. Timeout mặc định `2_000 ms`; timeout/error phải gọi cancellation/reset cleanup và không để job/root/lock tồn tại.
+
+## 3.2 Selector UX
+
+Selector phải có:
+
+- dim mask và `cursor: crosshair` rõ trên toàn viewport;
+- toolbar ngắn: “Kéo để vẽ vùng cần chụp · Enter xác nhận · Esc hủy”;
+- rectangle vàng/brand accent, dimensions live region;
+- move body và tám resize handles;
+- hit target mỗi handle tối thiểu 24×24 CSS px; visual dot có thể 12 px;
+- auto-scroll theo cả X/Y khi pointer sát edge;
+- no global styles/classes ngoài namespaced root.
+
+## 3.3 Keyboard model
+
+- `Space` khi chưa có rect: tạo centered rect, width `min(480, 50vw)`, height `min(320, 40vh)`, clamp vào document.
+- Arrow: move 1 CSS px.
+- Shift+Arrow: move 10 CSS px.
+- Alt+Arrow: resize edge theo hướng 1 CSS px.
+- Alt+Shift+Arrow: resize 10 CSS px.
+- Enter: commit khi rect hợp lệ.
+- Escape: cancel.
+
+Nếu browser/OS chiếm Alt+Arrow, toolbar có button “Tạo vùng bằng bàn phím” và controls tăng/giảm width/height làm fallback accessible.
+
+## 3.4 Commit/cancel invariants
+
+- Region lưu bằng CSS document coordinates.
+- Root bị remove trước capture; chờ ít nhất hai RAF.
+- Overlay pixels không được xuất hiện trong tile.
+- Cancel/launch failure phục hồi original scroll/focus và xóa job khi chưa có tile.
+- Duplicate open cho cùng job trả cùng selector instance hoặc thay thế atomically; không có hai roots.
+
+# 4. Adaptive auto-scroll engine
+
+## 4.1 Modules
 
 ```text
 src/capture/adaptive-scroll-capture-engine.ts
 src/capture/adaptive-frontier-planner.ts
 src/capture/stable-end-detector.ts
+src/background/adaptive-resume-service.ts
 ```
 
-- `ScrollCaptureEngine` tiếp tục là deterministic fallback cho target có kích thước đã biết.
-- `AdaptiveScrollCaptureEngine` phục vụ full-document auto-scroll đến stable end.
-- Cả hai dùng chung page adapter, rate limiter, crop/overlap primitives, tile repository và fixed/sticky policy.
+`ScrollCaptureEngine` cũ giữ vai trò deterministic fallback cho target có kích thước đã biết. Adaptive engine dùng chung page adapter, rate limiter, crop/overlap, fixed/sticky và tile repository.
 
-## 3.2 Capture frontier
-
-Engine không tạo toàn bộ tile plan trước. Nó lưu frontier tăng đơn điệu:
+## 4.2 Frontier
 
 ```ts
 interface AdaptiveCaptureFrontier {
@@ -60,32 +132,34 @@ interface AdaptiveCaptureFrontier {
   storedBytes: number;
   startedAt: string;
   lastGrowthAt: string;
+  sourceDocumentToken: string;
+  viewportWidthCss: number;
+  viewportHeightCss: number;
+  devicePixelRatio: number;
 }
 ```
 
 Quy tắc:
 
-1. Bắt đầu từ `y = 0` đối với full-document mode, không từ scroll hiện tại.
-2. Chụp viewport với overlap cố định và ghi `logicalOutputRectCss` sao cho output là contiguous prefix.
-3. Chỉ tăng `capturedBottomCss` sau khi Blob của tile đã được persist thành công.
-4. Sau mỗi tile, đo lại document height và max scroll.
-5. Nếu height tăng, giữ các tile đã lưu và tiếp tục từ frontier; không chụp lại prefix.
-6. Nếu viewport cuối ngắn hơn, crop theo logical bottom thực tế.
-7. Không lưu một row gây gap hoặc overlap logic ngoài crop metadata.
+1. Full-document bắt đầu tại `y=0`.
+2. Capture một row, persist Blob, rồi mới advance frontier.
+3. Remeasure height/max scroll sau mỗi settle.
+4. Height growth là expected; width/DPR/pixel-scale drift là lỗi.
+5. Prefix không được recapture khi height tăng hoặc resume.
+6. `logicalOutputRectCss` phải tạo contiguous coverage.
+7. Final viewport crop chạm đúng observed bottom.
 
-Frontier phải được persist trong `CaptureJob` hoặc record versioned riêng để service-worker restart có thể đánh dấu job retryable/partial một cách trung thực. 0.2.0 không yêu cầu resume capture tự động sau browser restart giữa tile; nhưng dữ liệu đã persist phải vẫn có thể giữ hoặc reset.
+## 4.3 Stable-end detector
 
-## 3.3 Stable-end detector
-
-Kết thúc hoàn chỉnh khi tất cả điều kiện đúng:
+Complete khi đồng thời:
 
 - `actualScrollY + viewportHeight >= maxScrollY - epsilon`;
-- document height không tăng trong tối thiểu `3` vòng settle liên tiếp;
-- không có pending layout growth được page adapter quan sát trong settle window;
-- tile cuối đã được persist và logical output chạm observed document bottom;
-- detector đã thực hiện một probe scroll-to-bottom cuối cùng sau vòng ổn định thứ hai.
+- height không tăng tối thiểu 3 settle rounds;
+- không có pending mutation/resize/image growth trong window;
+- final tile đã persist và logical bottom chạm document bottom;
+- final probe scroll-to-bottom không phát hiện growth.
 
-Giá trị mặc định dự kiến:
+Hằng số đề xuất:
 
 ```ts
 AUTO_SCROLL_STABLE_ROUNDS = 3
@@ -94,13 +168,9 @@ AUTO_SCROLL_GROWTH_SETTLE_MS = 500
 AUTO_SCROLL_FINAL_PROBE_MS = 750
 ```
 
-Các hằng số phải nằm trong `src/shared/constants.ts`, có unit test và có thể được điều chỉnh qua internal settings schema; không hard-code trong engine.
+## 4.4 Guardrails
 
-## 3.4 Guardrails
-
-Bỏ `DEFAULT_MAX_CSS_HEIGHT = 100_000` khỏi vai trò chặn mặc định của auto-scroll. Không được đổi thành “không giới hạn” theo nghĩa bỏ mọi guard.
-
-Auto-scroll dừng partial với machine-readable reason khi đạt một trong các budget:
+Adaptive mode không dùng 100.000 CSS px làm hard stop. Partial reasons:
 
 ```ts
 type AdaptiveStopReason =
@@ -110,104 +180,81 @@ type AdaptiveStopReason =
   | "max-stored-bytes"
   | "max-tiles"
   | "storage-pressure"
-  | "page-never-stabilized";
+  | "page-never-stabilized"
+  | "source-document-changed";
 ```
 
-Budget đề xuất ban đầu:
+Budget ban đầu để benchmark: 20 phút, 2.000 tile, nhỏ hơn 1 GiB hoặc quota còn lại. Không thêm `unlimitedStorage` nếu chưa có ADR và permission review.
 
-- duration: 20 phút;
-- max tile: 2.000;
-- max stored bytes: nhỏ hơn giữa 1 GiB và quota ước tính còn lại;
-- memory guard của exporter giữ nguyên;
-- mỗi lần chỉ decode/capture một tile.
+## 4.5 Resume sau service-worker restart
 
-Trước S22 phải benchmark và khóa lại con số. Không thêm `unlimitedStorage` nếu chưa có ADR/permission review riêng.
+Sau mỗi stored tile, persist frontier và opaque `sourceDocumentToken`. Recovery:
 
-## 3.5 Layout growth và fixed/sticky
+1. query active tab và content runtime;
+2. revalidate same tab/document token, viewport width, DPR và compatible page state;
+3. re-prepare page, scroll đến `nextYCss`, verify boundary fingerprint/coordinate;
+4. resume từ frontier nếu valid;
+5. nếu invalid, settle job thành retryable partial với Keep/Restart/Reset.
 
-- Page height tăng là expected behavior trong adaptive mode, không phải `E_LAYOUT_UNSTABLE` mặc định.
-- Width, DPR, screenshot pixel scale hoặc viewport geometry thay đổi giữa capture vẫn là lỗi để tránh ghép sai.
-- Smart fixed/sticky policy tiếp tục dùng namespaced ownership và compare-before-restore.
-- Với header/footer lặp, logical crop phải loại phần overlap đã dùng cho alignment.
-- S23 bổ sung fixture phát hiện duplicate horizontal strip ở seam.
+Không auto-resume nếu tab navigated, document token đổi hoặc pixel geometry không tương thích. Resume idempotent và không tạo duplicate tile index/output rect.
 
-# 4. Auto-PDF orchestration
+# 5. Auto-PDF và mode-aware output
 
-## 4.1 Job policy
-
-Thêm output workflow policy vào settings/job:
+## 5.1 Completion policy
 
 ```ts
 interface CaptureCompletionPolicy {
-  autoExport: "pdf" | "none";
+  primaryOutput: "png" | "jpeg" | "webp" | "pdf";
+  autoExport: boolean;
   openEditorAfterCapture: boolean;
+  allowGuardedImageFallback: boolean;
 }
 ```
 
-Mặc định cho “Toàn trang → PDF”:
+Defaults:
 
-```ts
-{
-  autoExport: "pdf",
-  openEditorAfterCapture: false
-}
-```
+- full-page: PDF, auto export;
+- scroll-area: PDF, auto export, guarded image option;
+- region: PNG, auto export, PDF fallback;
+- element: PNG, auto export, PDF fallback;
+- visible: existing image flow.
 
-Mode `region`, `element`, `scroll-area` có thể dùng cùng policy; visible capture giữ output image hiện tại.
+## 5.2 PDF exporter
 
-## 4.2 State flow
-
-Luồng thành công:
+State:
 
 ```text
-created
-→ preparing
-→ capturing
-→ processing
-→ ready
-→ exporting
-→ completed
+created → preparing → capturing → processing → ready → exporting → completed
 ```
 
-`ready` là durable checkpoint: tile set đã hoàn chỉnh và trang đã được restore. Coordinator sau đó tự gọi `PdfExportService.start()` khi policy là auto-PDF. Nếu service worker restart ở `ready`, initialization phải phát hiện policy và có thể tiếp tục export idempotently. Nếu restart ở `exporting`, quy tắc recovery hiện tại có thể chuyển failed nhưng source tiles phải còn để retry.
+`ready` là durable checkpoint. Auto-export từ `ready` phải idempotent. PDF invariants:
 
-Không gửi binary qua runtime message. Offscreen exporter tiếp tục đọc tile Blob trực tiếp từ IndexedDB.
+- consume logical output/crop/overlap metadata;
+- reject gap/duplicate/negative crop;
+- one page canvas at a time;
+- decoded tile concurrency ≤ 1;
+- exact final source bottom;
+- partial metadata rõ ràng;
+- no full-page canvas.
 
-## 4.3 Smart composition
+## 5.3 Guarded tiled image exporter
 
-“Ghép thông minh” trong 0.2.0 được định nghĩa bằng các invariant, không bằng xử lý hình ảnh mơ hồ:
+Thêm `TiledImageExportService` cho region/element và scroll-area nhỏ:
 
-- consume `logicalOutputRectCss`, `captureCropCss` và overlap metadata;
-- xác minh source coverage liên tục theo CSS coordinate;
-- reject gap, negative crop hoặc duplicate logical coverage;
-- render từng PDF page, một canvas page tại một thời điểm;
-- decode tối đa một tile tại một thời điểm;
-- giữ residual pixel rounding để trang cuối kết thúc đúng source bottom;
-- không tạo long-image canvas trước PDF;
-- page size mặc định A4 portrait, margin 8 mm; user setting được tôn trọng;
-- partial capture có metadata/watermark hoặc document property chỉ rõ là partial, không giả vờ complete.
+- chỉ allocate output canvas sau pixel/memory/canvas-dimension guard;
+- decode sequentially;
+- apply crop/overlap metadata;
+- PNG/JPEG/WebP output;
+- nếu vượt guard, trả typed recommendation `E_IMAGE_OUTPUT_TOO_LARGE` với CTA “Xuất PDF”.
 
-S23 thêm seam-integrity fixture với pattern duy nhất theo trục Y để phát hiện thiếu/lặp strip.
+Không cố ghép long image vượt browser canvas limit.
 
-## 4.4 Result actions
+# 6. Reset domain command
 
-Sau `completed`, popup đọc `outputArtifactId` và hiển thị:
-
-- `Tải PDF` — primary;
-- `Chỉnh sửa trang` — secondary, mở editor hiện tại;
-- `Chụp mới` — secondary;
-- technical metadata nằm trong details/help.
-
-# 5. Reset domain command
-
-## 5.1 Contract
-
-Thêm message versioned:
+Contract:
 
 ```ts
 type CaptureResetScope = "visible-session" | "job" | "tab";
-
-type CaptureResetDisposition = "discard-local-data";
 
 interface CaptureResetRequest {
   type: "CAPTURE_RESET";
@@ -219,157 +266,128 @@ interface CaptureResetRequest {
     scope: CaptureResetScope;
     tabId?: number;
     jobId?: string;
-    disposition: CaptureResetDisposition;
+    disposition: "discard-local-data";
   };
 }
 ```
 
-Response trả số record đã xóa theo loại, không trả binary hoặc raw URL.
+`CaptureResetService` là nơi duy nhất orchestration cleanup. Terminal reset: delete editor manifest/thumbnails → artifacts → tiles → job → summary → stale lock. Active reset: mark discard intent → cancel/restore → delete. Missing record success idempotent. Response chỉ có counts/warnings, không binary/URL.
 
-## 5.2 Semantics
+Expiry cleanup reuse cùng primitive. Settings/locale/downloaded files không bị xóa. “Đặt lại tùy chọn” dùng command riêng.
 
-### Terminal job
+# 7. Settings source of truth
 
-Theo thứ tự:
+- Popup load settings repository trước khi tạo job.
+- `startTiledCapture` nhận full validated settings, không import `DEFAULT_CAPTURE_SETTINGS` để override user choice.
+- Settings schema bump nếu thêm completion policy/per-mode output.
+- Migration 0.1.0 giữ locale và existing values; thêm defaults mới theo mode.
+- Persist: image format/quality, PDF size/orientation/margin/quality, fixed/sticky mode, completion policy.
+- Resource budgets chỉ nằm trong advanced/internal settings có validation; không expose raw unlimited values.
 
-1. kiểm tra job identity/scope;
-2. delete PDF edit manifest và thumbnail artifact;
-3. delete output/source artifact thuộc job;
-4. delete tiles;
-5. delete job record;
-6. delete job session summary;
-7. release stale tab lock nếu còn;
-8. trả success idempotently kể cả record đã không còn.
+# 8. Event-driven popup architecture
 
-### Active job
+## 8.1 Events
 
-1. đánh dấu cancellation/discard intent;
-2. gọi coordinator cancel và engine/page cleanup;
-3. chỉ sau cleanup attempt mới delete tile/artifact/job/session;
-4. nếu cleanup partial, vẫn trả reset report có warning code để UI nói rõ page có thể cần reload;
-5. không xóa job khác trên cùng tab nếu ID không khớp.
-
-### Visible session
-
-Xóa visible source/output artifact và `webcap.visible-session`; giữ settings và file đã download.
-
-## 5.3 Repository service
-
-Tạo `CaptureResetService` ở background thay vì để popup gọi từng repository. Service nhận các port:
-
-```ts
-jobs
-jobSessions
-tiles
-artifacts
-editorManifests
-visibleSessions
-captureCoordinator
-pageCleanup
-```
-
-Mọi reset request phải có dedupe record theo `requestId` để retry an toàn.
-
-# 6. Popup information architecture
-
-## 6.1 Default surface
-
-Cấu trúc mới:
+Background phát versioned events:
 
 ```text
-Header: WebCap + menu/help
-Support notice: chỉ khi tab không hỗ trợ hoặc cần quyền
-Primary goal selector:
-  - Toàn trang → PDF
-  - Vùng cụ thể
-  - Màn hình hiện tại
-Advanced target picker: chỉ mở khi chọn Vùng cụ thể
-Primary CTA
-Progress/result card
-Advanced options (collapsed)
-Help & diagnostics (collapsed or separate view)
+JOB_PROGRESS
+JOB_STATE_CHANGED
+VISIBLE_SESSION_CHANGED
+CAPTURE_RESET_COMPLETED
+SELECTOR_STATE_CHANGED
 ```
 
-## 6.2 Mapping mode
+Popup subscribe khi mở. Event chỉ metadata. Popup fetch authoritative job khi:
 
-- `Toàn trang → PDF` → `full-page`, policy auto-PDF.
-- `Vùng cụ thể` → submode `region | element | scroll-area`.
-- `Màn hình hiện tại` → `visible`.
+- initial open;
+- event revision bị skip;
+- reconnect after worker restart;
+- reconciliation timer 5–10 giây trong busy state.
 
-Không xóa capability hiện có; chỉ đổi information architecture.
+Không polling 350 ms liên tục.
 
-## 6.3 Ẩn khỏi main flow
+## 8.2 Information architecture
 
-- worker status/version;
-- current tab status khi supported;
-- milestone/session badge;
-- raw tile count và engine name;
-- SHA-256/checksum;
-- permission inventory;
-- diagnostics button.
+```text
+Header + help
+Conditional support/permission notice
+Goal selector:
+  Full page → PDF
+  Specific area
+  Current screen
+Target picker when Specific area:
+  Draw rectangle
+  Select element
+  Select scroll area
+Primary CTA
+Phase progress/result
+Advanced options
+Help & diagnostics
+```
 
-Các dữ liệu này chuyển vào `HelpDiagnosticsPanel`. Test selectors có thể giữ qua data attributes nhưng không hiển thị copy kỹ thuật.
+Ẩn khỏi main flow: worker/version, engine, raw tile count, checksum, milestones, full permissions, diagnostics. PDF source inspection không block main UI và không render checking card trên non-PDF tab.
 
-## 6.4 Progress copy
+# 9. Test strategy
 
-UI dùng phase-level progress:
+## 9.1 Region selection
 
-- “Đang chuẩn bị trang”;
-- “Đang cuộn và chụp…”;
-- “Đang tạo PDF…”;
-- “PDF đã sẵn sàng”.
+- unit: coordinate create/move/resize, keyboard model, ready handshake, timeout cleanup;
+- E2E from real action popup: click Draw region → popup closes → overlay visible ≤500 ms;
+- pointer create/move/eight handles/auto-scroll;
+- keyboard-only create/move/resize/confirm/cancel;
+- overlay exclusion, focus/scroll restoration, duplicate open, launch failure;
+- DPR/zoom critical matrix.
 
-Percentage chỉ hiển thị khi denominator đáng tin cậy. Adaptive mode chưa biết tổng tile nên dùng captured length/phase, không hiển thị `x/? tile` trong main flow.
+## 9.2 Adaptive/resume
 
-# 7. Storage và migration
+- stable detector static/delayed/repeated/never stable;
+- frontier monotonicity and no duplicate after resume;
+- actual browser static 30k, 100k, >100k;
+- finite lazy growth and infinite guard;
+- restart after N tiles: resume or partial disposition;
+- width/DPR/document change negatives.
 
-- Bump settings schema nếu thêm `completionPolicy` hoặc UI preference.
-- Job schema chỉ bump nếu persist adaptive frontier/completion policy trong `CaptureJob`.
-- Migration phải giữ settings 0.1.0 và mặc định auto-PDF cho full-page mới; không tự động export job cũ không có policy.
-- Reset chỉ xóa dữ liệu capture, không xóa locale hoặc settings.
-- Expiry cleanup phải dùng cùng cleanup primitive với reset để tránh hai semantics xóa khác nhau.
+## 9.3 Output/settings/UI
 
-# 8. Test strategy
+- auto-PDF restart at `ready` exactly once;
+- seam integrity pattern detects missing/duplicate strips;
+- guarded image export success/fallback;
+- settings persistence/migration/reset defaults;
+- event delivery and skipped revision reconciliation;
+- default popup excludes technical copy; help remains keyboard accessible.
 
-## 8.1 Unit
+## 9.4 Release gate
 
-- stable-end detector: static end, delayed growth, repeated growth, never stable;
-- adaptive frontier: monotonic, overlap crop, final short viewport, gap rejection;
-- reset service: terminal, active, duplicate, missing record, partial cleanup, isolation;
-- auto-export state orchestration và restart at `ready`;
-- settings/job migrations;
-- UI view model mapping từ technical states sang plain-language phases.
+S26 chạy:
 
-## 8.2 E2E fixtures
-
-1. Static page 30k.
-2. Static page >100k.
-3. Lazy-growth page thêm section sau mỗi bottom scroll rồi dừng hữu hạn.
-4. Infinite fixture buộc guard và partial UX.
-5. Fixed header/footer seam pattern.
-6. Service-worker restart sau capture `ready` trước auto-export.
-7. Reset completed job rồi capture lần hai trên cùng tab.
-8. Reset active job và xác minh scroll/focus/style restoration.
-9. Simplified popup keyboard flow và hidden diagnostics.
-10. PDF integrity/page count/download và editor fallback.
-
-## 8.3 Release gate
-
-Mỗi session chạy format, lint, strict typecheck, unit, build và test liên quan. S25 chạy toàn bộ:
-
+- format/lint/strict typecheck;
 - privacy/dependency/release/security audits;
-- unit suite;
-- PDF benchmarks;
-- Playwright full regression;
-- DPR/zoom matrix;
-- packaged install/update/uninstall;
-- deterministic ZIP verification;
-- acceptance traceability AC-01–AC-30.
+- all unit/PDF benchmarks/E2E;
+- DPR 1/1.5/2 × zoom 80/100/125/150 critical flows;
+- minimum Chrome, current stable và previous stable;
+- Linux/Windows/macOS packaged lifecycle;
+- deterministic ZIP;
+- acceptance AC-01–AC-40.
 
-# 9. Rollback boundaries
+# 10. Deferred và platform boundaries
 
-- S21 reset có thể rollback độc lập trước adaptive engine.
-- S22 adaptive engine đứng sau capability/feature flag nội bộ cho đến khi E2E pass.
-- S23 auto-PDF có thể tắt bằng completion policy mà không bỏ tile capture.
-- S24 UI có thể rollback presentation nhưng không rollback contracts đã ổn định.
-- Không upload 0.2.0 lên Chrome Web Store trước S25 release gate và approval riêng.
+Không cố “fix” bằng workaround nguy hiểm:
+
+- restricted browser surfaces;
+- DRM/protected overlays;
+- cross-origin frame DOM và closed shadow roots;
+- optional permission/file policy;
+- source tab active requirement của `captureVisibleTab` engines;
+- device/font/GPU pixel variance.
+
+Deferred sau 0.2.0: advanced crop, original PDF page ranges, one-long-page PDF, annotation/OCR, batch, cloud integrations và capture library.
+
+# 11. Rollback
+
+- S21 reset độc lập.
+- S22 region selector launch độc lập.
+- S23 adaptive/resume sau feature flag nội bộ.
+- S24 auto-export/output policy có thể tắt mà giữ tiles.
+- S25 UI/settings có thể rollback presentation, không rollback contracts.
+- Không package/upload 0.2.0 trước S26 gate và approval riêng.
