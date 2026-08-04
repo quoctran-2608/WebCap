@@ -205,10 +205,7 @@ async function runScenario(scenario: BenchmarkScenario): Promise<BenchmarkResult
     pageCount: result.diagnostics.pageCount,
     durationMs: Math.round(result.diagnostics.durationMs * 100) / 100,
     artifactBytes: artifact.blob.size,
-    sourceTileBytes: source.records.reduce(
-      (total, record) => total + (record.blob?.size ?? 0),
-      0,
-    ),
+    sourceTileBytes: source.records.reduce((total, record) => total + (record.blob?.size ?? 0), 0),
     maxDecodedTiles: result.diagnostics.maxDecodedTiles,
     maxCanvasPixelArea: result.diagnostics.maxCanvasPixelArea,
     estimatedWorkingSetBytes: result.diagnostics.memoryEstimate.estimatedWorkingSetBytes,
