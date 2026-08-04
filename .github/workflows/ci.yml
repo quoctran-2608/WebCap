@@ -34,8 +34,8 @@ jobs:
           echo "24457a5b7c3167d29c6a8c155c1fe8b021c7fa0be99ec87f8e06a8031afffddf  /tmp/s21.patch" | sha256sum --check
           git apply --index /tmp/s21.patch
           base64 --decode .github/s21.fix.patch.b64 > /tmp/s21.fix.patch
-          test "$(wc -c < /tmp/s21.fix.patch)" = "1812"
-          echo "12b5abc1c305506c9dc4f032b3c1e0a35ae7e2c5ddbd17f33d70924d5473291a  /tmp/s21.fix.patch" | sha256sum --check
+          test "$(wc -c < /tmp/s21.fix.patch)" = "4029"
+          echo "e58dd0df588ec37541d18b97d3b1158879731f4e1453e012c54f200d554443d9  /tmp/s21.fix.patch" | sha256sum --check
           git apply --index /tmp/s21.fix.patch
           rm -f \
             .github/s21.patch.gz.b64 \
