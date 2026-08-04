@@ -57,11 +57,7 @@ describe("inspectPdfIntegrity", () => {
     expect(report.valid).toBe(false);
     expect(report.signatureValid).toBe(true);
     expect(report.errors).toEqual(
-      expect.arrayContaining([
-        "page-count-mismatch",
-        "page-size-count-mismatch",
-        "page-size-1",
-      ]),
+      expect.arrayContaining(["page-count-mismatch", "page-size-count-mismatch", "page-size-1"]),
     );
   });
 
@@ -73,9 +69,7 @@ describe("inspectPdfIntegrity", () => {
     expect(report.valid).toBe(false);
     expect(report.signatureValid).toBe(false);
     expect(report.pageCount).toBe(0);
-    expect(report.errors).toEqual(
-      expect.arrayContaining(["signature", "load-failed"]),
-    );
+    expect(report.errors).toEqual(expect.arrayContaining(["signature", "load-failed"]));
   });
 
   it("rejects a loadable blank PDF when an image per page is required", async () => {
