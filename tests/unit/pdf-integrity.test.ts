@@ -48,19 +48,32 @@ describe("inspectPdfIntegrity", () => {
     expect(report.pages[1]).toEqual({ index: 1, widthPt: 612, heightPt: 792 });
   });
 
-  it("reports signature and expectation mismatches without throwing", async () => {
-    const bytes = Uint8Array.from(await imagePdf());
-    bytes[0] = 0;
-    const report = await inspectPdfIntegrity(bytes, {
+  it("reports expectation mismatches for a loadable PDF without throwing", async () => {
+    const report = await inspectPdfIntegrity(await imagePdf(), {
       pageCount: 3,
       pageSizes: [{ widthPt: 400, heightPt: 400 }],
     });
 
     expect(report.valid).toBe(false);
-    expect(report.signatureValid).toBe(false);
+    expect(report.signatureValid).toBe(true);
     expect(report.errors).toEqual(
-      expect.arrayContaining(["signature", "page-count-mismatch", "page-size-count-mismatch"]),
+      expect.arrayContaining([
+        "page-count-mismatch",
+        "page-size-count-mismatch",
+        "page-size-1",
+      ]),
     );
+  });
+
+  it("reports a corrupt header as an unloadable PDF", async () => {
+    const bytes = Uint8Array.from(await imagePdf());
+    bytes[0] = 0;
+    const report = await inspectPdfIntegrity(bytes);
+
+    expect(report.valid).toBe(false);
+    expect(report.signatureValid).toBe(false);
+    expect(report.pageCount).toBe(0);
+    expect(report.errors).toEqual(expect.arrayContaining(["signature", "load-failed"]));
   });
 
   it("rejects a loadable blank PDF when an image per page is required", async () => {
