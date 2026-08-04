@@ -41,6 +41,7 @@
     "tests/**/*.tsx",
     "vite.config.ts",
     "vitest.config.ts",
+    "vitest.benchmark.config.ts",
     "playwright.config.ts"
   ],
   "exclude": ["dist", "node_modules", "artifacts", "playwright-report", "test-results"]
