@@ -31,5 +31,20 @@ export default defineConfig({
       grep: /@dpr/,
       use: { deviceScaleFactor: 2 },
     },
+    {
+      name: "release-matrix-dpr1",
+      grep: /@release-matrix/,
+      use: { deviceScaleFactor: 1 },
+    },
+    {
+      name: "release-matrix-dpr15",
+      grep: /@release-matrix/,
+      use: { deviceScaleFactor: 1.5 },
+    },
+    {
+      name: "release-matrix-dpr2",
+      grep: /@release-matrix/,
+      use: { deviceScaleFactor: 2 },
+    },
   ],
 });
