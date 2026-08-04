@@ -66,3 +66,5 @@ jobs:
           git add -A
           git commit -m "Implement S21 capture reset lifecycle"
           git push origin HEAD:agent/s21-capture-reset
+
+# Triggered after the workflow was registered on the branch.
