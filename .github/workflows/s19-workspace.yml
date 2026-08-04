@@ -12,7 +12,7 @@ jobs:
   snapshot:
     if: github.head_ref == 'agent/s19-diagnostics-i18n-privacy'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
 
     steps:
       - name: Check out S19 branch
@@ -20,11 +20,26 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
-      - name: Create deterministic workspace archive
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create deterministic archives
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf node_modules dist playwright-report test-results
+          rm -rf dist playwright-report test-results
           tar \
             --sort=name \
             --mtime='UTC 2026-08-04' \
@@ -32,15 +47,24 @@ jobs:
             --group=0 \
             --numeric-owner \
             --exclude='.git' \
+            --exclude='node_modules' \
             -czf /tmp/webcap-s19-workspace.tar.gz .
-          sha256sum /tmp/webcap-s19-workspace.tar.gz > /tmp/webcap-s19-workspace.sha256
+          tar \
+            --sort=name \
+            --mtime='UTC 2026-08-04' \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            -czf /tmp/webcap-s19-node-modules.tar.gz node_modules
+          sha256sum /tmp/webcap-s19-workspace.tar.gz /tmp/webcap-s19-node-modules.tar.gz > /tmp/webcap-s19.sha256
 
-      - name: Upload workspace
+      - name: Upload workspace and toolchain
         uses: actions/upload-artifact@v4
         with:
-          name: webcap-s19-workspace
+          name: webcap-s19-toolchain
           path: |
             /tmp/webcap-s19-workspace.tar.gz
-            /tmp/webcap-s19-workspace.sha256
+            /tmp/webcap-s19-node-modules.tar.gz
+            /tmp/webcap-s19.sha256
           if-no-files-found: error
           retention-days: 1
