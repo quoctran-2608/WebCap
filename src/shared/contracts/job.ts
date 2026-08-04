@@ -8,6 +8,7 @@ import {
 import {
   CaptureEngineKindSchema,
   CaptureJobSchema,
+  PartialCaptureReasonSchema,
   CaptureTileSchema,
   JobStateSchema,
   type CaptureJob,
@@ -31,6 +32,7 @@ export const JobSummarySchema = z
     updatedAt: IsoDateTimeSchema,
     expiresAt: IsoDateTimeSchema,
     activeEngine: CaptureEngineKindSchema.optional(),
+    partialCaptureReason: PartialCaptureReasonSchema.optional(),
     errorCode: WebCapErrorCodeSchema.optional(),
     errorUserMessageKey: z.string().min(1).max(120).optional(),
   })
@@ -113,6 +115,9 @@ export function summarizeJob(job: CaptureJob): JobSummary {
     updatedAt: job.updatedAt,
     expiresAt: job.expiresAt,
     ...(job.activeEngine === undefined ? {} : { activeEngine: job.activeEngine }),
+    ...(job.partialCapture === undefined
+      ? {}
+      : { partialCaptureReason: job.partialCapture.reason }),
     ...(job.error === undefined
       ? {}
       : {

@@ -493,6 +493,9 @@ function createFreezeStyle(preparationId: string): HTMLStyleElement {
     "html {",
     "  scroll-behavior: auto !important;",
     "}",
+    "html, body, * {",
+    "  scroll-snap-type: none !important;",
+    "}",
   ].join("\n");
   (document.head ?? document.documentElement).append(style);
   return style;
@@ -710,6 +713,7 @@ async function runLazyPreScroll(
   options: PagePreparationOptions,
 ): Promise<{
   reachedLimit: boolean;
+  completionReason: "lazy-disabled" | "stable" | "max-css-height" | "max-duration";
   stableSamples: number;
   mutationCount: number;
   documentWidth: number;
@@ -733,6 +737,10 @@ async function runLazyPreScroll(
   let lastHeight = initialSettle.sample.height;
   let stableHeightCount = 0;
   let reachedLimit = false;
+  let completionReason: "lazy-disabled" | "stable" | "max-css-height" | "max-duration" = options
+    .lazyLoad.enabled
+    ? "stable"
+    : "lazy-disabled";
   const deadline = Date.now() + maxDurationMs;
 
   if (options.lazyLoad.enabled) {
@@ -741,6 +749,7 @@ async function runLazyPreScroll(
       const size = readDocumentSize();
       if (size.height >= options.maxCssHeight) {
         reachedLimit = true;
+        completionReason = "max-css-height";
       }
       const cappedHeight = Math.min(size.height, options.maxCssHeight);
       const maxScrollY = Math.max(0, cappedHeight - Math.max(1, window.innerHeight));
@@ -759,6 +768,7 @@ async function runLazyPreScroll(
       const remaining = deadline - Date.now();
       if (remaining <= 0) {
         reachedLimit = true;
+        completionReason = "max-duration";
         break;
       }
       const settle = await waitForLayoutSettle(
@@ -784,8 +794,9 @@ async function runLazyPreScroll(
       }
     }
 
-    if (Date.now() >= deadline) {
+    if (Date.now() >= deadline && !reachedLimit) {
       reachedLimit = true;
+      completionReason = "max-duration";
     }
   }
 
@@ -797,6 +808,7 @@ async function runLazyPreScroll(
 
   return {
     reachedLimit,
+    completionReason,
     stableSamples,
     mutationCount,
     documentWidth: finalSettle.sample.width,
@@ -848,6 +860,7 @@ async function handlePrepare(
       documentWidth: settle.documentWidth,
       documentHeight: settle.documentHeight,
       reachedLimit: settle.reachedLimit,
+      completionReason: settle.completionReason,
       stableSamples: settle.stableSamples,
       mutationCount: settle.mutationCount,
       modifiedNodeCount: snapshot.mutations.length,

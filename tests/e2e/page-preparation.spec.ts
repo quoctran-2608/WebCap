@@ -295,3 +295,99 @@ test("@smoke restores automatically after unstable layout and cancellation", asy
   expect((result.prepareResponse.payload as { code: string }).code).toBe("E_CANCELLED");
   expect(await snapshotPage(targetPage)).toEqual(cancelBefore);
 });
+
+test("@smoke stops infinite growth at the CSS height limit and reports why", async ({
+  serviceWorker,
+  targetPage,
+}) => {
+  await targetPage.goto("http://127.0.0.1:4174/infinite-scroll.html");
+  const before = await snapshotPage(targetPage);
+  const tabId = await resolveFixtureTab(serviceWorker, targetPage);
+  await injectContentScript(serviceWorker, tabId);
+  const preparationId = "infinite-height-limit";
+
+  const ready = await sendContentMessage(
+    serviceWorker,
+    tabId,
+    prepareMessage(preparationId, {
+      ...baseOptions,
+      maxCssHeight: 2_200,
+      lazyLoad: { enabled: true, stepRatio: 0.8, settleMs: 40, maxDurationMs: 5_000 },
+    }),
+  );
+
+  expect(ready.type).toBe("PAGE_PREPARATION_READY");
+  expect(ready.payload).toMatchObject({
+    reachedLimit: true,
+    completionReason: "max-css-height",
+  });
+  expect(
+    Number(await targetPage.evaluate(() => document.body.dataset.appended ?? "0")),
+  ).toBeGreaterThan(2);
+  const restored = await sendContentMessage(serviceWorker, tabId, restoreMessage(preparationId));
+  expect((restored.payload as { completed: boolean }).completed).toBe(true);
+  expect(await snapshotPage(targetPage)).toEqual(before);
+});
+
+test("@smoke disables scroll snap during preparation and restores it exactly", async ({
+  serviceWorker,
+  targetPage,
+}) => {
+  await targetPage.goto("http://127.0.0.1:4174/scroll-snap.html");
+  const before = await snapshotPage(targetPage);
+  const snapBefore = await targetPage.evaluate(
+    () => getComputedStyle(document.documentElement).scrollSnapType,
+  );
+  expect(snapBefore).toContain("mandatory");
+  const tabId = await resolveFixtureTab(serviceWorker, targetPage);
+  await injectContentScript(serviceWorker, tabId);
+  const preparationId = "scroll-snap-safe";
+
+  const ready = await sendContentMessage(
+    serviceWorker,
+    tabId,
+    prepareMessage(preparationId, baseOptions),
+  );
+  expect(ready.type).toBe("PAGE_PREPARATION_READY");
+  expect(
+    await targetPage.evaluate(() => getComputedStyle(document.documentElement).scrollSnapType),
+  ).toBe("none");
+  await targetPage.evaluate(() => window.scrollTo({ top: 750, behavior: "auto" }));
+  await targetPage.waitForTimeout(100);
+  expect(await targetPage.evaluate(() => window.scrollY)).toBeCloseTo(750, 0);
+  await targetPage.evaluate(() => window.scrollTo({ top: 0, behavior: "auto" }));
+  await expect.poll(() => targetPage.evaluate(() => window.scrollY)).toBe(0);
+
+  const restored = await sendContentMessage(serviceWorker, tabId, restoreMessage(preparationId));
+  expect((restored.payload as { completed: boolean }).completed).toBe(true);
+  expect(
+    await targetPage.evaluate(() => getComputedStyle(document.documentElement).scrollSnapType),
+  ).toBe(snapBefore);
+  expect(await snapshotPage(targetPage)).toEqual(before);
+});
+
+test("@smoke waits for bounded layout shifts that eventually settle", async ({
+  serviceWorker,
+  targetPage,
+}) => {
+  await targetPage.goto("http://127.0.0.1:4174/layout-shift-settles.html");
+  const before = await snapshotPage(targetPage);
+  const tabId = await resolveFixtureTab(serviceWorker, targetPage);
+  await injectContentScript(serviceWorker, tabId);
+  const preparationId = "layout-shift-settles";
+
+  const ready = await sendContentMessage(
+    serviceWorker,
+    tabId,
+    prepareMessage(preparationId, {
+      ...baseOptions,
+      lazyLoad: { ...baseOptions.lazyLoad, settleMs: 60, maxDurationMs: 2_000 },
+    }),
+  );
+  expect(ready.type).toBe("PAGE_PREPARATION_READY");
+  expect(ready.payload).toMatchObject({ reachedLimit: false, completionReason: "lazy-disabled" });
+  expect(await targetPage.evaluate(() => document.body.dataset.settled)).toBe("true");
+
+  await sendContentMessage(serviceWorker, tabId, restoreMessage(preparationId));
+  expect(await snapshotPage(targetPage)).toEqual(before);
+});

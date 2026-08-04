@@ -228,7 +228,14 @@ export class ScrollCaptureEngine implements CaptureEngine {
       overlapCss: this.overlapCss,
       maxTiles: context.settings.limits.maxTiles,
     });
-    await context.onPlan(metrics, plan.targetRect, plan.tiles);
+    const partialCapture = plan.limitedByMaxTiles
+      ? {
+          reason: "max-tiles" as const,
+          capturedRect: plan.targetRect,
+          limitValue: context.settings.limits.maxTiles,
+        }
+      : undefined;
+    await context.onPlan(metrics, plan.targetRect, plan.tiles, partialCapture);
 
     const storedTiles: CaptureTile[] = [];
     let captureScale: CapturePixelScale | undefined;
@@ -358,7 +365,12 @@ export class ScrollCaptureEngine implements CaptureEngine {
       storedTiles.push(captured);
     }
 
-    return { metrics, targetRect: plan.targetRect, tiles: storedTiles };
+    return {
+      metrics,
+      targetRect: plan.targetRect,
+      tiles: storedTiles,
+      ...(partialCapture === undefined ? {} : { partialCapture }),
+    };
   }
 
   async cleanup(context: CaptureEngineContext): Promise<void> {

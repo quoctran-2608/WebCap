@@ -1,0 +1,57 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Infinite scroll fixture</title>
+<style>
+  html,
+  body {
+    margin: 0;
+  }
+  body {
+    font: 16px/1.5 system-ui;
+    background: #f7f3e8;
+  }
+  header {
+    height: 180px;
+    display: grid;
+    place-items: center;
+    background: #174f3c;
+    color: white;
+  }
+  .block {
+    height: 420px;
+    display: grid;
+    place-items: center;
+    border-bottom: 4px solid white;
+    font-size: 32px;
+  }
+  .block:nth-child(odd) {
+    background: #e9c46a;
+  }
+  .block:nth-child(even) {
+    background: #f4a261;
+  }
+</style>
+<header><h1>Bounded infinite content</h1></header>
+<main id="feed"></main>
+<script>
+  const feed = document.querySelector("#feed");
+  let count = 0;
+  const append = () => {
+    for (let index = 0; index < 2; index += 1) {
+      const block = document.createElement("section");
+      block.className = "block";
+      block.textContent = `Infinite block ${count + 1}`;
+      feed.append(block);
+      count += 1;
+    }
+    document.body.dataset.appended = String(count);
+  };
+  append();
+  addEventListener(
+    "scroll",
+    () => {
+      if (scrollY + innerHeight >= document.documentElement.scrollHeight - 160) append();
+    },
+    { passive: true },
+  );
+</script>

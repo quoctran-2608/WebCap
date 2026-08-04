@@ -9,6 +9,7 @@ import { URL } from "node:url";
 const fixtureRoot = new URL("../fixtures/", import.meta.url).pathname;
 const host = "127.0.0.1";
 const port = 4174;
+const crossOriginPort = 4175;
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -49,8 +50,11 @@ function sendPdf(request, response) {
   else response.end(publicPdfBytes);
 }
 
-const server = createServer((request, response) => {
-  const requestPath = new URL(request.url ?? "/", `http://${host}:${port}`).pathname;
+const handler = (request, response) => {
+  const requestPath = new URL(
+    request.url ?? "/",
+    `http://${request.headers.host ?? `${host}:${port}`}`,
+  ).pathname;
 
   if (requestPath === "/public-sample.pdf" || requestPath === "/pdf-download") {
     sendPdf(request, response);
@@ -107,14 +111,28 @@ const server = createServer((request, response) => {
     "Content-Type": contentTypes[extname(filePath)] ?? "application/octet-stream",
   });
   createReadStream(filePath).pipe(response);
-});
+};
+
+const server = createServer(handler);
+const crossOriginServer = createServer(handler);
 
 server.listen(port, host, () => {
   process.stdout.write(`WebCap fixture server listening on http://${host}:${port}\n`);
 });
+crossOriginServer.listen(crossOriginPort, host, () => {
+  process.stdout.write(
+    `WebCap cross-origin fixture listening on http://${host}:${crossOriginPort}\n`,
+  );
+});
 
 const shutdown = () => {
-  server.close(() => process.exit(0));
+  let pending = 2;
+  const closed = () => {
+    pending -= 1;
+    if (pending === 0) process.exit(0);
+  };
+  server.close(closed);
+  crossOriginServer.close(closed);
 };
 
 process.on("SIGINT", shutdown);

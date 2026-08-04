@@ -120,7 +120,14 @@ export class CdpCaptureEngine implements CaptureEngine {
         maxTiles: context.settings.limits.maxTiles,
       },
     });
-    await context.onPlan(metrics, plan.targetRect, plan.tiles);
+    const partialCapture = plan.limitedByMaxTiles
+      ? {
+          reason: "max-tiles" as const,
+          capturedRect: plan.targetRect,
+          limitValue: context.settings.limits.maxTiles,
+        }
+      : undefined;
+    await context.onPlan(metrics, plan.targetRect, plan.tiles, partialCapture);
 
     const storedTiles: CaptureTile[] = [];
     for (const tile of plan.tiles) {
@@ -151,6 +158,7 @@ export class CdpCaptureEngine implements CaptureEngine {
       metrics,
       targetRect: plan.targetRect,
       tiles: storedTiles,
+      ...(partialCapture === undefined ? {} : { partialCapture }),
     };
   }
 

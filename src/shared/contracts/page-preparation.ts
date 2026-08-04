@@ -11,6 +11,12 @@ import { WebCapErrorDataSchema } from "@shared/errors/error";
 import { err, ok, type Result } from "@shared/result";
 
 export const PAGE_PREPARATION_SNAPSHOT_VERSION = 1 as const;
+export const PagePreparationCompletionReasonSchema = z.enum([
+  "lazy-disabled",
+  "stable",
+  "max-css-height",
+  "max-duration",
+]);
 
 const IsoDateTimeSchema = z.string().datetime({ offset: true });
 const RequestIdSchema = z.string().min(1).max(160);
@@ -61,6 +67,7 @@ export const PagePreparationReadyPayloadSchema = z
     documentWidth: z.number().finite().positive(),
     documentHeight: z.number().finite().positive(),
     reachedLimit: z.boolean(),
+    completionReason: PagePreparationCompletionReasonSchema,
     stableSamples: z.number().int().nonnegative(),
     mutationCount: z.number().int().nonnegative(),
     modifiedNodeCount: z.number().int().nonnegative(),
@@ -157,6 +164,7 @@ export const PagePreparationResponseSchema = z.discriminatedUnion("type", [
   PagePreparationErrorMessageSchema,
 ]);
 
+export type PagePreparationCompletionReason = z.infer<typeof PagePreparationCompletionReasonSchema>;
 export type PagePreparationOptions = z.infer<typeof PagePreparationOptionsSchema>;
 export type PagePreparationReadyPayload = z.infer<typeof PagePreparationReadyPayloadSchema>;
 export type PagePreparationCleanupReport = z.infer<typeof PagePreparationCleanupReportSchema>;

@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S18
+current_session: S19
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -116,8 +116,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | S15 | M4 | PDF benchmarks, integrity và memory guards | S14 | 18k–26k | DONE |
 | S16 | M5 | Scrollable-container detection và capture | S15 | 22k–30k | DONE |
 | S17 | M5 | PDF source detection và original passthrough | S16 | 18k–26k | DONE |
-| S18 | M6 | Hardening lazy/infinite/iframe/canvas/WebGL | S17 | 22k–30k | NEXT |
-| S19 | M6 | Diagnostics, i18n, privacy và permissions | S18 | 18k–26k | READY |
+| S18 | M6 | Hardening lazy/infinite/iframe/canvas/WebGL | S17 | 22k–30k | DONE |
+| S19 | M6 | Diagnostics, i18n, privacy và permissions | S18 | 18k–26k | NEXT |
 | S20 | M6 | Release candidate, packaging và store readiness | S19 | 18k–26k | READY |
 
 # 7. Session chi tiết
@@ -674,6 +674,8 @@ pnpm build
 
 **Commit gợi ý:** `Harden capture edge cases`.
 
+**Hoàn thành 2026-08-04 — PR #22 / `79398f7040f6ef6fd9ea5ee5a9e7d07a34e440bd`:** lazy/infinite growth được chặn bởi stable-height, CSS-height, duration, tile limit và user stop; mọi giới hạn tạo `partialCapture` machine-readable cùng cảnh báo rõ thay vì truncate im lặng. Planner/engine chỉ giữ contiguous prefix an toàn, popup cho phép giữ phần đã chụp hoặc hủy/xóa, scroll-snap được tắt tạm trong ownership window và restore theo compare-before-restore. Fixture/browser matrix xác thực iframe same/cross-origin ở mức compositor pixel, Canvas 2D, WebGL, infinite growth, scroll-snap, layout settle, DPR 2 và zoom 125%; known limitations ghi rõ cross-origin DOM, protected media và restricted surfaces không được hỗ trợ. Gate sạch: format, lint, strict typecheck, 268 unit tests/75 files, 4 PDF benchmarks, Manifest V3 build và 33 Playwright E2E.
+
 ---
 
 ## S19 — Diagnostics, i18n, privacy và permissions
@@ -830,8 +832,8 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S15 | DONE | 2026-08-04 | PR #19 / CI 30871783639 | format, lint, typecheck, 239 unit, 4 PDF benchmarks, build, 20 Playwright E2E | Guard trước allocation, PDF integrity trước persistence, diagnostics heap best-effort và reference 10k/30k/100k/wide đã xác thực page-at-a-time với decoded concurrency bằng 1; source tiles được giữ để retry. |
 | S16 | DONE | 2026-08-04 | PR #20 / CI 30876338727 | format, lint, typecheck, 248 unit, 4 PDF benchmarks, build, 23 Playwright E2E | Candidate detection, opaque target revalidation, 2D visible-tab crop capture, sticky-child cleanup, crop-aware PDF/thumbnail và exact restore đã được xác thực trên nested scroll, wide table và stale modal/chat. |
 | S17 | DONE | 2026-08-04 | PR #21 / cdffec8 / CI 30882436209 | format, lint, typecheck, 265 unit, 4 PDF benchmarks, build, 26 Playwright E2E | URL/content-type/viewer detection, exact-origin/file permission, active-tab revalidation, original-byte integrity/hash/local Blob download và auth-required zero-artifact fallback đã được xác thực. |
-| S18 | NEXT | — | — | — | Sẵn sàng harden lazy/infinite, iframe, canvas/WebGL, scroll-snap/layout-shift và zoom/DPR matrix trọng yếu. |
-| S19 | READY | — | — | — | — |
+| S18 | DONE | 2026-08-04 | PR #22 / 79398f7 / CI 30889381904 | format, lint, typecheck, 268 unit, 4 PDF benchmarks, build, 33 Playwright E2E | Bounded growth, partial reason/user-stop, contiguous-prefix safety, scroll-snap/layout settle, iframe compositor pixels, Canvas/WebGL và DPR/zoom matrix đã được xác thực. |
+| S19 | NEXT | — | — | — | Sẵn sàng hoàn thiện diagnostics, Việt/Anh i18n, privacy/permission UX, accessibility và dependency/license audit. |
 | S20 | READY | — | — | — | — |
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp

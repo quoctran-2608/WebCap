@@ -24,9 +24,11 @@ export interface TilePlanRequest {
 
 export interface TilePlan {
   targetRect: Rect;
+  requestedTargetRect: Rect;
   rowCount: number;
   columnCount: number;
   tiles: CaptureTile[];
+  limitedByMaxTiles: boolean;
 }
 
 interface AxisSegment {
@@ -170,16 +172,23 @@ export function planCaptureTiles(request: TilePlanRequest): TilePlan {
 
   const targetRect = clampRectToBounds(request.targetRect, request.documentBounds);
   const tileSize = resolveTileSize(targetRect, request.pixelScale, request.limits);
-  const columns = axisSegments(targetRect.x, targetRect.width, tileSize.width);
-  const rows = axisSegments(targetRect.y, targetRect.height, tileSize.height);
-  const tileCount = rows.length * columns.length;
-
-  if (tileCount > request.limits.maxTiles) {
-    throw planError("The capture target exceeds the configured tile limit.", "MaxTilesExceeded", {
-      tileCount,
-      maxTiles: request.limits.maxTiles,
-    });
-  }
+  const allColumns = axisSegments(targetRect.x, targetRect.width, tileSize.width);
+  const allRows = axisSegments(targetRect.y, targetRect.height, tileSize.height);
+  const tileCount = allRows.length * allColumns.length;
+  const limitedByMaxTiles = tileCount > request.limits.maxTiles;
+  const columnCount =
+    allColumns.length <= request.limits.maxTiles ? allColumns.length : request.limits.maxTiles;
+  const rowCount = limitedByMaxTiles
+    ? Math.max(1, Math.floor(request.limits.maxTiles / columnCount))
+    : allRows.length;
+  const columns = allColumns.slice(0, columnCount);
+  const rows = allRows.slice(0, rowCount);
+  const limitedTargetRect: Rect = {
+    x: targetRect.x,
+    y: targetRect.y,
+    width: columns.reduce((sum, segment) => sum + segment.size, 0),
+    height: rows.reduce((sum, segment) => sum + segment.size, 0),
+  };
 
   const tiles: CaptureTile[] = [];
   for (const [row, ySegment] of rows.entries()) {
@@ -207,12 +216,14 @@ export function planCaptureTiles(request: TilePlanRequest): TilePlan {
     }
   }
 
-  validateTileCoverage(targetRect, rows.length, columns.length, tiles);
+  validateTileCoverage(limitedTargetRect, rows.length, columns.length, tiles);
   return {
-    targetRect,
+    targetRect: limitedTargetRect,
+    requestedTargetRect: targetRect,
     rowCount: rows.length,
     columnCount: columns.length,
     tiles,
+    limitedByMaxTiles,
   };
 }
 

@@ -75,17 +75,21 @@ describe("planScrollCaptureTiles", () => {
     });
   });
 
-  it("rejects a fallback plan above the configured tile limit", () => {
-    expect(() =>
-      planScrollCaptureTiles({
-        jobId: "limited",
-        targetRect: { x: 0, y: 0, width: 3_000, height: 3_000 },
-        viewportWidthCss: 500,
-        viewportHeightCss: 500,
-        pixelScale: 1,
-        overlapCss: 64,
-        maxTiles: 4,
-      }),
-    ).toThrowError(expect.objectContaining({ name: "E_TILE_PLAN" }));
+  it("returns an explicit contiguous partial fallback plan above maxTiles", () => {
+    const result = planScrollCaptureTiles({
+      jobId: "limited",
+      targetRect: { x: 0, y: 0, width: 3_000, height: 3_000 },
+      viewportWidthCss: 500,
+      viewportHeightCss: 500,
+      pixelScale: 1,
+      overlapCss: 64,
+      maxTiles: 4,
+    });
+
+    expect(result.limitedByMaxTiles).toBe(true);
+    expect(result.tiles).toHaveLength(4);
+    expect(result.rows).toBe(1);
+    expect(result.columns).toBe(4);
+    expect(result.targetRect).toEqual({ x: 0, y: 0, width: 1_808, height: 500 });
   });
 });

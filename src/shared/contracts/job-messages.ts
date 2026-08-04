@@ -63,6 +63,7 @@ export const JobCancelMessageSchema = EnvelopeBaseSchema.extend({
     .object({
       jobId: IdentifierSchema,
       reason: z.string().min(1).max(300).optional(),
+      disposition: z.enum(["discard", "keep-partial"]).default("discard"),
     })
     .strict(),
 }).strict();
@@ -182,7 +183,11 @@ export function createJobGetActiveMessage(
 }
 
 export function createJobCancelMessage(
-  options: JobMessageCreationOptions & { jobId: string; reason?: string },
+  options: JobMessageCreationOptions & {
+    jobId: string;
+    reason?: string;
+    disposition?: "discard" | "keep-partial";
+  },
 ): JobCancelMessage {
   return JobCancelMessageSchema.parse({
     protocolVersion: PROTOCOL_VERSION,
@@ -193,6 +198,7 @@ export function createJobCancelMessage(
     payload: {
       jobId: options.jobId,
       ...(options.reason === undefined ? {} : { reason: options.reason }),
+      disposition: options.disposition ?? "discard",
     },
     sentAt: options.sentAt,
   });

@@ -46,6 +46,7 @@ function readyResponse(message: Record<string, unknown>): PagePreparationRespons
     documentWidth: 1200,
     documentHeight: 9000,
     reachedLimit: false,
+    completionReason: "stable",
     stableSamples: 4,
     mutationCount: 2,
     modifiedNodeCount: 1,

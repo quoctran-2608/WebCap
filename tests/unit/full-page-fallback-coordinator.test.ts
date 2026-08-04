@@ -181,6 +181,7 @@ describe("FullPageCaptureCoordinator fallback", () => {
           documentWidth: 800,
           documentHeight: 1_200,
           reachedLimit: false,
+          completionReason: "stable",
           stableSamples: 2,
           mutationCount: 0,
           modifiedNodeCount: 0,

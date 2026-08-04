@@ -1,0 +1,33 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Scroll snap fixture</title>
+<style>
+  html {
+    scroll-snap-type: y mandatory;
+  }
+  html,
+  body {
+    margin: 0;
+  }
+  section {
+    height: 100vh;
+    scroll-snap-align: start;
+    display: grid;
+    place-items: center;
+    font: 700 42px system-ui;
+  }
+  section:nth-child(1) {
+    background: #0b6e4f;
+    color: white;
+  }
+  section:nth-child(2) {
+    background: #e9c46a;
+  }
+  section:nth-child(3) {
+    background: #264653;
+    color: white;
+  }
+</style>
+<section>Snap one</section>
+<section>Snap two</section>
+<section>Snap three</section>

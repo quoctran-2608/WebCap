@@ -6,7 +6,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 ## Current status
 
-**S17 — PDF source detection and original-byte passthrough is implemented.** WebCap now classifies the active source as non-PDF, safe original passthrough, viewer capture, authentication-required, or unsupported by combining permitted URL, content-type, and Chrome PDF viewer signals. Optional HTTP(S) origin or `file:///*` permission is requested only after explicit user intent. When passthrough is available, the background revalidates the active tab, fetches with the browser credential context, enforces a 128 MiB guard, verifies the `%PDF-` signature, records SHA-256 and byte length, stores the unchanged Blob locally in IndexedDB, and downloads it without rasterization or binary runtime messages. Permission denial and authentication failures leave every image-capture mode available and show an honest fallback. The clean S17 gate passes 265 unit tests across 74 files, four PDF benchmarks, and 26 Playwright E2E cases covering public `.pdf`, content-type-only PDF, authentication-required zero-artifact handling, and all prior capture/export regressions. S18 is next: hardening lazy/infinite, iframe, canvas, WebGL, scroll-snap, layout-shift, and key zoom/DPR cases.
+**S18 — capture hardening for difficult pages is implemented.** WebCap now bounds lazy and infinite growth by stable height, maximum CSS height, elapsed duration, tile count, and explicit user stop. A limited run stores a machine-readable partial-capture reason, keeps only a safe contiguous tile prefix, and shows an explicit warning instead of silently truncating. Scroll snapping is disabled only while WebCap owns preparation and restored with compare-before-restore protection; bounded layout settling remains mandatory before capture. Deterministic browser fixtures validate same-origin and cross-origin iframe pixels without promising cross-origin DOM access, Canvas 2D, WebGL, infinite growth, scroll snap, layout shifts, DPR 2, and 125% zoom. The clean S18 gate passes 268 unit tests across 75 files, four PDF benchmarks, the Manifest V3 production build, and 33 Playwright E2E cases. S19 is next: diagnostics, Vietnamese/English localization, privacy/permission UX, accessibility, and dependency/license review.
 
 ## Requirements
 
@@ -86,3 +86,4 @@ scripts/                Build verification and repository automation.
 - [Changelog](./CHANGELOG.md)
 - [PDF benchmark and integrity reference](./docs/benchmarks.md)
 - [Privacy baseline](./docs/privacy.md)
+- [Known capture limitations](./docs/known-limitations.md)

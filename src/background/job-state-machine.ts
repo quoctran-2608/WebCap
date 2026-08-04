@@ -32,6 +32,7 @@ export type JobTransitionPatch = Partial<
     | "completedTiles"
     | "totalTiles"
     | "cleanup"
+    | "partialCapture"
     | "exportProgress"
     | "outputArtifactId"
     | "error"

@@ -25,6 +25,7 @@ function layoutMetrics(width: number, height: number) {
 function cancellation(): CaptureCancellation {
   return {
     cancelled: false,
+    keepPartial: false,
     throwIfCancelled: () => undefined,
   };
 }
@@ -158,6 +159,7 @@ describe("CdpCaptureEngine", () => {
       get cancelled() {
         return cancelled;
       },
+      keepPartial: false,
       throwIfCancelled(stage = "capture") {
         if (cancelled) {
           throw createWebCapRuntimeError(
