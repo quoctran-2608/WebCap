@@ -29,3 +29,7 @@ Produce a reproducible, installable, testable WebCap 0.1.0 release candidate wit
 - Chrome Web Store submission or credential handling.
 - Git tag, GitHub Release, CRX signing, external update server, or auto-publish.
 - New runtime permission, default host permission, telemetry, backend, account, or cloud sync.
+
+## Completion evidence
+
+S20 completed on 2026-08-04 through PR #24. Validation head `3fb083fc` passed read-only CI `30909732983` and Release Candidate run `30909732939`. The deterministic 24-entry ZIP is 1,097,035 bytes with SHA-256 `630c44c07e72da0d5edc1c82c013ecf6caf995e0542ee19679380081e7b0cb7a`; packaged install/update/storage/uninstall passed Linux, Windows, macOS, Chrome 116.0.5845.96, and Chrome stable 151.0.7922.71. No tag, GitHub Release, Chrome Web Store upload, or publication was performed.
