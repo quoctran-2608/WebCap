@@ -1,0 +1,233 @@
+name: Release Candidate
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/release-candidate.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "public/manifest.json"
+      - "public/_locales/**"
+      - "assets/icons.json"
+      - "scripts/audit-release.mjs"
+      - "scripts/install-chrome-for-testing.mjs"
+      - "scripts/package-extension.mjs"
+      - "scripts/verify-release-package.mjs"
+      - "scripts/verify-reproducible-package.mjs"
+      - "scripts/release/**"
+      - "tests/release/**"
+      - "tests/unit/release-zip.test.mjs"
+      - "tests/unit/pdf-integrity.test.ts"
+      - "tests/e2e/release-compatibility.spec.ts"
+      - "playwright.config.ts"
+      - "docs/release/**"
+      - "docs/release-checklist.md"
+      - "docs/known-limitations.md"
+      - "docs/store-*.md"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Privacy, dependency, release, and critical security audits
+        run: pnpm run audit && pnpm audit:security
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: PDF performance benchmark
+        run: pnpm benchmark:pdf
+
+      - name: Build extension
+        run: pnpm build
+
+      - name: Reproduce and verify release ZIP
+        run: node scripts/verify-reproducible-package.mjs
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Full extension E2E
+        run: pnpm test:e2e
+
+      - name: Packaged lifecycle smoke
+        run: pnpm test:release
+
+      - name: Upload deterministic release package
+        uses: actions/upload-artifact@v4
+        with:
+          name: webcap-release-candidate-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  packaged-lifecycle-os:
+    needs: build-and-quality
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download deterministic release package
+        uses: actions/download-artifact@v4
+        with:
+          name: webcap-release-candidate-${{ github.sha }}
+          path: artifacts
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Test packaged install, update, and uninstall
+        shell: bash
+        run: >-
+          node tests/release/packaged-lifecycle.mjs
+          --browser-label "${{ runner.os }}-playwright"
+          --report "artifacts/packaged-lifecycle-${{ runner.os }}.json"
+
+      - name: Upload lifecycle report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-lifecycle-${{ runner.os }}
+          path: artifacts/packaged-lifecycle-${{ runner.os }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  packaged-browser-compatibility:
+    needs: build-and-quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install browser runtime dependencies
+        run: pnpm exec playwright install-deps chromium
+
+      - name: Download deterministic release package
+        uses: actions/download-artifact@v4
+        with:
+          name: webcap-release-candidate-${{ github.sha }}
+          path: artifacts
+
+      - name: Install minimum and current stable Chrome for Testing
+        id: chrome
+        run: |
+          node scripts/install-chrome-for-testing.mjs \
+            --major 116 \
+            --destination .release-browsers/chrome-116 \
+            --github-output-key minimum
+          node scripts/install-chrome-for-testing.mjs \
+            --channel stable \
+            --destination .release-browsers/chrome-stable \
+            --github-output-key stable
+
+      - name: Test package on minimum Chrome
+        run: >-
+          node tests/release/packaged-lifecycle.mjs
+          --executable-path "${{ steps.chrome.outputs.minimum }}"
+          --browser-label "chrome-${{ steps.chrome.outputs.minimum_version }}"
+          --report artifacts/packaged-lifecycle-chrome-minimum.json
+
+      - name: Test package on current stable Chrome
+        run: >-
+          node tests/release/packaged-lifecycle.mjs
+          --executable-path "${{ steps.chrome.outputs.stable }}"
+          --browser-label "chrome-${{ steps.chrome.outputs.stable_version }}"
+          --report artifacts/packaged-lifecycle-chrome-stable.json
+
+      - name: Upload browser compatibility reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-browser-compatibility
+          path: artifacts/packaged-lifecycle-chrome-*.json
+          if-no-files-found: error
+          retention-days: 30
