@@ -2,20 +2,24 @@
 
 WebCap is a local-first Chrome extension for capturing everything a web page presents: the visible viewport, a full page, a selected region, a DOM element, or a scrollable area. Long captures are processed in tiles and can be exported as images or multi-page PDF files without uploading page content to a server.
 
-> The 0.1.0 MVP implementation plan `S00–S20` is complete. WebCap 0.2.0 is now planned in `S21–S25` around adaptive auto-scroll, automatic PDF creation, capture reset/new-capture lifecycle, and a simplified popup. The baseline product scope remains in [`PRD_WebCap_v1.0.md`](./PRD_WebCap_v1.0.md); the 0.2.0 delta is in [`PRD_WebCap_v1.1.md`](./PRD_WebCap_v1.1.md). Technical contracts are defined by [`SPEC.md`](./SPEC.md) plus [`docs/spec-0.2.0.md`](./docs/spec-0.2.0.md), and execution status is tracked in [`PLAN.md`](./PLAN.md).
+> The 0.1.0 MVP roadmap `S00–S20` is complete. WebCap 0.2.0 is planned in `S21–S26` around capture reset, reliable region drawing, adaptive auto-scroll, automatic PDF/mode-aware output, stored settings, event-driven progress and a simplified popup. Baseline scope remains in [`PRD_WebCap_v1.0.md`](./PRD_WebCap_v1.0.md); the 0.2.0 delta is in [`PRD_WebCap_v1.1.md`](./PRD_WebCap_v1.1.md). Technical contracts are defined by [`SPEC.md`](./SPEC.md) plus [`docs/spec-0.2.0.md`](./docs/spec-0.2.0.md), the 0.1.0 gap inventory is in [`docs/audits/0.1.0-gap-audit.md`](./docs/audits/0.1.0-gap-audit.md), and execution status is tracked in [`PLAN.md`](./PLAN.md).
 
 ## Current status
 
 **0.1.0 release candidate remains complete and unchanged.** It has a deterministic, verified 24-entry Chrome Web Store ZIP (`webcap-0.1.0.zip`, 1,097,035 bytes, SHA-256 `630c44c07e72da0d5edc1c82c013ecf6caf995e0542ee19679380081e7b0cb7a`). The final gate passed formatting, ESLint, strict TypeScript, privacy/license/release/critical-security audits, 279 unit tests across 79 files, four PDF benchmarks, a verified Manifest V3 build, and 38 Playwright E2E cases including DPR 1/1.5/2 at 80/100/125/150% zoom. No tag, GitHub Release, Chrome Web Store upload, review submission, or publication has been performed.
 
-**0.2.0 is planned, not implemented.** The active roadmap begins with S21 capture reset, followed by adaptive auto-scroll to a stable page end, automatic PDF export, popup simplification, and a full 0.2.0 release gate. “Capture to the end” removes the arbitrary 100,000 CSS-pixel stopping behavior for adaptive mode, while retaining explicit time, storage, tile, and memory safeguards for truly infinite or device-exhausting pages.
+**0.2.0 is planned, not implemented.** The active roadmap begins with S21 capture reset, then S22 region-selector launch/reliability, S23 adaptive auto-scroll and restart recovery, S24 automatic PDF and guarded tiled-image output, S25 settings/events/popup simplification, and S26 release hardening. “Capture to the end” removes the arbitrary 100,000 CSS-pixel stopping behavior for adaptive mode while retaining explicit time, storage, tile and memory safeguards for truly infinite or device-exhausting pages.
 
 ## Planned 0.2.0 outcomes
 
-- One-click **Full page → PDF**: scroll from document start, continue through finite lazy growth, restore the page, and automatically create a PDF.
+- One-click **Full page → PDF**: capture from document start, continue through finite lazy growth, restore the page and automatically create a PDF.
+- A reliable **Draw region** flow: the popup closes only after the selector is ready, the overlay appears immediately, pointer and keyboard can create/adjust the rectangle, and selector UI is excluded from output.
 - A clear **New capture** action that safely cancels or discards the current local job and allows another capture on the same tab.
-- A simpler default popup focused on capture goals, progress, download, edit, and new capture; worker/version/tile/checksum details move to help and diagnostics.
-- No backend, telemetry, remote executable code, new required permission, or default host permission.
+- Mode-aware output: region/element default to guarded image output; full page defaults to PDF; oversized images receive an explicit PDF fallback.
+- Stored format, quality, PDF and fixed/sticky preferences are actually applied to new jobs.
+- Event-driven progress with slow reconciliation instead of continuous 350 ms polling.
+- A simpler popup focused on capture goals, progress, download, edit and new capture; technical details move to help and diagnostics.
+- No backend, telemetry, remote executable code, new required permission or default host permission.
 
 ## Requirements
 
@@ -70,29 +74,30 @@ The `dist/` output contains `manifest.json`, `popup.html`, `editor.html`, `servi
 ```text
 public/                 Manifest and static extension assets copied as-is.
 assets/                 Internal build-time icon sources.
-src/background/         Manifest V3 service worker, job routing, capture coordination, and Chrome adapters.
-src/capture/            Page measurement, deterministic/adaptive tile planning, and capture engines.
-src/content/            On-demand page preparation, lazy settle, selection, and restoration runtime.
-src/editor/             React PDF editor, persistent manifest client, and lazy thumbnail rendering.
-src/popup/              React popup entry, capture controls, progress UI, and runtime clients.
+src/background/         Manifest V3 service worker, routing, coordination, reset and Chrome adapters.
+src/capture/            Deterministic/adaptive planning and capture engines.
+src/content/            Page preparation, selectors, lazy settle and restoration runtime.
+src/editor/             React PDF editor, persistent manifest client and lazy thumbnail rendering.
+src/popup/              React popup entry, goal UI, progress/result views and runtime clients.
 src/shared/contracts/   Typed cross-context message envelopes.
 src/storage/            IndexedDB and chrome.storage repositories.
-tests/unit/             Fast deterministic contract, engine, coordinator, and router tests.
-tests/performance/      Repeatable PDF and long-page benchmark scenarios and metric output.
+tests/unit/             Deterministic contract, engine, coordinator, router and view-model tests.
+tests/performance/      Repeatable PDF and long-page benchmark scenarios.
 tests/e2e/              Playwright unpacked-extension integration tests.
 tests/smoke/            Real-Chrome unpacked-extension smoke tests.
 tests/release/          Packaged install/update/uninstall lifecycle validation.
 scripts/release/        Deterministic ZIP implementation and verification primitives.
-scripts/                Build, audit, packaging, browser-install, and repository automation.
+scripts/                Build, audit, packaging, browser-install and repository automation.
 ```
 
 ## Development rules
 
 - Keep TypeScript strict; do not introduce `any` without an adapter-boundary justification.
 - Add or update tests in the same change as behavior.
-- Do not add Chrome permissions, remote scripts, analytics, or backend calls outside the approved PRD/SPEC scope.
+- Do not add Chrome permissions, remote scripts, analytics or backend calls outside the approved PRD/SPEC scope.
 - Complete only the active session in `PLAN.md`; defer unrelated work instead of expanding the current change.
-- Preserve the 0.1.0 release artifact boundary until S25 deliberately creates a 0.2.0 package.
+- Preserve the 0.1.0 release artifact boundary until S26 deliberately creates a 0.2.0 package.
+- Treat missing/duplicated content, orphan selector/job/lock, page-restore failure, privacy leaks and misleading complete/partial status as release blockers.
 - Run the final merge gate through the repository's read-only CI workflow after every temporary write-enabled workflow and staging file has been removed.
 
 ## Documentation
@@ -101,6 +106,7 @@ scripts/                Build, audit, packaging, browser-install, and repository
 - [0.2.0 product requirements delta](./PRD_WebCap_v1.1.md)
 - [Baseline engineering specification](./SPEC.md)
 - [0.2.0 engineering specification addendum](./docs/spec-0.2.0.md)
+- [0.1.0 gap audit and disposition](./docs/audits/0.1.0-gap-audit.md)
 - [Active implementation plan](./PLAN.md)
 - [Changelog](./CHANGELOG.md)
 - [PDF benchmark and integrity reference](./docs/benchmarks.md)
