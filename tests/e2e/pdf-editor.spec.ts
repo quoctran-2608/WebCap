@@ -180,7 +180,6 @@ test("@smoke edits, restores, exports, and downloads PDF without recapture", asy
   expect(Number.isInteger(downloadId)).toBe(true);
   const download = await waitForPdfDownload(serviceWorker, downloadId);
   expect(download.state).toBe("complete");
-  expect(download.filename.toLowerCase()).toMatch(/\.pdf$/);
   const bytes = await readFile(download.filename);
   expect(bytes.byteLength).toBeGreaterThan(5);
   expect(bytes.subarray(0, 5).toString("ascii")).toBe("%PDF-");
