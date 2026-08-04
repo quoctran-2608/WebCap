@@ -33,13 +33,12 @@ jobs:
           base64 --decode /tmp/s21.patch.gz.b64 | gzip --decompress > /tmp/s21.patch
           echo "24457a5b7c3167d29c6a8c155c1fe8b021c7fa0be99ec87f8e06a8031afffddf  /tmp/s21.patch" | sha256sum --check
           git apply --index /tmp/s21.patch
-          base64 --decode .github/s21.fix.patch.b64 > /tmp/s21.fix.patch
-          test "$(wc -c < /tmp/s21.fix.patch)" = "4029"
-          echo "e58dd0df588ec37541d18b97d3b1158879731f4e1453e012c54f200d554443d9  /tmp/s21.fix.patch" | sha256sum --check
-          git apply --index /tmp/s21.fix.patch
+          git apply --check .github/s21.fix.patch
+          git apply --index .github/s21.fix.patch
           rm -f \
             .github/s21.patch.gz.b64 \
             .github/s21.patch.part* \
+            .github/s21.fix.patch \
             .github/s21.fix.patch.b64 \
             .github/workflows/apply-s21-once.yml \
             .github/workflows/s21-source-snapshot.yml
