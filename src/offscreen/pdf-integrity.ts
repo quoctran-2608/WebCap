@@ -1,5 +1,7 @@
 import { PDFDocument } from "pdf-lib";
 
+import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
+
 export interface PdfExpectedPageSize {
   widthPt: number;
   heightPt: number;
@@ -63,6 +65,10 @@ function dimensionMatches(actual: number, expected: number, tolerance: number): 
   return Number.isFinite(actual) && Math.abs(actual - expected) <= tolerance;
 }
 
+function addError(errors: string[], error: string): void {
+  if (!errors.includes(error)) errors.push(error);
+}
+
 export async function inspectPdfIntegrity(
   input: Uint8Array | ArrayBuffer,
   expectations: PdfIntegrityExpectations = {},
@@ -70,8 +76,8 @@ export async function inspectPdfIntegrity(
   const bytes = bytesOf(input);
   const signatureValid = hasPdfSignature(bytes);
   const errors: string[] = [];
-  if (!signatureValid) errors.push("signature");
-  if (bytes.byteLength === 0) errors.push("empty-file");
+  if (!signatureValid) addError(errors, "signature");
+  if (bytes.byteLength === 0) addError(errors, "empty-file");
 
   const raw = new TextDecoder("latin1").decode(bytes);
   const imageObjectCount = countMatches(raw, /\/Subtype\s*\/Image\b/g);
@@ -86,9 +92,9 @@ export async function inspectPdfIntegrity(
     }));
     const pageCount = pages.length;
 
-    if (pageCount <= 0) errors.push("page-count-empty");
+    if (pageCount <= 0) addError(errors, "page-count-empty");
     if (expectations.pageCount !== undefined && pageCount !== expectations.pageCount) {
-      errors.push("page-count-mismatch");
+      addError(errors, "page-count-mismatch");
     }
 
     const tolerance = expectations.dimensionTolerancePt ?? 0.5;
@@ -96,7 +102,9 @@ export async function inspectPdfIntegrity(
       throw new TypeError("dimensionTolerancePt must be a finite non-negative number.");
     }
     if (expectations.pageSizes !== undefined) {
-      if (expectations.pageSizes.length !== pageCount) errors.push("page-size-count-mismatch");
+      if (expectations.pageSizes.length !== pageCount) {
+        addError(errors, "page-size-count-mismatch");
+      }
       for (const [index, expected] of expectations.pageSizes.entries()) {
         const page = pages[index];
         if (
@@ -104,14 +112,14 @@ export async function inspectPdfIntegrity(
           !dimensionMatches(page.widthPt, expected.widthPt, tolerance) ||
           !dimensionMatches(page.heightPt, expected.heightPt, tolerance)
         ) {
-          errors.push(`page-size-${index + 1}`);
+          addError(errors, `page-size-${index + 1}`);
         }
       }
     }
 
     if (expectations.requireImagePerPage !== false) {
-      if (imageObjectCount < pageCount) errors.push("image-object-count");
-      if (nonEmptyStreamCount < imageObjectCount) errors.push("empty-image-stream");
+      if (imageObjectCount < pageCount) addError(errors, "image-object-count");
+      if (nonEmptyStreamCount < imageObjectCount) addError(errors, "empty-image-stream");
     }
 
     return {
@@ -126,7 +134,7 @@ export async function inspectPdfIntegrity(
     };
   } catch (error) {
     if (error instanceof TypeError && error.message.includes("dimensionTolerancePt")) throw error;
-    errors.push("load-failed");
+    addError(errors, "load-failed");
     return {
       valid: false,
       byteLength: bytes.byteLength,
@@ -138,4 +146,33 @@ export async function inspectPdfIntegrity(
       errors,
     };
   }
+}
+
+export async function assertPdfIntegrity(
+  input: Uint8Array | ArrayBuffer,
+  expectations: PdfIntegrityExpectations = {},
+): Promise<PdfIntegrityReport> {
+  const report = await inspectPdfIntegrity(input, expectations);
+  if (report.valid) return report;
+
+  throw createWebCapRuntimeError(
+    createWebCapError({
+      code: "E_EXPORT_FAILED",
+      stage: "export",
+      message:
+        "The generated PDF failed integrity validation. The source capture remains available so the export can be retried.",
+      userMessageKey: "errors.exportFailed",
+      retryable: true,
+      fallbackAllowed: false,
+      causeCode: "PdfIntegrityCheckFailed",
+      safeContext: {
+        errors: report.errors.join(","),
+        byteLength: report.byteLength,
+        pageCount: report.pageCount,
+        expectedPageCount: expectations.pageCount ?? -1,
+        imageObjectCount: report.imageObjectCount,
+        nonEmptyStreamCount: report.nonEmptyStreamCount,
+      },
+    }),
+  );
 }
