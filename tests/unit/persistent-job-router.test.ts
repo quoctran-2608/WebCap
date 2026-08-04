@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  routePdfExportProgressMessage,
   routePersistentJobMessage,
   type PersistentJobRouterDependencies,
 } from "@background/persistent-job-router";
@@ -12,6 +13,7 @@ import {
   createJobCreateMessage,
   createJobGetMessage,
 } from "@shared/contracts/job-messages";
+import { createOffscreenPdfExportProgressMessage } from "@shared/contracts/offscreen";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 import type { DedupeRepositoryPort } from "@storage/dedupe-repository";
 
@@ -209,6 +211,36 @@ describe("persistent job router", () => {
     expect(first).toEqual(second);
     expect(first).toMatchObject({ type: "ERROR_RESPONSE", payload: { code: "E_STORAGE_READ" } });
     expect(jobs.getCalls).toBe(1);
+  });
+
+  it("acknowledges progress while an exporting job remains active even if persistence fails", async () => {
+    const jobs = new FakeCoordinator();
+    jobs.current = {
+      ...job(),
+      state: "exporting",
+      stateRevision: 4,
+      exportProgress: { completedPages: 0, totalPages: 3 },
+    };
+    const dedupe = new MemoryDedupe();
+    const message = createOffscreenPdfExportProgressMessage({
+      requestId: "progress-1",
+      sentAt: now.toISOString(),
+      jobId: jobs.current.id,
+      completedPages: 1,
+      totalPages: 3,
+    });
+    const response = await routePdfExportProgressMessage(message, {
+      ...dependencies(jobs, dedupe),
+      pdfExports: {
+        start: () => Promise.resolve(jobs.current as CaptureJob),
+        handleProgress: () => Promise.reject(new Error("progress persistence failed")),
+      },
+    });
+
+    expect(response).toMatchObject({
+      type: "OFFSCREEN_PDF_EXPORT_PROGRESS_ACK",
+      payload: { jobId: jobs.current.id, accepted: true },
+    });
   });
 
   it("ignores unrelated runtime messages", async () => {

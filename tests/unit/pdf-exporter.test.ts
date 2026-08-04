@@ -9,9 +9,9 @@ import {
 } from "@offscreen/pdf-exporter";
 import type { ArtifactRecord } from "@shared/contracts/artifact";
 import type { CaptureTile } from "@shared/contracts/domain";
+import type { StoredTileRecord } from "@shared/contracts/job";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
-import type { StoredTileRecord } from "@shared/contracts/job";
 import type { TileRepositoryPort } from "@storage/tile-repository";
 
 const ONE_PIXEL_JPEG = Buffer.from(
@@ -156,7 +156,7 @@ describe("PdfExporter", () => {
       },
       ({ completedPages }) => {
         progress.push(completedPages);
-        return Promise.resolve();
+        return Promise.resolve(true);
       },
     );
 

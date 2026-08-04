@@ -81,8 +81,8 @@ const TILED_STATUS_COPY: Record<CaptureJob["state"], string> = {
   capturing: "Đang chụp các tile; WebCap tự chuyển sang scroll fallback khi cần…",
   processing: "Đang xác nhận tile set…",
   ready: "Tile set toàn trang đã sẵn sàng.",
-  exporting: "Đang xuất kết quả…",
-  completed: "Đã hoàn tất.",
+  exporting: "Đang tạo PDF từng trang…",
+  completed: "PDF đã sẵn sàng để tải xuống.",
   failed: "Không thể hoàn tất chụp toàn trang.",
   cancelling: "Đang hủy và phục hồi trang…",
   cancelled: "Đã hủy chụp toàn trang.",
@@ -113,7 +113,9 @@ function tiledStatusCopy(job: CaptureJob): string {
 function isFullPageBusy(job: CaptureJob | undefined): boolean {
   return (
     job !== undefined &&
-    ["created", "preparing", "capturing", "processing", "cancelling"].includes(job.state)
+    ["created", "preparing", "capturing", "processing", "exporting", "cancelling"].includes(
+      job.state,
+    )
   );
 }
 
@@ -216,7 +218,8 @@ export function App(): React.JSX.Element {
     selectedMode === "full-page" || selectedMode === "region" || selectedMode === "element";
   const busy = tiledMode ? fullPageBusy : visibleBusy;
   const terminal = tiledMode
-    ? fullPageJob !== undefined && ["ready", "failed", "cancelled"].includes(fullPageJob.state)
+    ? fullPageJob !== undefined &&
+      ["ready", "exporting", "completed", "failed", "cancelled"].includes(fullPageJob.state)
     : status === "ready" || status === "completed" || status === "error";
   const availableFormats = OUTPUT_FORMATS.filter(
     (format): format is { id: ImageFormat; label: string } =>
@@ -527,6 +530,14 @@ export function App(): React.JSX.Element {
     }
   }, [handleOperationError, session?.artifact, syncSession]);
 
+  const handleOpenPdfEditor = useCallback(async (): Promise<void> => {
+    if (fullPageJob === undefined) return;
+    await chrome.tabs.create({
+      url: chrome.runtime.getURL(`editor.html?jobId=${encodeURIComponent(fullPageJob.id)}`),
+    });
+    window.close();
+  }, [fullPageJob]);
+
   const sourceEstimate =
     session?.source === undefined
       ? undefined
@@ -594,9 +605,7 @@ export function App(): React.JSX.Element {
                     : "Chụp vùng đang xem"}
             </h2>
           </div>
-          <span className="planned-badge">
-            {selectedMode === "element" ? "S12" : selectedMode === "region" ? "S11" : "S10"}
-          </span>
+          <span className="planned-badge">{selectedMode === "visible" ? "M1" : "S14"}</span>
         </div>
 
         <div className="mode-grid" aria-label="Các chế độ chụp">
@@ -619,22 +628,30 @@ export function App(): React.JSX.Element {
           })}
         </div>
 
-        <label className="field-label" htmlFor="output-format">
-          Định dạng đầu ra
-        </label>
-        <select
-          id="output-format"
-          aria-label="Định dạng đầu ra"
-          value={selectedFormat}
-          disabled={busy}
-          onChange={(event) => setSelectedFormat(event.target.value as ImageFormat)}
-        >
-          {availableFormats.map((format) => (
-            <option value={format.id} key={format.id}>
-              {format.label}
-            </option>
-          ))}
-        </select>
+        {selectedMode === "visible" ? (
+          <>
+            <label className="field-label" htmlFor="output-format">
+              Định dạng đầu ra
+            </label>
+            <select
+              id="output-format"
+              aria-label="Định dạng đầu ra"
+              value={selectedFormat}
+              disabled={busy}
+              onChange={(event) => setSelectedFormat(event.target.value as ImageFormat)}
+            >
+              {availableFormats.map((format) => (
+                <option value={format.id} key={format.id}>
+                  {format.label}
+                </option>
+              ))}
+            </select>
+          </>
+        ) : (
+          <p className="field-label">
+            Đầu ra: PDF nhiều trang · chỉnh khổ giấy, lề, chất lượng và thứ tự sau khi chụp.
+          </p>
+        )}
 
         {busy ? (
           <button
@@ -648,7 +665,9 @@ export function App(): React.JSX.Element {
           <button
             className="primary-action"
             type="button"
-            disabled={!canCapture || fullPageJob?.state === "ready"}
+            disabled={
+              !canCapture || fullPageJob?.state === "ready" || fullPageJob?.state === "completed"
+            }
             onClick={() => void handleCapture()}
           >
             {selectedMode === "full-page"
@@ -786,11 +805,30 @@ export function App(): React.JSX.Element {
                     : "Đã lưu đầy đủ tile"}
               </h3>
               <p>
-                {fullPageJob.completedTiles} tile PNG đang được giữ cục bộ trong IndexedDB. Ghép ảnh
-                và export cuối thuộc milestone xuất kết quả sau S12.
+                {fullPageJob.completedTiles} source tile đang được giữ cục bộ. Mở editor để xem
+                thumbnail, đổi khổ giấy, sắp xếp hoặc bỏ trang và tạo PDF mà không chụp lại.
               </p>
-              <button className="text-action" type="button" onClick={() => void handleCancel()}>
-                Kết thúc phiên tile
+              <button
+                className="primary-action"
+                type="button"
+                onClick={() => void handleOpenPdfEditor()}
+              >
+                Mở trình biên tập PDF
+              </button>
+            </div>
+          )}
+          {tiledMode && fullPageJob?.state === "completed" && (
+            <div className="feedback feedback--success">
+              <h3 ref={feedbackHeadingRef} tabIndex={-1}>
+                PDF đã sẵn sàng
+              </h3>
+              <p>Mở editor để tải file PDF đã tạo.</p>
+              <button
+                className="primary-action"
+                type="button"
+                onClick={() => void handleOpenPdfEditor()}
+              >
+                Mở và tải PDF
               </button>
             </div>
           )}
@@ -822,12 +860,23 @@ export function App(): React.JSX.Element {
               {fullPageJob.activeEngine === "scroll" && (
                 <p>Scroll fallback đã dừng an toàn và trang đã được phục hồi.</p>
               )}
-              <button className="text-action" type="button" onClick={() => void handleRetry()}>
-                {selectedMode === "region"
-                  ? "Chọn lại vùng"
-                  : selectedMode === "element"
-                    ? "Chọn lại phần tử"
-                    : "Thử lại chụp toàn trang"}
+              <button
+                className="text-action"
+                type="button"
+                onClick={() =>
+                  fullPageJob.totalTiles > 0 &&
+                  fullPageJob.completedTiles === fullPageJob.totalTiles
+                    ? void handleOpenPdfEditor()
+                    : void handleRetry()
+                }
+              >
+                {fullPageJob.totalTiles > 0 && fullPageJob.completedTiles === fullPageJob.totalTiles
+                  ? "Mở editor để thử xuất lại"
+                  : selectedMode === "region"
+                    ? "Chọn lại vùng"
+                    : selectedMode === "element"
+                      ? "Chọn lại phần tử"
+                      : "Thử lại chụp toàn trang"}
               </button>
             </div>
           )}
@@ -887,7 +936,7 @@ export function App(): React.JSX.Element {
       </section>
 
       <footer>
-        <span>Ảnh được xử lý và lưu cục bộ; không tải lên máy chủ.</span>
+        <span>Ảnh, source tiles và PDF được xử lý cục bộ; không tải lên máy chủ.</span>
       </footer>
     </main>
   );

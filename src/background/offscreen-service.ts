@@ -1,5 +1,12 @@
 import type { ArtifactMetadata } from "@shared/contracts/artifact";
 import type { ImageFormat } from "@shared/contracts/domain";
+import type { PdfEditorPage } from "@shared/contracts/pdf-editor";
+import { createOffscreenExportEditedPdfMessage } from "@shared/contracts/pdf-editor-offscreen";
+import {
+  createOffscreenPdfThumbnailMessage,
+  isOffscreenPdfThumbnailCreatedMessage,
+  type OffscreenPdfThumbnailMessage,
+} from "@shared/contracts/pdf-thumbnail-offscreen";
 import {
   createOffscreenCreateObjectUrlMessage,
   createOffscreenExportPdfMessage,
@@ -61,6 +68,12 @@ export interface ProcessImageOptions {
   createdAt: string;
   expiresAt: string;
 }
+
+export type ExportPdfOptions = OffscreenExportPdfMessage["payload"] & {
+  pages?: PdfEditorPage[];
+};
+
+export type CreatePdfThumbnailOptions = OffscreenPdfThumbnailMessage["payload"];
 
 const OFFSCREEN_PATH = "offscreen.html";
 const DEFAULT_IDLE_TIMEOUT_MS = 60_000;
@@ -189,18 +202,47 @@ export class OffscreenService {
     });
   }
 
-  async exportPdf(options: OffscreenExportPdfMessage["payload"]): Promise<ArtifactMetadata> {
+  async exportPdf(options: ExportPdfOptions): Promise<ArtifactMetadata> {
     return this.withDocument(async () => {
-      const request = createOffscreenExportPdfMessage({
+      const request =
+        options.pages === undefined
+          ? createOffscreenExportPdfMessage({
+              requestId: this.createRequestId(),
+              sentAt: this.now().toISOString(),
+              ...options,
+            })
+          : createOffscreenExportEditedPdfMessage({
+              requestId: this.createRequestId(),
+              sentAt: this.now().toISOString(),
+              ...options,
+              pages: options.pages,
+            });
+      const response = await this.runtime.sendMessage(request);
+      throwOffscreenError(response);
+      if (!isOffscreenPdfExportedMessage(response) || response.requestId !== request.requestId) {
+        throw unavailableError(
+          new TypeError("Offscreen processor returned an invalid PDF response."),
+        );
+      }
+      return response.payload;
+    });
+  }
+
+  async createPdfThumbnail(options: CreatePdfThumbnailOptions): Promise<ArtifactMetadata> {
+    return this.withDocument(async () => {
+      const request = createOffscreenPdfThumbnailMessage({
         requestId: this.createRequestId(),
         sentAt: this.now().toISOString(),
         ...options,
       });
       const response = await this.runtime.sendMessage(request);
       throwOffscreenError(response);
-      if (!isOffscreenPdfExportedMessage(response) || response.requestId !== request.requestId) {
+      if (
+        !isOffscreenPdfThumbnailCreatedMessage(response) ||
+        response.requestId !== request.requestId
+      ) {
         throw unavailableError(
-          new TypeError("Offscreen processor returned an invalid PDF response."),
+          new TypeError("Offscreen processor returned an invalid PDF thumbnail response."),
         );
       }
       return response.payload;

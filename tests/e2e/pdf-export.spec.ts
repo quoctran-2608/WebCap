@@ -11,6 +11,8 @@ interface PdfState {
     totalPages: number;
     tileCount: number;
     errorCode?: string;
+    errorCauseCode?: string;
+    errorMessage?: string;
   } | null;
   artifact: {
     artifactId: string;
@@ -53,7 +55,7 @@ async function readPdfState(serviceWorker: Worker): Promise<PdfState> {
       updatedAt: string;
       outputArtifactId?: string;
       exportProgress?: { completedPages: number; totalPages: number };
-      error?: { code: string };
+      error?: { code: string; causeCode?: string; message?: string };
     }>;
     const job = jobs
       .filter((candidate) => candidate.mode === "full-page")
@@ -91,7 +93,15 @@ async function readPdfState(serviceWorker: Worker): Promise<PdfState> {
               completedPages: job.exportProgress?.completedPages ?? 0,
               totalPages: job.exportProgress?.totalPages ?? 0,
               tileCount: tiles.length,
-              ...(job.error === undefined ? {} : { errorCode: job.error.code }),
+              ...(job.error === undefined
+                ? {}
+                : {
+                    errorCode: job.error.code,
+                    ...(job.error.causeCode === undefined
+                      ? {}
+                      : { errorCauseCode: job.error.causeCode }),
+                    ...(job.error.message === undefined ? {} : { errorMessage: job.error.message }),
+                  }),
             },
       artifact:
         artifact === undefined
@@ -162,6 +172,14 @@ test("@smoke exports a stored full-page tile set as a loadable paged PDF", async
     .poll(
       async () => {
         const state = await readPdfState(serviceWorker);
+        if (state.job?.state === "failed") {
+          return JSON.stringify({
+            state: state.job.state,
+            errorCode: state.job.errorCode,
+            errorCauseCode: state.job.errorCauseCode,
+            errorMessage: state.job.errorMessage,
+          });
+        }
         return state.job?.state ?? "missing";
       },
       { timeout: 45_000 },

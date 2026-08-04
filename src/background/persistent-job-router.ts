@@ -641,10 +641,18 @@ export async function routePdfExportProgressMessage(
   if (!isOffscreenPdfExportProgressMessage(message)) {
     return undefined;
   }
-  const accepted =
-    dependencies.pdfExports === undefined
-      ? false
-      : (await dependencies.pdfExports.handleProgress(message.payload)) !== undefined;
+  let accepted = false;
+  if (dependencies.pdfExports !== undefined) {
+    try {
+      accepted = (await dependencies.pdfExports.handleProgress(message.payload)) !== undefined;
+    } catch {
+      try {
+        accepted = (await dependencies.jobs.get(message.payload.jobId))?.state === "exporting";
+      } catch {
+        accepted = false;
+      }
+    }
+  }
   return createOffscreenPdfExportProgressAckMessage({
     requestId: message.requestId,
     jobId: message.payload.jobId,
@@ -662,11 +670,22 @@ export function registerPersistentJobRouter(): void {
       sendResponse: (response?: unknown) => void,
     ) => {
       if (isOffscreenPdfExportProgressMessage(message)) {
-        void routePdfExportProgressMessage(message, dependencies).then((response) => {
-          if (response !== undefined) {
-            sendResponse(response);
-          }
-        });
+        void routePdfExportProgressMessage(message, dependencies)
+          .then((response) => {
+            if (response !== undefined) {
+              sendResponse(response);
+            }
+          })
+          .catch(() => {
+            sendResponse(
+              createOffscreenPdfExportProgressAckMessage({
+                requestId: message.requestId,
+                jobId: message.payload.jobId,
+                accepted: false,
+                sentAt: dependencies.now().toISOString(),
+              }),
+            );
+          });
         return true;
       }
       if (isElementSelectionEventType(message)) {

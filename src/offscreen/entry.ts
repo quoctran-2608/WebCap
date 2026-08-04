@@ -1,4 +1,12 @@
+import { createPdfPageThumbnail } from "@editor/thumbnail-service";
+import { isOffscreenExportEditedPdfMessage } from "@shared/contracts/pdf-editor-offscreen";
 import {
+  createOffscreenPdfThumbnailCreatedMessage,
+  isOffscreenPdfThumbnailMessage,
+  type OffscreenPdfThumbnailCreatedMessage,
+} from "@shared/contracts/pdf-thumbnail-offscreen";
+import {
+  OffscreenPdfExportProgressAckMessageSchema,
   createOffscreenErrorMessage,
   createOffscreenImageProcessedMessage,
   createOffscreenObjectUrlCreatedMessage,
@@ -15,12 +23,14 @@ import { IndexedDbTileRepository } from "@storage/tile-repository";
 
 import { ImageProcessor } from "./image-processor";
 import { ObjectUrlRegistry } from "./object-url-registry";
-import { PdfExporter, type PdfExportProgress } from "./pdf-exporter";
+import { PdfExporter, type PdfExportPayload, type PdfExportProgress } from "./pdf-exporter";
+
+export type OffscreenRouterResponse = OffscreenResponse | OffscreenPdfThumbnailCreatedMessage;
 
 export interface OffscreenRouterDependencies {
   processor: ImageProcessor;
   pdfExporter: PdfExporter;
-  reportPdfProgress: (progress: PdfExportProgress) => Promise<void>;
+  reportPdfProgress: (progress: PdfExportProgress) => Promise<boolean>;
   objectUrls: ObjectUrlRegistry;
   now: () => Date;
 }
@@ -31,12 +41,18 @@ const defaultDependencies: OffscreenRouterDependencies = {
   processor: new ImageProcessor({ artifacts }),
   pdfExporter: new PdfExporter({ artifacts, tiles }),
   reportPdfProgress: async (progress) => {
-    await chrome.runtime.sendMessage(
-      createOffscreenPdfExportProgressMessage({
-        requestId: crypto.randomUUID(),
-        sentAt: new Date().toISOString(),
-        ...progress,
-      }),
+    const request = createOffscreenPdfExportProgressMessage({
+      requestId: crypto.randomUUID(),
+      sentAt: new Date().toISOString(),
+      ...progress,
+    });
+    const response: unknown = await chrome.runtime.sendMessage(request);
+    const parsed = OffscreenPdfExportProgressAckMessageSchema.safeParse(response);
+    return (
+      parsed.success &&
+      parsed.data.requestId === request.requestId &&
+      parsed.data.payload.jobId === progress.jobId &&
+      parsed.data.payload.accepted
     );
   },
   objectUrls: new ObjectUrlRegistry({ artifacts }),
@@ -60,10 +76,64 @@ function targetsOffscreen(value: unknown): boolean {
   );
 }
 
+async function exportPdf(
+  requestId: string,
+  payload: PdfExportPayload,
+  dependencies: OffscreenRouterDependencies,
+): Promise<OffscreenResponse> {
+  const result = await dependencies.pdfExporter.export(payload, dependencies.reportPdfProgress);
+  return createOffscreenPdfExportedMessage({
+    requestId,
+    artifact: result.artifact,
+    sentAt: dependencies.now().toISOString(),
+  });
+}
+
 export async function routeOffscreenMessage(
   message: unknown,
   dependencies: OffscreenRouterDependencies = defaultDependencies,
-): Promise<OffscreenResponse | undefined> {
+): Promise<OffscreenRouterResponse | undefined> {
+  if (isOffscreenPdfThumbnailMessage(message)) {
+    try {
+      const thumbnail = await createPdfPageThumbnail(message.payload);
+      return createOffscreenPdfThumbnailCreatedMessage({
+        requestId: message.requestId,
+        artifact: thumbnail.metadata,
+        sentAt: dependencies.now().toISOString(),
+      });
+    } catch (error) {
+      return createOffscreenErrorMessage({
+        requestId: message.requestId,
+        error: normalizeError(error, {
+          code: "E_EXPORT_FAILED",
+          stage: "process",
+          userMessageKey: "errors.exportFailed",
+          retryable: true,
+          fallbackAllowed: false,
+        }),
+        sentAt: dependencies.now().toISOString(),
+      });
+    }
+  }
+
+  if (isOffscreenExportEditedPdfMessage(message)) {
+    try {
+      return await exportPdf(message.requestId, message.payload, dependencies);
+    } catch (error) {
+      return createOffscreenErrorMessage({
+        requestId: message.requestId,
+        error: normalizeError(error, {
+          code: "E_EXPORT_FAILED",
+          stage: "export",
+          userMessageKey: "errors.exportFailed",
+          retryable: true,
+          fallbackAllowed: false,
+        }),
+        sentAt: dependencies.now().toISOString(),
+      });
+    }
+  }
+
   const parsed = parseOffscreenRequest(message);
   if (!parsed.ok) {
     const requestId = requestIdFrom(message);
@@ -90,29 +160,8 @@ export async function routeOffscreenMessage(
           artifact: await dependencies.processor.process(parsed.value.payload),
           sentAt: dependencies.now().toISOString(),
         });
-      case "OFFSCREEN_EXPORT_PDF": {
-        const payload = parsed.value.payload;
-        const result = await dependencies.pdfExporter.export(
-          {
-            jobId: payload.jobId,
-            outputArtifactId: payload.outputArtifactId,
-            targetRect: payload.targetRect,
-            tiles: payload.tiles,
-            settings: payload.settings,
-            filename: payload.filename,
-            createdAt: payload.createdAt,
-            expiresAt: payload.expiresAt,
-            ...(payload.sourceTitle === undefined ? {} : { sourceTitle: payload.sourceTitle }),
-            ...(payload.sourceDomain === undefined ? {} : { sourceDomain: payload.sourceDomain }),
-          },
-          dependencies.reportPdfProgress,
-        );
-        return createOffscreenPdfExportedMessage({
-          requestId: parsed.value.requestId,
-          artifact: result.artifact,
-          sentAt: dependencies.now().toISOString(),
-        });
-      }
+      case "OFFSCREEN_EXPORT_PDF":
+        return exportPdf(parsed.value.requestId, parsed.value.payload, dependencies);
       case "OFFSCREEN_CREATE_OBJECT_URL":
         return createOffscreenObjectUrlCreatedMessage({
           requestId: parsed.value.requestId,

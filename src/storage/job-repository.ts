@@ -70,13 +70,14 @@ export class IndexedDbJobRepository implements JobRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.jobs, "readwrite");
+      const completed = transactionDone(transaction);
       const store = transaction.objectStore(WEBCAP_STORES.jobs);
       const existing = await requestResult<unknown>(store.get(validated.id));
       if (existing !== undefined) {
         throw revisionConflict(validated.id, 0, parseJob(existing).stateRevision);
       }
       store.add(validated);
-      await transactionDone(transaction);
+      await completed;
     } catch (error) {
       throw storageError("write", error);
     }
@@ -89,7 +90,6 @@ export class IndexedDbJobRepository implements JobRepositoryPort {
       const value = await requestResult<unknown>(
         transaction.objectStore(WEBCAP_STORES.jobs).get(jobId),
       );
-      await transactionDone(transaction);
       return value === undefined ? undefined : parseJob(value);
     } catch (error) {
       throw storageError("read", error);
@@ -101,6 +101,7 @@ export class IndexedDbJobRepository implements JobRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.jobs, "readwrite");
+      const completed = transactionDone(transaction);
       const store = transaction.objectStore(WEBCAP_STORES.jobs);
       const value = await requestResult<unknown>(store.get(validated.id));
       if (value === undefined) {
@@ -116,7 +117,7 @@ export class IndexedDbJobRepository implements JobRepositoryPort {
       }
 
       store.put(validated);
-      await transactionDone(transaction);
+      await completed;
     } catch (error) {
       throw storageError("write", error);
     }
@@ -136,14 +137,15 @@ export class IndexedDbJobRepository implements JobRepositoryPort {
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.jobs, "readwrite");
+      const completed = transactionDone(transaction);
       const store = transaction.objectStore(WEBCAP_STORES.jobs);
       const existing = await requestResult<unknown>(store.get(jobId));
       if (existing === undefined) {
-        await transactionDone(transaction);
+        await completed;
         return false;
       }
       store.delete(jobId);
-      await transactionDone(transaction);
+      await completed;
       return true;
     } catch (error) {
       throw storageError("write", error);
@@ -157,7 +159,6 @@ export class IndexedDbJobRepository implements JobRepositoryPort {
       const values = await requestResult<unknown[]>(
         transaction.objectStore(WEBCAP_STORES.jobs).getAll(),
       );
-      await transactionDone(transaction);
       return values
         .map(parseJob)
         .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt));

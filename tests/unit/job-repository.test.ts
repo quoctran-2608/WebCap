@@ -92,6 +92,15 @@ async function runtimeRejection(operation: Promise<unknown>): Promise<WebCapRunt
 }
 
 describe("IndexedDbJobRepository", () => {
+  it("resolves readonly job requests without waiting for transaction completion", async () => {
+    const stored = job(1);
+    const repository = new IndexedDbJobRepository({
+      openDatabase: () => Promise.resolve(databaseWithStoredJob(stored)),
+    });
+
+    await expect(repository.get(stored.id)).resolves.toEqual(stored);
+  });
+
   it("rejects stale compare-and-set writes", async () => {
     const repository = new IndexedDbJobRepository({
       openDatabase: () => Promise.resolve(databaseWithStoredJob(job(2))),

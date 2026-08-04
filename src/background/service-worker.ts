@@ -1,5 +1,7 @@
 import { registerMessageRouter } from "./message-router";
+import { registerPdfEditorRouter } from "./pdf-editor-router";
 import { registerPersistentJobRouter } from "./persistent-job-router";
 
 registerMessageRouter();
 registerPersistentJobRouter();
+registerPdfEditorRouter();
