@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Bounded lazy/infinite-page preparation with explicit completion reasons for stable height, maximum CSS height, elapsed duration, tile limit, and user-requested stop.
+- Partial-capture metadata and popup warnings that preserve only a safe contiguous stored prefix, allow the user to keep captured tiles, and never represent guard-limited output as complete.
+- Temporary scroll-snap suppression with compare-before-restore cleanup plus bounded layout-shift settling before measurement and capture.
+- Deterministic iframe, Canvas 2D, WebGL, infinite-scroll, scroll-snap, and settling-layout fixtures, including compositor-pixel validation for same-origin and cross-origin frames without cross-origin DOM access.
+- The S18 clean reference gate passes 268 unit tests across 75 files, four PDF benchmark scenarios, the verified Manifest V3 build, and 33 Playwright E2E cases including DPR 2 and 125% zoom.
 - Typed PDF-source capability model for non-PDF, original passthrough, viewer capture, authentication-required, and unsupported sources using permitted URL, content-type, and Chrome PDF viewer signals.
 - Explicit optional-origin and `file:///*` permission flow that runs only after user intent and leaves image capture available when permission is denied.
 - Original PDF byte passthrough with active-tab revalidation, credential-context fetch, 128 MiB guard, `%PDF-` verification, SHA-256/size metadata, unchanged local IndexedDB Blob persistence, and download through the existing object-URL lifecycle without rasterization.
