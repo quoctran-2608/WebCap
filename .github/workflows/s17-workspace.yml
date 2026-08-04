@@ -8,6 +8,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: s17-workspace-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   workspace:
     if: github.head_ref == 'agent/s17-pdf-source-passthrough'
@@ -18,17 +22,12 @@ jobs:
       - name: Check out S17 branch
         uses: actions/checkout@v4
 
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.15.1
-          run_install: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.22.0
-          cache: pnpm
+      - name: Install pinned pnpm
+        run: |
+          corepack enable
+          corepack install pnpm@11.15.1 --activate
+          node --version
+          pnpm --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
