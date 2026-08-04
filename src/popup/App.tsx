@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import iconData from "../../assets/icons.json";
 
 import { FOUNDATION_CAPABILITIES, type CaptureCapabilities } from "@shared/capabilities";
+import { copyText } from "@shared/clipboard";
+import { serializeSafeDiagnostics } from "@shared/diagnostics";
 import type { CaptureJob, CaptureMode, ImageFormat, OutputFormat } from "@shared/contracts/domain";
 import type { TabCapabilityPayload } from "@shared/contracts/messages";
+import { WebCapRuntimeError, type WebCapErrorCode } from "@shared/errors/error";
+import { errorPresentation, t, type MessageKey, type UiLocale } from "@shared/i18n";
+import { useUiLocale } from "@shared/use-ui-locale";
 import type { PdfOriginalDownload, PdfSourceCapability } from "@shared/contracts/pdf-source";
 import type {
   VisibleSessionSnapshot,
@@ -36,20 +41,9 @@ import {
   startVisibleCapture,
 } from "./worker-client";
 
-const CAPTURE_MODES = [
-  { id: "visible", label: "Vùng đang xem" },
-  { id: "full-page", label: "Toàn bộ trang" },
-  { id: "region", label: "Vùng tự chọn" },
-  { id: "element", label: "Phần tử" },
-  { id: "scroll-area", label: "Vùng cuộn" },
-] as const;
+const CAPTURE_MODE_IDS = ["visible", "full-page", "region", "element", "scroll-area"] as const;
 
-const OUTPUT_FORMATS: ReadonlyArray<{ id: OutputFormat; label: string }> = [
-  { id: "png", label: "PNG" },
-  { id: "jpeg", label: "JPEG" },
-  { id: "webp", label: "WebP" },
-  { id: "pdf", label: "PDF" },
-];
+const OUTPUT_FORMATS: ReadonlyArray<OutputFormat> = ["png", "jpeg", "webp", "pdf"];
 
 const IMAGE_QUALITY = 0.92;
 const SESSION_POLL_MS = 350;
@@ -57,127 +51,92 @@ const SESSION_POLL_MS = 350;
 type WorkerStatus = "checking" | "connected" | "unavailable";
 type UiStatus = VisibleSessionStatus | "idle";
 
-const STATUS_COPY: Record<WorkerStatus, string> = {
-  checking: "Đang kết nối…",
-  connected: "Đã kết nối",
-  unavailable: "Không thể kết nối",
-};
-
-const TAB_STATUS_COPY: Record<TabCapabilityPayload["status"], string> = {
-  supported: "Có thể chụp",
-  unsupported: "URL không hỗ trợ",
-  unavailable: "Không có tab hoạt động",
-};
-
-const CAPTURE_STATUS_COPY: Record<Exclude<UiStatus, "idle">, string> = {
-  capturing: "Đang chụp tab hiện tại…",
-  captured: "Đã chụp xong, chuẩn bị mã hóa…",
-  processing: "Đang tạo ảnh xem trước…",
-  ready: "Bản xem trước đã sẵn sàng.",
-  downloading: "Đang bắt đầu tải xuống…",
-  completed: "Tệp đã được gửi tới Chrome Downloads.",
-  cancelled: "Đã hủy thao tác chụp.",
-  error: "Không thể hoàn tất thao tác.",
-};
-
-const TILED_STATUS_COPY: Record<CaptureJob["state"], string> = {
-  created: "Đang khởi tạo phiên chụp…",
-  preparing: "Đang chuẩn bị và làm ổn định trang…",
-  capturing: "Đang chụp các tile; WebCap tự chuyển sang scroll fallback khi cần…",
-  processing: "Đang xác nhận tile set…",
-  ready: "Tile set toàn trang đã sẵn sàng.",
-  exporting: "Đang tạo PDF từng trang…",
-  completed: "PDF đã sẵn sàng để tải xuống.",
-  failed: "Không thể hoàn tất chụp toàn trang.",
-  cancelling: "Đang hủy và phục hồi trang…",
-  cancelled: "Đã hủy chụp toàn trang.",
-};
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message.length > 0
-    ? error.message
-    : "WebCap không thể hoàn tất thao tác.";
+function workerStatusCopy(locale: UiLocale, status: WorkerStatus): string {
+  return t(locale, `popup.worker.${status}` as MessageKey);
 }
 
-function pdfCapabilityCopy(capability: PdfSourceCapability): { title: string; detail: string } {
+function tabStatusCopy(locale: UiLocale, status: TabCapabilityPayload["status"]): string {
+  return t(locale, `popup.tab.${status}` as MessageKey);
+}
+
+function captureStatusCopy(locale: UiLocale, status: Exclude<UiStatus, "idle">): string {
+  return t(locale, `popup.capture.${status}` as MessageKey);
+}
+
+function genericErrorCopy(locale: UiLocale, error: unknown): string {
+  const presentation =
+    error instanceof WebCapRuntimeError
+      ? errorPresentation(locale, error.data)
+      : typeof error === "object" && error !== null && "code" in error
+        ? errorPresentation(locale, error as { code: WebCapErrorCode })
+        : errorPresentation(
+            locale,
+            error instanceof Error && error.name.startsWith("E_")
+              ? (error.name as WebCapErrorCode)
+              : "E_UNKNOWN",
+          );
+  return `${presentation.message} ${presentation.action}`;
+}
+
+function pdfCapabilityCopy(
+  locale: UiLocale,
+  capability: PdfSourceCapability,
+): { title: string; detail: string } {
   if (capability.status === "auth-required") {
-    return {
-      title: "Nguồn PDF cần đăng nhập",
-      detail:
-        "Đăng nhập trong tab hiện tại rồi kiểm tra lại. WebCap không đọc hoặc ghi log thông tin đăng nhập.",
-    };
+    return { title: t(locale, "popup.pdf.authTitle"), detail: t(locale, "popup.pdf.authDetail") };
   }
   if (capability.status === "viewer-capture") {
     return {
-      title: "Không thể lấy byte PDF gốc",
-      detail:
-        "Bạn vẫn có thể chụp phần PDF đang hiển thị bằng chế độ toàn trang, vùng chọn hoặc vùng cuộn.",
+      title: t(locale, "popup.pdf.viewerTitle"),
+      detail: t(locale, "popup.pdf.viewerDetail"),
     };
   }
   if (capability.status === "unsupported") {
     return {
-      title: "Nguồn PDF không được hỗ trợ",
-      detail:
-        "Chrome không cho phép WebCap truy cập trực tiếp nguồn này. Có thể dùng chụp ảnh nếu tab vẫn hiển thị nội dung.",
+      title: t(locale, "popup.pdf.unsupportedTitle"),
+      detail: t(locale, "popup.pdf.unsupportedDetail"),
     };
   }
   if (capability.permission === "file-access-required") {
     return {
-      title: "Cần bật quyền truy cập file",
-      detail:
-        "Mở trang quản lý tiện ích của Chrome, bật “Cho phép truy cập vào URL của tệp”, rồi mở lại popup.",
+      title: t(locale, "popup.pdf.filePermissionTitle"),
+      detail: t(locale, "popup.pdf.filePermissionDetail"),
     };
   }
   if (capability.permission === "host-required") {
     return {
-      title: "Có thể tải PDF nguyên bản",
-      detail:
-        "WebCap chỉ xin quyền cho đúng nguồn PDF này khi bạn bấm tải; byte tài liệu không được gửi lên máy chủ.",
+      title: t(locale, "popup.pdf.originalTitle"),
+      detail: t(locale, "popup.pdf.hostPermissionDetail"),
     };
   }
   return {
-    title: "Có thể tải PDF nguyên bản",
-    detail: "WebCap sẽ giữ nguyên byte PDF, kiểm tra chữ ký và tải xuống mà không rasterize lại.",
+    title: t(locale, "popup.pdf.originalTitle"),
+    detail: t(locale, "popup.pdf.originalDetail"),
   };
 }
 
-function tiledStatusCopy(job: CaptureJob): string {
-  if (job.mode === "element") {
-    if (job.state === "created") return "Chọn phần tử trực tiếp trên trang…";
-    if (job.state === "ready") return "Tile set phần tử đã sẵn sàng.";
-    if (job.state === "failed") return "Không thể hoàn tất chụp phần tử.";
-    if (job.state === "cancelled") return "Đã hủy chọn phần tử.";
+function tiledStatusCopy(locale: UiLocale, job: CaptureJob): string {
+  const specializedStates = [
+    "created",
+    "preparing",
+    "capturing",
+    "ready",
+    "failed",
+    "cancelled",
+  ] as const;
+  if (
+    (job.mode === "element" || job.mode === "region" || job.mode === "scroll-area") &&
+    specializedStates.includes(job.state as (typeof specializedStates)[number])
+  ) {
+    const key = `popup.job.${job.mode}.${job.state}` as const;
+    return t(locale, key as MessageKey);
   }
-  if (job.mode === "region") {
-    if (job.state === "created") return "Chọn vùng trực tiếp trên trang…";
-    if (job.state === "ready") return "Tile set vùng chọn đã sẵn sàng.";
-    if (job.state === "failed") return "Không thể hoàn tất chụp vùng chọn.";
-    if (job.state === "cancelled") return "Đã hủy chọn vùng.";
-  }
-  if (job.mode === "scroll-area") {
-    if (job.state === "created") return "Chọn một khung có nội dung cuộn trên trang…";
-    if (job.state === "preparing") return "Đang đo toàn bộ nội dung bên trong vùng cuộn…";
-    if (job.state === "capturing") return "Đang cuộn và chụp từng phần bên trong khung…";
-    if (job.state === "ready") return "Tile set toàn bộ vùng cuộn đã sẵn sàng.";
-    if (job.state === "failed") return "Không thể hoàn tất chụp vùng cuộn.";
-    if (job.state === "cancelled") return "Đã hủy chọn vùng cuộn.";
-  }
-  return TILED_STATUS_COPY[job.state];
+  return t(locale, `popup.job.${job.state}` as MessageKey);
 }
 
-function partialCaptureCopy(job: CaptureJob): string | undefined {
-  const partial = job.partialCapture;
-  if (partial === undefined) return undefined;
-  if (partial.reason === "max-css-height") {
-    return "WebCap đã chụp đến giới hạn chiều cao cấu hình. Phần tile hiện có vẫn có thể xuất PDF.";
-  }
-  if (partial.reason === "max-duration") {
-    return "Trang tiếp tục tăng sau thời gian chuẩn bị tối đa. WebCap đã giữ phần nội dung ổn định đã chụp được.";
-  }
-  if (partial.reason === "max-tiles") {
-    return "Trang vượt giới hạn số tile an toàn. WebCap đã giữ phần liên tục từ đầu trang thay vì cắt im lặng.";
-  }
-  return "Bạn đã dừng sớm và giữ phần tile liên tục đã chụp được.";
+function partialCaptureCopy(locale: UiLocale, job: CaptureJob): string | undefined {
+  const reason = job.partialCapture?.reason;
+  return reason === undefined ? undefined : t(locale, `popup.partial.${reason}` as MessageKey);
 }
 
 function isFullPageBusy(job: CaptureJob | undefined): boolean {
@@ -190,6 +149,7 @@ function isFullPageBusy(job: CaptureJob | undefined): boolean {
 }
 
 export function App(): React.JSX.Element {
+  const { locale, setLocale } = useUiLocale();
   const [workerStatus, setWorkerStatus] = useState<WorkerStatus>("checking");
   const [workerVersion, setWorkerVersion] = useState<string>();
   const [capabilities, setCapabilities] = useState<CaptureCapabilities>(FOUNDATION_CAPABILITIES);
@@ -209,6 +169,7 @@ export function App(): React.JSX.Element {
   const [pdfDownloading, setPdfDownloading] = useState(false);
   const [pdfDownload, setPdfDownload] = useState<PdfOriginalDownload>();
   const [pdfError, setPdfError] = useState<string>();
+  const [diagnosticsNotice, setDiagnosticsNotice] = useState<string>();
   const resumedSessionRef = useRef<string | undefined>(undefined);
   const activeCaptureRequestIdRef = useRef<string | undefined>(undefined);
   const feedbackHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -272,7 +233,7 @@ export function App(): React.JSX.Element {
           }
         } catch (error) {
           if (active) {
-            setUiError(errorMessage(error));
+            setUiError(genericErrorCopy(locale, error));
           }
         }
       } catch {
@@ -285,7 +246,7 @@ export function App(): React.JSX.Element {
     return () => {
       active = false;
     };
-  }, []);
+  }, [locale]);
 
   useEffect(() => {
     let active = true;
@@ -308,7 +269,7 @@ export function App(): React.JSX.Element {
         if (active) setPdfCapability(capability);
       })
       .catch((error: unknown) => {
-        if (active) setPdfError(errorMessage(error));
+        if (active) setPdfError(genericErrorCopy(locale, error));
       })
       .finally(() => {
         if (active) setPdfInspecting(false);
@@ -317,7 +278,7 @@ export function App(): React.JSX.Element {
     return () => {
       active = false;
     };
-  }, [tabCapability.status, tabCapability.tabId, workerStatus]);
+  }, [locale, tabCapability.status, tabCapability.tabId, workerStatus]);
 
   const status: UiStatus = localStatus === "idle" ? (session?.status ?? "idle") : localStatus;
   const visibleBusy = status === "capturing" || status === "processing" || status === "downloading";
@@ -333,9 +294,8 @@ export function App(): React.JSX.Element {
       ["ready", "exporting", "completed", "failed", "cancelled"].includes(fullPageJob.state)
     : status === "ready" || status === "completed" || status === "error";
   const availableFormats = OUTPUT_FORMATS.filter(
-    (format): format is { id: ImageFormat; label: string } =>
-      format.id !== "pdf" && capabilities.outputFormats[format.id],
-  );
+    (format): format is ImageFormat => format !== "pdf" && capabilities.outputFormats[format],
+  ).map((format) => ({ id: format, label: format.toUpperCase() }));
   const selectedModeEnabled = capabilities.modes[selectedMode];
   const canCapture =
     workerStatus === "connected" &&
@@ -364,14 +324,14 @@ export function App(): React.JSX.Element {
 
     const timer = globalThis.setInterval(() => {
       void syncFullPageJob(fullPageJob.id).catch((error: unknown) => {
-        setUiError(errorMessage(error));
+        setUiError(genericErrorCopy(locale, error));
       });
     }, SESSION_POLL_MS);
 
     return () => {
       globalThis.clearInterval(timer);
     };
-  }, [fullPageBusy, fullPageJob, syncFullPageJob]);
+  }, [fullPageBusy, fullPageJob, locale, syncFullPageJob]);
 
   useEffect(() => {
     if (terminal) {
@@ -399,7 +359,7 @@ export function App(): React.JSX.Element {
       })
       .catch((error: unknown) => {
         if (!disposed) {
-          setUiError(errorMessage(error));
+          setUiError(genericErrorCopy(locale, error));
         }
       });
 
@@ -407,15 +367,19 @@ export function App(): React.JSX.Element {
       disposed = true;
       revoke?.();
     };
-  }, [session?.artifact?.artifactId]);
+  }, [locale, session?.artifact?.artifactId]);
 
   const handleOperationError = useCallback(
     async (error: unknown): Promise<void> => {
       const restored = await syncSession().catch(() => undefined);
       setLocalStatus("idle");
-      setUiError(restored?.error?.message ?? errorMessage(error));
+      setUiError(
+        restored?.error === undefined
+          ? genericErrorCopy(locale, error)
+          : genericErrorCopy(locale, restored.error),
+      );
     },
-    [syncSession],
+    [locale, syncSession],
   );
 
   const runExport = useCallback(
@@ -474,7 +438,7 @@ export function App(): React.JSX.Element {
 
   const handleFullPageCapture = useCallback(async (): Promise<void> => {
     if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
-      setUiError("Không xác định được tab đang hoạt động.");
+      setUiError(genericErrorCopy(locale, { code: "E_TAB_NOT_ACTIVE" }));
       return;
     }
     setFullPageJob(undefined);
@@ -488,13 +452,13 @@ export function App(): React.JSX.Element {
       setFullPageJob(job);
       await syncFullPageJob(job.id);
     } catch (error) {
-      setUiError(errorMessage(error));
+      setUiError(genericErrorCopy(locale, error));
     }
-  }, [selectedFormat, syncFullPageJob, tabCapability.tabId, tabCapability.windowId]);
+  }, [locale, selectedFormat, syncFullPageJob, tabCapability.tabId, tabCapability.windowId]);
 
   const handleRegionCapture = useCallback(async (): Promise<void> => {
     if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
-      setUiError("Không xác định được tab đang hoạt động.");
+      setUiError(genericErrorCopy(locale, { code: "E_TAB_NOT_ACTIVE" }));
       return;
     }
     setFullPageJob(undefined);
@@ -507,13 +471,13 @@ export function App(): React.JSX.Element {
       });
       setFullPageJob(job);
     } catch (error) {
-      setUiError(errorMessage(error));
+      setUiError(genericErrorCopy(locale, error));
     }
-  }, [selectedFormat, tabCapability.tabId, tabCapability.windowId]);
+  }, [locale, selectedFormat, tabCapability.tabId, tabCapability.windowId]);
 
   const handleElementCapture = useCallback(async (): Promise<void> => {
     if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
-      setUiError("Không xác định được tab đang hoạt động.");
+      setUiError(genericErrorCopy(locale, { code: "E_TAB_NOT_ACTIVE" }));
       return;
     }
     setFullPageJob(undefined);
@@ -526,13 +490,13 @@ export function App(): React.JSX.Element {
       });
       setFullPageJob(job);
     } catch (error) {
-      setUiError(errorMessage(error));
+      setUiError(genericErrorCopy(locale, error));
     }
-  }, [selectedFormat, tabCapability.tabId, tabCapability.windowId]);
+  }, [locale, selectedFormat, tabCapability.tabId, tabCapability.windowId]);
 
   const handleScrollAreaCapture = useCallback(async (): Promise<void> => {
     if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
-      setUiError("Không xác định được tab đang hoạt động.");
+      setUiError(genericErrorCopy(locale, { code: "E_TAB_NOT_ACTIVE" }));
       return;
     }
     setFullPageJob(undefined);
@@ -545,9 +509,9 @@ export function App(): React.JSX.Element {
       });
       setFullPageJob(job);
     } catch (error) {
-      setUiError(errorMessage(error));
+      setUiError(genericErrorCopy(locale, error));
     }
-  }, [selectedFormat, tabCapability.tabId, tabCapability.windowId]);
+  }, [locale, selectedFormat, tabCapability.tabId, tabCapability.windowId]);
 
   const handleCapture = useCallback(async (): Promise<void> => {
     if (!canCapture) {
@@ -595,7 +559,7 @@ export function App(): React.JSX.Element {
         setFullPageJob(job);
         await syncFullPageJob(job.id);
       } catch (error) {
-        setUiError(errorMessage(error));
+        setUiError(genericErrorCopy(locale, error));
       }
       return;
     }
@@ -619,6 +583,7 @@ export function App(): React.JSX.Element {
     selectedMode,
     session?.captureRequestId,
     status,
+    locale,
     syncFullPageJob,
     syncSession,
   ]);
@@ -630,9 +595,9 @@ export function App(): React.JSX.Element {
       setFullPageJob(job);
       await syncFullPageJob(job.id);
     } catch (error) {
-      setUiError(errorMessage(error));
+      setUiError(genericErrorCopy(locale, error));
     }
-  }, [fullPageJob, syncFullPageJob]);
+  }, [fullPageJob, locale, syncFullPageJob]);
 
   const handleRetry = useCallback(async (): Promise<void> => {
     if (
@@ -702,11 +667,11 @@ export function App(): React.JSX.Element {
     try {
       setPdfCapability(await inspectPdfSource());
     } catch (error) {
-      setPdfError(errorMessage(error));
+      setPdfError(genericErrorCopy(locale, error));
     } finally {
       setPdfInspecting(false);
     }
-  }, []);
+  }, [locale]);
 
   const handleOriginalPdfDownload = useCallback(async (): Promise<void> => {
     if (pdfCapability?.tabId === undefined) return;
@@ -718,8 +683,8 @@ export function App(): React.JSX.Element {
       if (!granted) {
         setPdfError(
           pdfCapability.permission === "file-access-required"
-            ? "Chrome chưa cho phép WebCap đọc file cục bộ. Bật quyền truy cập URL của tệp trong trang quản lý tiện ích rồi thử lại."
-            : "Bạn đã từ chối quyền cho nguồn PDF. Luồng chụp ảnh của WebCap vẫn sử dụng được.",
+            ? t(locale, "popup.pdf.fileDenied")
+            : t(locale, "popup.pdf.permissionDenied"),
         );
         return;
       }
@@ -727,7 +692,7 @@ export function App(): React.JSX.Element {
       const refreshed = await inspectPdfSource();
       setPdfCapability(refreshed);
       if (refreshed.permission !== "granted") {
-        setPdfError("Chrome chưa cấp quyền cần thiết cho nguồn PDF này.");
+        setPdfError(t(locale, "popup.pdf.permissionMissing"));
         return;
       }
 
@@ -737,14 +702,14 @@ export function App(): React.JSX.Element {
         setPdfCapability(result.capability);
       } else {
         setPdfCapability(result);
-        setPdfError(pdfCapabilityCopy(result).detail);
+        setPdfError(pdfCapabilityCopy(locale, result).detail);
       }
     } catch (error) {
-      setPdfError(errorMessage(error));
+      setPdfError(genericErrorCopy(locale, error));
     } finally {
       setPdfDownloading(false);
     }
-  }, [pdfCapability]);
+  }, [locale, pdfCapability]);
 
   const sourceEstimate =
     session?.source === undefined
@@ -754,6 +719,68 @@ export function App(): React.JSX.Element {
     fullPageJob === undefined || fullPageJob.totalTiles === 0
       ? 0
       : Math.round((fullPageJob.completedTiles / fullPageJob.totalTiles) * 100);
+
+  const diagnosticsJson = useMemo(
+    () =>
+      serializeSafeDiagnostics({
+        extensionVersion: workerVersion ?? chrome.runtime.getManifest().version,
+        locale,
+        surface: "popup",
+        workerStatus,
+        tabStatus: tabCapability.status,
+        chromeVersion: navigator.userAgent,
+        ...(fullPageJob === undefined
+          ? {}
+          : {
+              job: {
+                id: fullPageJob.id,
+                mode: fullPageJob.mode,
+                state: fullPageJob.state,
+                ...(fullPageJob.activeEngine === undefined
+                  ? {}
+                  : { engine: fullPageJob.activeEngine }),
+                completedTiles: fullPageJob.completedTiles,
+                totalTiles: fullPageJob.totalTiles,
+                ...(fullPageJob.error === undefined ? {} : { errorCode: fullPageJob.error.code }),
+              },
+            }),
+        ...(session === undefined
+          ? {}
+          : {
+              visible: {
+                status: session.status,
+                format: session.format,
+                ...(session.error === undefined ? {} : { errorCode: session.error.code }),
+              },
+            }),
+        ...(pdfCapability === undefined
+          ? {}
+          : {
+              pdf: {
+                status: pdfCapability.status,
+                permission: pdfCapability.permission,
+              },
+            }),
+      }),
+    [
+      fullPageJob,
+      locale,
+      pdfCapability,
+      session,
+      tabCapability.status,
+      workerStatus,
+      workerVersion,
+    ],
+  );
+
+  const handleCopyDiagnostics = useCallback(async (): Promise<void> => {
+    try {
+      await copyText(diagnosticsJson);
+      setDiagnosticsNotice(t(locale, "common.diagnosticsCopied"));
+    } catch {
+      setDiagnosticsNotice(t(locale, "common.diagnosticsCopyFailed"));
+    }
+  }, [diagnosticsJson, locale]);
 
   return (
     <main className="popup-shell">
@@ -766,38 +793,44 @@ export function App(): React.JSX.Element {
           height="40"
         />
         <div>
-          <p className="brand__eyebrow">CHROME EXTENSION</p>
+          <p className="brand__eyebrow">{t(locale, "popup.brandEyebrow")}</p>
           <h1>WebCap</h1>
         </div>
       </header>
 
-      <section className="status-card" aria-label="Trạng thái extension">
+      <section className="status-card" aria-label={t(locale, "popup.extensionStatus")}>
         <div className="status-row">
-          <span>Service worker</span>
+          <span>{t(locale, "popup.workerLabel")}</span>
           <strong
             className={`status status--${workerStatus}`}
             data-testid="worker-status"
             data-status={workerStatus}
           >
             <span className="status__dot" aria-hidden="true" />
-            {STATUS_COPY[workerStatus]}
+            {workerStatusCopy(locale, workerStatus)}
           </strong>
         </div>
         <div className="status-row">
-          <span>Phiên bản</span>
+          <span>{t(locale, "popup.version")}</span>
           <strong>{workerVersion ?? chrome.runtime.getManifest().version}</strong>
         </div>
         <div className="status-row">
-          <span>Tab hiện tại</span>
+          <span>{t(locale, "popup.currentTab")}</span>
           <strong
             className={`status status--${tabCapability.status === "supported" ? "connected" : "pending"}`}
             data-testid="tab-status"
             data-status={tabCapability.status}
           >
-            {TAB_STATUS_COPY[tabCapability.status]}
+            {tabStatusCopy(locale, tabCapability.status)}
           </strong>
         </div>
       </section>
+
+      {tabCapability.status === "unsupported" && (
+        <p className="restricted-page-notice" role="status" data-testid="restricted-page-copy">
+          {t(locale, "popup.tab.unsupportedDetail")}
+        </p>
+      )}
 
       {(pdfInspecting || (pdfCapability !== undefined && pdfCapability.status !== "not-pdf")) && (
         <section
@@ -810,13 +843,13 @@ export function App(): React.JSX.Element {
         >
           <div className="section-heading">
             <div>
-              <p className="section-heading__eyebrow">NGUỒN PDF</p>
+              <p className="section-heading__eyebrow">{t(locale, "popup.pdf.sourceEyebrow")}</p>
               <h2 id="pdf-source-title">
                 {pdfInspecting
-                  ? "Đang kiểm tra nguồn PDF…"
+                  ? t(locale, "popup.pdf.checking")
                   : pdfCapability === undefined
-                    ? "Nguồn PDF"
-                    : pdfCapabilityCopy(pdfCapability).title}
+                    ? t(locale, "popup.pdf.source")
+                    : pdfCapabilityCopy(locale, pdfCapability).title}
               </h2>
             </div>
             <span className="planned-badge">S17</span>
@@ -824,14 +857,16 @@ export function App(): React.JSX.Element {
 
           {pdfCapability !== undefined && (
             <>
-              <p className="pdf-source-card__detail">{pdfCapabilityCopy(pdfCapability).detail}</p>
+              <p className="pdf-source-card__detail">
+                {pdfCapabilityCopy(locale, pdfCapability).detail}
+              </p>
               <dl className="pdf-source-metadata">
                 <div>
-                  <dt>Nguồn</dt>
-                  <dd>{pdfCapability.sourceLabel ?? "Tab hiện tại"}</dd>
+                  <dt>{t(locale, "popup.pdf.sourceLabel")}</dt>
+                  <dd>{pdfCapability.sourceLabel ?? t(locale, "popup.pdf.currentTab")}</dd>
                 </div>
                 <div>
-                  <dt>Tệp</dt>
+                  <dt>{t(locale, "popup.pdf.fileLabel")}</dt>
                   <dd>{pdfCapability.filename ?? "document.pdf"}</dd>
                 </div>
               </dl>
@@ -846,12 +881,12 @@ export function App(): React.JSX.Element {
               onClick={() => void handleOriginalPdfDownload()}
             >
               {pdfDownloading
-                ? "Đang kiểm tra và tải PDF…"
+                ? t(locale, "popup.pdf.downloadChecking")
                 : pdfCapability.permission === "host-required"
-                  ? "Cho phép nguồn và tải PDF gốc"
+                  ? t(locale, "popup.pdf.allowAndDownload")
                   : pdfCapability.permission === "file-access-required"
-                    ? "Kiểm tra quyền file và tải PDF gốc"
-                    : "Tải PDF gốc"}
+                    ? t(locale, "popup.pdf.checkFileAndDownload")
+                    : t(locale, "popup.pdf.downloadOriginal")}
             </button>
           )}
 
@@ -863,7 +898,7 @@ export function App(): React.JSX.Element {
               disabled={pdfInspecting || pdfDownloading}
               onClick={() => void handleRefreshPdfSource()}
             >
-              Kiểm tra lại nguồn PDF
+              {t(locale, "popup.pdf.recheck")}
             </button>
           )}
 
@@ -874,7 +909,7 @@ export function App(): React.JSX.Element {
               data-download-id={pdfDownload.downloadId}
               data-checksum={pdfDownload.checksumSha256}
             >
-              <strong>PDF nguyên bản đã được gửi tới Chrome Downloads.</strong>
+              <strong>{t(locale, "popup.pdf.downloadSuccess")}</strong>
               <small>
                 {formatBytes(pdfDownload.originalByteLength)} · SHA-256{" "}
                 {pdfDownload.checksumSha256.slice(0, 12)}…
@@ -892,39 +927,31 @@ export function App(): React.JSX.Element {
       <section className="capture-panel" aria-labelledby="capture-title" aria-busy={busy}>
         <div className="section-heading">
           <div>
-            <p className="section-heading__eyebrow">CHẾ ĐỘ CHỤP</p>
-            <h2 id="capture-title">
-              {selectedMode === "full-page"
-                ? "Chụp toàn bộ trang"
-                : selectedMode === "region"
-                  ? "Chụp vùng tự chọn"
-                  : selectedMode === "element"
-                    ? "Chụp phần tử"
-                    : selectedMode === "scroll-area"
-                      ? "Chụp toàn bộ vùng cuộn"
-                      : "Chụp vùng đang xem"}
-            </h2>
+            <p className="section-heading__eyebrow">{t(locale, "popup.captureModeEyebrow")}</p>
+            <h2 id="capture-title">{t(locale, `popup.title.${selectedMode}` as MessageKey)}</h2>
           </div>
           <span className="planned-badge">
             {selectedMode === "visible" ? "M1" : selectedMode === "scroll-area" ? "S16" : "S14"}
           </span>
         </div>
 
-        <div className="mode-grid" aria-label="Các chế độ chụp">
-          {CAPTURE_MODES.map((mode) => {
-            const enabled = capabilities.modes[mode.id];
-            const selected = mode.id === selectedMode;
+        <div className="mode-grid" aria-label={t(locale, "popup.captureModes")}>
+          {CAPTURE_MODE_IDS.map((mode) => {
+            const enabled = capabilities.modes[mode];
+            const selected = mode === selectedMode;
             return (
               <button
                 className={`mode-button ${selected ? "mode-button--selected" : ""}`}
                 type="button"
                 disabled={!enabled || busy}
                 aria-pressed={selected}
-                onClick={() => setSelectedMode(mode.id)}
-                key={mode.id}
+                onClick={() => setSelectedMode(mode)}
+                key={mode}
               >
-                <span>{mode.label}</span>
-                <small>{enabled ? "Khả dụng" : "Chưa khả dụng"}</small>
+                <span>{t(locale, `popup.mode.${mode}` as MessageKey)}</span>
+                <small>
+                  {enabled ? t(locale, "common.available") : t(locale, "common.unavailable")}
+                </small>
               </button>
             );
           })}
@@ -933,11 +960,11 @@ export function App(): React.JSX.Element {
         {selectedMode === "visible" ? (
           <>
             <label className="field-label" htmlFor="output-format">
-              Định dạng đầu ra
+              {t(locale, "popup.outputFormat")}
             </label>
             <select
               id="output-format"
-              aria-label="Định dạng đầu ra"
+              aria-label={t(locale, "popup.outputFormat")}
               value={selectedFormat}
               disabled={busy}
               onChange={(event) => setSelectedFormat(event.target.value as ImageFormat)}
@@ -950,9 +977,7 @@ export function App(): React.JSX.Element {
             </select>
           </>
         ) : (
-          <p className="field-label">
-            Đầu ra: PDF nhiều trang · chỉnh khổ giấy, lề, chất lượng và thứ tự sau khi chụp.
-          </p>
+          <p className="field-label">{t(locale, "popup.pdfOutputHint")}</p>
         )}
 
         {busy ? (
@@ -963,7 +988,7 @@ export function App(): React.JSX.Element {
                 type="button"
                 onClick={() => void handleStopPartial()}
               >
-                Dừng và giữ {fullPageJob?.completedTiles} tile
+                {t(locale, "popup.stopKeep", { count: fullPageJob?.completedTiles ?? 0 })}
               </button>
             )}
             <button
@@ -971,7 +996,9 @@ export function App(): React.JSX.Element {
               type="button"
               onClick={() => void handleCancel()}
             >
-              {(fullPageJob?.completedTiles ?? 0) > 0 ? "Hủy và xóa phần tạm" : "Hủy chụp"}
+              {(fullPageJob?.completedTiles ?? 0) > 0
+                ? t(locale, "popup.cancelDiscard")
+                : t(locale, "popup.cancelCapture")}
             </button>
           </div>
         ) : selectedMode === "visible" && session?.artifact !== undefined ? null : (
@@ -983,15 +1010,7 @@ export function App(): React.JSX.Element {
             }
             onClick={() => void handleCapture()}
           >
-            {selectedMode === "full-page"
-              ? "Bắt đầu chụp toàn trang"
-              : selectedMode === "region"
-                ? "Bắt đầu chọn vùng"
-                : selectedMode === "element"
-                  ? "Bắt đầu chọn phần tử"
-                  : selectedMode === "scroll-area"
-                    ? "Bắt đầu chọn vùng cuộn"
-                    : "Tạo bản xem trước"}
+            {t(locale, `popup.start.${selectedMode}` as MessageKey)}
           </button>
         )}
 
@@ -999,7 +1018,7 @@ export function App(): React.JSX.Element {
           <section className="progress-card" aria-live="polite" data-testid="full-page-progress">
             {fullPageBusy && <span className="progress-card__spinner" aria-hidden="true" />}
             <div>
-              <strong>{tiledStatusCopy(fullPageJob)}</strong>
+              <strong>{tiledStatusCopy(locale, fullPageJob)}</strong>
               <small>
                 {fullPageJob.completedTiles}/{fullPageJob.totalTiles || "?"} tile ·{" "}
                 {fullPageProgress}%
@@ -1007,15 +1026,7 @@ export function App(): React.JSX.Element {
               <progress
                 value={fullPageJob.completedTiles}
                 max={Math.max(1, fullPageJob.totalTiles)}
-                aria-label={
-                  selectedMode === "region"
-                    ? "Tiến độ chụp vùng chọn"
-                    : selectedMode === "element"
-                      ? "Tiến độ chụp phần tử"
-                      : selectedMode === "scroll-area"
-                        ? "Tiến độ chụp vùng cuộn"
-                        : "Tiến độ chụp toàn trang"
-                }
+                aria-label={t(locale, `popup.progress.${selectedMode}` as MessageKey)}
               />
             </div>
           </section>
@@ -1025,10 +1036,13 @@ export function App(): React.JSX.Element {
           <section className="progress-card" aria-live="polite">
             <span className="progress-card__spinner" aria-hidden="true" />
             <div>
-              <strong>{CAPTURE_STATUS_COPY[status as Exclude<UiStatus, "idle">]}</strong>
+              <strong>{captureStatusCopy(locale, status)}</strong>
               {sourceEstimate !== undefined && (
                 <small>
-                  Ước tính {selectedFormat.toUpperCase()} · {formatBytes(sourceEstimate)}
+                  {t(locale, "popup.estimate", {
+                    format: selectedFormat.toUpperCase(),
+                    bytes: formatBytes(sourceEstimate),
+                  })}
                 </small>
               )}
             </div>
@@ -1043,18 +1057,20 @@ export function App(): React.JSX.Element {
           >
             <div className="preview-card__media">
               {previewUrl === undefined ? (
-                <div className="preview-card__placeholder">Đang tải bản xem trước…</div>
+                <div className="preview-card__placeholder">
+                  {t(locale, "popup.preview.loading")}
+                </div>
               ) : (
                 <img
                   src={previewUrl}
-                  alt="Bản xem trước ảnh chụp vùng đang xem"
+                  alt={t(locale, "popup.preview.alt")}
                   data-testid="preview-image"
                 />
               )}
             </div>
             <figcaption>
               <h3 ref={feedbackHeadingRef} tabIndex={-1} data-testid="preview-heading">
-                Bản xem trước
+                {t(locale, "popup.preview.title")}
               </h3>
               <dl
                 className="preview-metadata"
@@ -1065,17 +1081,17 @@ export function App(): React.JSX.Element {
                 data-bytes={session.artifact.byteLength}
               >
                 <div>
-                  <dt>Kích thước</dt>
+                  <dt>{t(locale, "popup.preview.dimensions")}</dt>
                   <dd>
                     {session.artifact.width} × {session.artifact.height} px
                   </dd>
                 </div>
                 <div>
-                  <dt>Định dạng</dt>
+                  <dt>{t(locale, "popup.preview.format")}</dt>
                   <dd>{session.artifact.format.toUpperCase()}</dd>
                 </div>
                 <div>
-                  <dt>Dung lượng</dt>
+                  <dt>{t(locale, "popup.preview.size")}</dt>
                   <dd>{formatBytes(session.artifact.byteLength)}</dd>
                 </div>
               </dl>
@@ -1086,7 +1102,9 @@ export function App(): React.JSX.Element {
                   disabled={busy}
                   onClick={() => void handleDownload()}
                 >
-                  {status === "downloading" ? "Đang tải…" : "Tải xuống"}
+                  {status === "downloading"
+                    ? t(locale, "popup.preview.downloading")
+                    : t(locale, "common.download")}
                 </button>
                 {session.source !== undefined && selectedFormat !== session.artifact.format && (
                   <button
@@ -1095,7 +1113,7 @@ export function App(): React.JSX.Element {
                     disabled={busy}
                     onClick={() => void handleRetry()}
                   >
-                    Tạo lại định dạng
+                    {t(locale, "popup.preview.reformat")}
                   </button>
                 )}
                 <button
@@ -1104,7 +1122,7 @@ export function App(): React.JSX.Element {
                   disabled={!canCapture}
                   onClick={() => void handleVisibleCapture()}
                 >
-                  Chụp lại
+                  {t(locale, "popup.preview.recapture")}
                 </button>
               </div>
             </figcaption>
@@ -1115,21 +1133,12 @@ export function App(): React.JSX.Element {
           {tiledMode && fullPageJob?.state === "ready" && (
             <div className="feedback feedback--success">
               <h3 ref={feedbackHeadingRef} tabIndex={-1}>
-                {selectedMode === "region"
-                  ? "Đã lưu tile vùng chọn"
-                  : selectedMode === "element"
-                    ? "Đã lưu tile phần tử"
-                    : selectedMode === "scroll-area"
-                      ? "Đã lưu toàn bộ tile vùng cuộn"
-                      : "Đã lưu đầy đủ tile"}
+                {t(locale, `popup.ready.${selectedMode}` as MessageKey)}
               </h3>
-              <p>
-                {fullPageJob.completedTiles} source tile đang được giữ cục bộ. Mở editor để xem
-                thumbnail, đổi khổ giấy, sắp xếp hoặc bỏ trang và tạo PDF mà không chụp lại.
-              </p>
-              {partialCaptureCopy(fullPageJob) !== undefined && (
+              <p>{t(locale, "popup.ready.detail", { count: fullPageJob.completedTiles })}</p>
+              {partialCaptureCopy(locale, fullPageJob) !== undefined && (
                 <p className="partial-capture-warning" data-testid="partial-capture-warning">
-                  {partialCaptureCopy(fullPageJob)}
+                  {partialCaptureCopy(locale, fullPageJob)}
                 </p>
               )}
               <button
@@ -1137,59 +1146,44 @@ export function App(): React.JSX.Element {
                 type="button"
                 onClick={() => void handleOpenPdfEditor()}
               >
-                Mở trình biên tập PDF
+                {t(locale, "popup.openEditor")}
               </button>
             </div>
           )}
           {tiledMode && fullPageJob?.state === "completed" && (
             <div className="feedback feedback--success">
               <h3 ref={feedbackHeadingRef} tabIndex={-1}>
-                PDF đã sẵn sàng
+                {t(locale, "popup.pdfReady")}
               </h3>
-              <p>Mở editor để tải file PDF đã tạo.</p>
+              <p>{t(locale, "popup.pdfReadyDetail")}</p>
               <button
                 className="primary-action"
                 type="button"
                 onClick={() => void handleOpenPdfEditor()}
               >
-                Mở và tải PDF
+                {t(locale, "popup.openDownloadPdf")}
               </button>
             </div>
           )}
           {tiledMode && fullPageJob?.state === "cancelled" && (
             <div className="feedback feedback--neutral">
-              <p>{tiledStatusCopy(fullPageJob)}</p>
+              <p>{tiledStatusCopy(locale, fullPageJob)}</p>
               <button className="text-action" type="button" onClick={() => void handleRetry()}>
-                Thử lại
+                {t(locale, "common.retry")}
               </button>
             </div>
           )}
           {tiledMode && fullPageJob?.state === "failed" && (
             <div className="feedback feedback--error" role="alert">
               <h3 ref={feedbackHeadingRef} tabIndex={-1}>
-                {selectedMode === "region"
-                  ? "Không thể hoàn tất chụp vùng chọn"
-                  : selectedMode === "element"
-                    ? "Không thể hoàn tất chụp phần tử"
-                    : selectedMode === "scroll-area"
-                      ? "Không thể hoàn tất chụp vùng cuộn"
-                      : "Không thể hoàn tất chụp toàn trang"}
+                {t(locale, `popup.failed.${selectedMode}` as MessageKey)}
               </h3>
-              <p>
-                {fullPageJob.error?.message ??
-                  (selectedMode === "region"
-                    ? "Không thể chụp vùng đã chọn."
-                    : selectedMode === "element"
-                      ? "Phần tử đã chọn không còn hợp lệ hoặc không thể chụp."
-                      : selectedMode === "scroll-area"
-                        ? "Khung cuộn đã chọn không còn hợp lệ hoặc không thể chụp toàn bộ nội dung."
-                        : "Không thể chụp toàn bộ trang.")}
-              </p>
+              <p>{genericErrorCopy(locale, fullPageJob.error ?? { code: "E_UNKNOWN" })}</p>
               {fullPageJob.activeEngine === "scroll" && (
                 <p>
                   {selectedMode === "scroll-area"
-                    ? "Vùng cuộn đã dừng an toàn và trạng thái cuộn đã được phục hồi."
-                    : "Scroll fallback đã dừng an toàn và trang đã được phục hồi."}
+                    ? t(locale, "popup.scrollAreaRestored")
+                    : t(locale, "popup.scrollRestored")}
                 </p>
               )}
               <button
@@ -1203,14 +1197,10 @@ export function App(): React.JSX.Element {
                 }
               >
                 {fullPageJob.totalTiles > 0 && fullPageJob.completedTiles === fullPageJob.totalTiles
-                  ? "Mở editor để thử xuất lại"
-                  : selectedMode === "region"
-                    ? "Chọn lại vùng"
-                    : selectedMode === "element"
-                      ? "Chọn lại phần tử"
-                      : selectedMode === "scroll-area"
-                        ? "Chọn lại vùng cuộn"
-                        : "Thử lại chụp toàn trang"}
+                  ? t(locale, "popup.retryExport")
+                  : selectedMode === "full-page"
+                    ? t(locale, "popup.retryFullPage")
+                    : t(locale, `popup.reselect.${selectedMode}` as MessageKey)}
               </button>
             </div>
           )}
@@ -1222,19 +1212,19 @@ export function App(): React.JSX.Element {
                 data-testid="download-success"
                 data-download-id={session.downloadId}
               >
-                {CAPTURE_STATUS_COPY.completed}
+                {captureStatusCopy(locale, "completed")}
               </p>
             )}
           {selectedMode === "visible" && status === "cancelled" && (
             <div className="feedback feedback--neutral">
-              <p>{CAPTURE_STATUS_COPY.cancelled}</p>
+              <p>{captureStatusCopy(locale, "cancelled")}</p>
               <button
                 className="text-action"
                 type="button"
                 disabled={!canCapture}
                 onClick={() => void handleVisibleCapture()}
               >
-                Thử lại
+                {t(locale, "common.retry")}
               </button>
             </div>
           )}
@@ -1244,9 +1234,13 @@ export function App(): React.JSX.Element {
                 ref={session?.artifact === undefined ? feedbackHeadingRef : undefined}
                 tabIndex={-1}
               >
-                Không thể hoàn tất
+                {t(locale, "popup.failed")}
               </h3>
-              <p>{session?.error?.message ?? uiError ?? CAPTURE_STATUS_COPY.error}</p>
+              <p>
+                {session?.error === undefined
+                  ? (uiError ?? captureStatusCopy(locale, "error"))
+                  : genericErrorCopy(locale, session.error)}
+              </p>
               {(session?.error?.retryable ?? true) && (
                 <button
                   className="text-action"
@@ -1254,7 +1248,7 @@ export function App(): React.JSX.Element {
                   disabled={busy || workerStatus !== "connected"}
                   onClick={() => void handleRetry()}
                 >
-                  Thử lại
+                  {t(locale, "common.retry")}
                 </button>
               )}
             </div>
@@ -1269,8 +1263,47 @@ export function App(): React.JSX.Element {
         </div>
       </section>
 
-      <footer>
-        <span>Ảnh, source tiles và PDF được xử lý cục bộ; không tải lên máy chủ.</span>
+      <footer className="trust-footer">
+        <span>{t(locale, "popup.footer")}</span>
+        <label className="locale-control">
+          <span>{t(locale, "common.language")}</span>
+          <select
+            value={locale}
+            aria-label={t(locale, "common.language")}
+            data-testid="locale-select"
+            onChange={(event) => void setLocale(event.target.value as UiLocale)}
+          >
+            <option value="vi">{t(locale, "common.vietnamese")}</option>
+            <option value="en">{t(locale, "common.english")}</option>
+          </select>
+        </label>
+        <details className="trust-details">
+          <summary>{t(locale, "common.privacy")}</summary>
+          <strong>{t(locale, "common.permissions")}</strong>
+          <ul>
+            <li>{t(locale, "popup.trust.activeTab")}</li>
+            <li>{t(locale, "popup.trust.debugger")}</li>
+            <li>{t(locale, "popup.trust.scripting")}</li>
+            <li>{t(locale, "popup.trust.local")}</li>
+            <li>{t(locale, "popup.trust.optional")}</li>
+          </ul>
+          <p>
+            <strong>{t(locale, "common.localOnly")}</strong> · {t(locale, "common.noAnalytics")}
+          </p>
+        </details>
+        <button
+          className="secondary-action diagnostics-action"
+          type="button"
+          data-testid="copy-diagnostics"
+          onClick={() => void handleCopyDiagnostics()}
+        >
+          {t(locale, "common.copyDiagnostics")}
+        </button>
+        {diagnosticsNotice !== undefined && (
+          <p className="diagnostics-notice" role="status" aria-live="polite">
+            {diagnosticsNotice}
+          </p>
+        )}
       </footer>
     </main>
   );

@@ -1,3 +1,4 @@
+import { throwRemoteWebCapError } from "@shared/errors/remote-error";
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@shared/constants";
 import {
   createPdfEditorGetMessage,
@@ -25,9 +26,7 @@ async function sendEditorRequest(request: unknown): Promise<PdfEditorSnapshot> {
     rejectAfter(DEFAULT_REQUEST_TIMEOUT_MS),
   ]);
   if (isPdfEditorErrorMessage(response)) {
-    const error = new Error(response.payload.message);
-    error.name = response.payload.code;
-    throw error;
+    throwRemoteWebCapError(response.payload);
   }
   if (!isPdfEditorResponseMessage(response)) {
     throw new TypeError("Service worker returned an invalid PDF editor response.");
@@ -70,7 +69,7 @@ export async function getPdfEditorThumbnail(
     rejectAfter(DEFAULT_REQUEST_TIMEOUT_MS),
   ]);
   if (isPdfEditorErrorMessage(response)) {
-    throw new Error(response.payload.message);
+    throwRemoteWebCapError(response.payload);
   }
   if (!isPdfEditorThumbnailResponseMessage(response) || response.requestId !== request.requestId) {
     throw new TypeError("Service worker returned an invalid PDF thumbnail response.");

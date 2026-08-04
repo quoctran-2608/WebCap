@@ -8,6 +8,7 @@ import {
 } from "./element-selector";
 import { openRegionSelector, type RegionSelectorController } from "./region-selector";
 import type { ElementTargetDescriptor, FixedElementMode, Rect } from "@shared/contracts/domain";
+import { loadUiLocale } from "@shared/ui-locale";
 import type {
   ScrollAreaCleanupMessage,
   ScrollAreaScrollMessage,
@@ -1025,38 +1026,41 @@ function ensureRegionSelectionRuntime(state: PagePreparationRuntimeState): void 
       return false;
     }
 
-    try {
-      state.region = openRegionSelector({
-        jobId: message.payload.jobId,
-        onCommit: async (rect) => {
-          delete state.region;
-          await sendRegionSelectionEvent("REGION_SELECTION_COMMIT", message.payload.jobId, {
-            rect,
-          });
-        },
-        onCancel: async (reason) => {
-          delete state.region;
-          await sendRegionSelectionEvent("REGION_SELECTION_CANCEL", message.payload.jobId, {
-            reason,
-          });
-        },
-      });
-      sendResponse(
-        regionSelectionResponse(message, "REGION_SELECTION_OPENED", {
+    void loadUiLocale()
+      .then((locale) => {
+        state.region = openRegionSelector({
           jobId: message.payload.jobId,
-          reused: false,
-        }),
-      );
-    } catch (error) {
-      sendResponse(
-        regionSelectionError(
-          message,
-          error instanceof Error ? error.message : "Region selector could not be created.",
-          error instanceof Error ? error.name : "RegionSelectionOpenFailure",
-        ),
-      );
-    }
-    return false;
+          locale,
+          onCommit: async (rect) => {
+            delete state.region;
+            await sendRegionSelectionEvent("REGION_SELECTION_COMMIT", message.payload.jobId, {
+              rect,
+            });
+          },
+          onCancel: async (reason) => {
+            delete state.region;
+            await sendRegionSelectionEvent("REGION_SELECTION_CANCEL", message.payload.jobId, {
+              reason,
+            });
+          },
+        });
+        sendResponse(
+          regionSelectionResponse(message, "REGION_SELECTION_OPENED", {
+            jobId: message.payload.jobId,
+            reused: false,
+          }),
+        );
+      })
+      .catch((error: unknown) => {
+        sendResponse(
+          regionSelectionError(
+            message,
+            error instanceof Error ? error.message : "Region selector could not be created.",
+            error instanceof Error ? error.name : "RegionSelectionOpenFailure",
+          ),
+        );
+      });
+    return true;
   };
 
   state.regionPageHideListener = () => {
@@ -1748,45 +1752,48 @@ function installElementSelectionRuntime(): { installed: boolean; reused: boolean
       return false;
     }
 
-    try {
-      state.controller = openElementSelector({
-        jobId: message.payload.jobId,
-        captureKind: message.payload.captureKind,
-        onCommit: async (selection: ElementSelection) => {
-          delete state.controller;
-          state.targets.set(selection.descriptor.selectionId, {
-            jobId: message.payload.jobId,
-            element: selection.element,
-            descriptor: selection.descriptor,
-          });
-          await sendElementSelectionEvent("ELEMENT_SELECTION_COMMIT", message.payload.jobId, {
-            rect: selection.rect,
-            descriptor: selection.descriptor,
-          });
-        },
-        onCancel: async (reason) => {
-          delete state.controller;
-          await sendElementSelectionEvent("ELEMENT_SELECTION_CANCEL", message.payload.jobId, {
-            reason,
-          });
-        },
-      });
-      sendResponse(
-        elementSelectionResponse(message, "ELEMENT_SELECTION_OPENED", {
+    void loadUiLocale()
+      .then((locale) => {
+        state.controller = openElementSelector({
           jobId: message.payload.jobId,
-          reused: false,
-        }),
-      );
-    } catch (error) {
-      sendResponse(
-        elementSelectionFailure(message, {
-          message:
-            error instanceof Error ? error.message : "Element selector could not be created.",
-          causeCode: error instanceof Error ? error.name : "ElementSelectionOpenFailure",
-        }),
-      );
-    }
-    return false;
+          captureKind: message.payload.captureKind,
+          locale,
+          onCommit: async (selection: ElementSelection) => {
+            delete state.controller;
+            state.targets.set(selection.descriptor.selectionId, {
+              jobId: message.payload.jobId,
+              element: selection.element,
+              descriptor: selection.descriptor,
+            });
+            await sendElementSelectionEvent("ELEMENT_SELECTION_COMMIT", message.payload.jobId, {
+              rect: selection.rect,
+              descriptor: selection.descriptor,
+            });
+          },
+          onCancel: async (reason) => {
+            delete state.controller;
+            await sendElementSelectionEvent("ELEMENT_SELECTION_CANCEL", message.payload.jobId, {
+              reason,
+            });
+          },
+        });
+        sendResponse(
+          elementSelectionResponse(message, "ELEMENT_SELECTION_OPENED", {
+            jobId: message.payload.jobId,
+            reused: false,
+          }),
+        );
+      })
+      .catch((error: unknown) => {
+        sendResponse(
+          elementSelectionFailure(message, {
+            message:
+              error instanceof Error ? error.message : "Element selector could not be created.",
+            causeCode: error instanceof Error ? error.name : "ElementSelectionOpenFailure",
+          }),
+        );
+      });
+    return true;
   };
 
   state.pageHideListener = () => {
