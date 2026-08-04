@@ -42,7 +42,10 @@ interface BenchmarkResult {
   peakHeapBytes?: number | undefined;
 }
 
-function createSource(widthCss: number, heightCss: number): {
+function createSource(
+  widthCss: number,
+  heightCss: number,
+): {
   tiles: CaptureTile[];
   records: StoredTileRecord[];
   dimensions: Map<Blob, { width: number; height: number }>;
@@ -102,8 +105,7 @@ function repositories(records: StoredTileRecord[]): {
   return {
     tiles: {
       put: () => Promise.resolve(),
-      get: (_jobId, index) =>
-        Promise.resolve(records.find((record) => record.index === index)),
+      get: (_jobId, index) => Promise.resolve(records.find((record) => record.index === index)),
       listByJob: () => Promise.resolve(records),
       deleteByJob: () => Promise.resolve(0),
     },
@@ -159,9 +161,7 @@ function benchmarkEnvironment(
       height,
       getContext: () => ({ fillWhite: () => undefined, drawImage: () => undefined }),
       convertToJpeg: () =>
-        Promise.resolve(
-          new Blob([Uint8Array.from(ONE_PIXEL_JPEG).buffer], { type: "image/jpeg" }),
-        ),
+        Promise.resolve(new Blob([Uint8Array.from(ONE_PIXEL_JPEG).buffer], { type: "image/jpeg" })),
       release: () => undefined,
     }),
     createDocument: realPdfDocument,
@@ -234,9 +234,7 @@ describe("PDF export performance reference", () => {
       expect(result.maxDecodedTiles).toBe(1);
       expect(result.estimatedWorkingSetBytes).toBeLessThanOrEqual(result.memoryThresholdBytes);
       expect(result.durationMs).toBeLessThan(30_000);
-      expect(result.maxCanvasPixelArea).toBeLessThan(
-        scenario.widthCss * scenario.heightCss,
-      );
+      expect(result.maxCanvasPixelArea).toBeLessThan(scenario.widthCss * scenario.heightCss);
     });
   }
 });

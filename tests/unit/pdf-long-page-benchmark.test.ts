@@ -240,12 +240,7 @@ describe("PDF long-page benchmark", () => {
     for (const scenario of scenarios) metrics.push(await runScenario(scenario));
 
     console.info(`WEBCAP_PDF_BENCHMARK=${JSON.stringify(metrics)}`);
-    expect(metrics.map((metric) => metric.heightCss)).toEqual([
-      10_000,
-      30_000,
-      100_000,
-      30_000,
-    ]);
+    expect(metrics.map((metric) => metric.heightCss)).toEqual([10_000, 30_000, 100_000, 30_000]);
     expect(metrics.every((metric) => metric.artifactBytes > 0)).toBe(true);
     expect(metrics.every((metric) => metric.maxDecodedTiles <= 2)).toBe(true);
     expect(metrics.every((metric) => metric.durationMs >= 0)).toBe(true);

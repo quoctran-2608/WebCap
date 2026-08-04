@@ -17,10 +17,7 @@ import {
   type PdfIntegrityReport,
 } from "./pdf-integrity";
 import { planPdfDocument } from "./pdf-layout";
-import {
-  assertPdfExportMemorySafe,
-  type PdfMemoryEstimate,
-} from "./pdf-memory-guard";
+import { assertPdfExportMemorySafe, type PdfMemoryEstimate } from "./pdf-memory-guard";
 import { planPdfTileIntersections } from "./pdf-tile-intersections";
 
 export interface PdfExportPayload {

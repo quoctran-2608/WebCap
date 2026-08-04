@@ -62,8 +62,7 @@ function repositories(records: StoredTileRecord[]): {
   return {
     tiles: {
       put: () => Promise.resolve(),
-      get: (_jobId, index) =>
-        Promise.resolve(records.find((record) => record.index === index)),
+      get: (_jobId, index) => Promise.resolve(records.find((record) => record.index === index)),
       listByJob: () => Promise.resolve(records),
       deleteByJob: () => Promise.resolve(0),
     },
