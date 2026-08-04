@@ -32,3 +32,5 @@ Complete the pre-release trust and usability layer without adding telemetry, acc
 ## Completion evidence
 
 S19 was completed on 2026-08-04 in PR #23. Clean read-only CI run `30899360894` passed formatting, lint, strict typecheck, privacy and dependency audits, 276 unit tests across 78 files, four PDF benchmark scenarios, the verified Manifest V3 build, and 35 Playwright E2E cases. The audits found no remote executable code, analytics SDK, unsafe diagnostics fields, default host permission, or incompatible direct dependency license; all 18 direct packages are MIT or Apache-2.0. The implementation added no telemetry backend, account, cloud sync, remote diagnostics upload, required permission, or S20 release artifact.
+
+A later documentation-only gate exposed a slow-run timing edge in the existing PDF editor browser test: the trace showed export still progressing normally at page 12 of 14 (86%) when the global 60-second test budget closed Chromium. The test now has a scoped 90-second budget and a 60-second export-completion assertion; production exporter timeouts and behavior are unchanged.
