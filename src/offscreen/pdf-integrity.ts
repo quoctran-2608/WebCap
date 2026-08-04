@@ -118,7 +118,10 @@ export async function inspectPdfIntegrity(
     }
 
     if (expectations.requireImagePerPage !== false) {
-      if (imageObjectCount < pageCount) addError(errors, "image-object-count");
+      // pdf-lib may legitimately reuse one image XObject across multiple pages. Require an
+      // image-backed document and non-empty streams without assuming one unique image object
+      // per page.
+      if (imageObjectCount <= 0) addError(errors, "image-object-count");
       if (nonEmptyStreamCount < imageObjectCount) addError(errors, "empty-image-stream");
     }
 
