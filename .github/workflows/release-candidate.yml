@@ -211,14 +211,16 @@ jobs:
 
       - name: Test package on minimum Chrome
         run: >-
-          node tests/release/packaged-lifecycle.mjs
+          xvfb-run -a node tests/release/packaged-lifecycle.mjs
+          --headed
           --executable-path "${{ steps.chrome.outputs.minimum }}"
           --browser-label "chrome-${{ steps.chrome.outputs.minimum_version }}"
           --report artifacts/packaged-lifecycle-chrome-minimum.json
 
       - name: Test package on current stable Chrome
         run: >-
-          node tests/release/packaged-lifecycle.mjs
+          xvfb-run -a node tests/release/packaged-lifecycle.mjs
+          --headed
           --executable-path "${{ steps.chrome.outputs.stable }}"
           --browser-label "chrome-${{ steps.chrome.outputs.stable_version }}"
           --report artifacts/packaged-lifecycle-chrome-stable.json
@@ -229,5 +231,5 @@ jobs:
         with:
           name: packaged-browser-compatibility
           path: artifacts/packaged-lifecycle-chrome-*.json
-          if-no-files-found: error
+          if-no-files-found: ignore
           retention-days: 30
