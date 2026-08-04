@@ -1,0 +1,31 @@
+name: S21 source snapshot
+
+on:
+  push:
+    branches:
+      - agent/s21-capture-reset
+    paths:
+      - .github/workflows/s21-source-snapshot.yml
+
+permissions:
+  contents: read
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out S21 branch
+        uses: actions/checkout@v4
+
+      - name: Archive repository source
+        run: git archive --format=tar.gz --output=/tmp/webcap-s21-source.tar.gz HEAD
+
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: webcap-s21-source-${{ github.sha }}
+          path: /tmp/webcap-s21-source.tar.gz
+          if-no-files-found: error
+          retention-days: 1
