@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { argv, env, stdout } from "node:process";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -48,7 +48,8 @@ async function extractArchive(archivePath, destination) {
   await mkdir(destination, { recursive: true });
   for (const entry of entries) {
     const outputPath = resolve(destination, entry.path);
-    if (!outputPath.startsWith(`${resolve(destination)}/`)) {
+    const relativeOutputPath = relative(destination, outputPath);
+    if (relativeOutputPath.startsWith("..") || isAbsolute(relativeOutputPath)) {
       throw new Error(`Unsafe extracted path: ${entry.path}`);
     }
     await mkdir(dirname(outputPath), { recursive: true });
