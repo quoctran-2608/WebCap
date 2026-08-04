@@ -46,14 +46,17 @@ jobs:
           set -euo pipefail
 
           expected=(
-            'a47bdd5b725ad542c9a3c5846ac90e8a0e907daedc3833e917bc7e8820c2c8c2  .s17-core-v2.patch.part00'
-            'eae878d4565fac635887e77348514e644425d0278a59f1aaf1e62d17d8bc0a55  .s17-core-v2.patch.part01'
-            '966812c10631abba4373bc599083a3b9d35de4c76199dcc38e8307d3b4857196  .s17-core-v2.patch.part02'
-            'c2260b5bf82a931a7ff066a4097408e1c9f4b0159188f87f88bed662b8c92295  .s17-core-v2.patch.part03'
+            'cf118b43c9a5061f956071b961d10bcc6e526f3669c95d0fd7cdb031b5bc02d4  .s17-core-v3.patch.part00'
+            'e750fc38a3c4d574c357c5a57c389f32bae35d8a2f64109ad6096b57964752d2  .s17-core-v3.patch.part01'
+            '9b22965822d2fbb1205b3e072f99bfd7fcfc023aef4b70b32d6cef39a67e6bf0  .s17-core-v3.patch.part02'
+            'f67e63c21c9f5ad803a019dfc384a6729f76a2ce3f89059d3fddd7e8b2b16af6  .s17-core-v3.patch.part03'
+            '2a7c7799b274f3a9237f31a5628baadae59003169d266cb55bf37294a63c7942  .s17-core-v3.patch.part04'
+            'e7e93d011e8914a08f8f9c6fb6c46565a9b886fdbe4772505ef9e5f650521661  .s17-core-v3.patch.part05'
+            'c2260b5bf82a931a7ff066a4097408e1c9f4b0159188f87f88bed662b8c92295  .s17-core-v3.patch.part06'
           )
           printf '%s\n' "${expected[@]}" | sha256sum -c -
 
-          cat .s17-core-v2.patch.part{00..03} > /tmp/s17-core.patch.gz.b64
+          cat .s17-core-v3.patch.part{00..06} > /tmp/s17-core.patch.gz.b64
           test "$(wc -c < /tmp/s17-core.patch.gz.b64)" -eq 24316
           echo '42ba61d2c3309718753233e2a44b20ac522ffdfc2e9f8df4a1bf05ab5581b76b  /tmp/s17-core.patch.gz.b64' | sha256sum -c -
 
@@ -65,7 +68,8 @@ jobs:
           git rm -f \
             .s17-core.patch.gz.b64 \
             .s17-core.patch.part{00..06} \
-            .s17-core-v2.patch.part{00..03}
+            .s17-core-v2.patch.part{00..03} \
+            .s17-core-v3.patch.part{00..06}
           git rm -f .github/workflows/s17-workspace.yml
 
       - name: Check formatting
