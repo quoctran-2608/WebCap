@@ -22,6 +22,8 @@ pnpm install --frozen-lockfile
 pnpm benchmark:pdf
 ```
 
+CI runs this dedicated suite after the normal unit suite and before the extension build and Playwright browser checks.
+
 The benchmark prints one JSON line per scenario with the prefix field:
 
 ```json
