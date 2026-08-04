@@ -40,7 +40,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify and apply S19 patch
+      - name: Verify and apply S19 patches
         shell: bash
         run: |
           set -euo pipefail
@@ -52,6 +52,7 @@ jobs:
             'cdffd70ab4608ca452f08fa8f3df009b5359836bfd5e51e9c26e666b2c8433a4  .s19-stage.part03'
             '4baf35966e27e698ccca53acf3c4062a36b65daf77fb782d84c395b7bbc92e15  .s19-stage.part04-05'
             'f8e69bcd755c3eabb42dd20318d8015ab2b4899f83fcb686dd0d5aebc9e18872  .s19-stage.part06-07'
+            '8707a1af77a4b225f6db8eac97cd9cce91ae0ecc4292ced3c41beb2644a9e3b7  .s19-e2e-fix.patch.b64'
           )
           printf '%s\n' "${expected[@]}" | sha256sum -c -
 
@@ -72,13 +73,20 @@ jobs:
           git apply --check /tmp/s19-core.patch
           git apply /tmp/s19-core.patch
 
+          base64 --decode .s19-e2e-fix.patch.b64 > /tmp/s19-e2e-fix.patch
+          test "$(wc -c < /tmp/s19-e2e-fix.patch)" -eq 1832
+          echo '066469dea892e9b50e9113f9c98f6f6aa64336ff4dd74d186ce3f0cf3f0cbf7c  /tmp/s19-e2e-fix.patch' | sha256sum -c -
+          git apply --check /tmp/s19-e2e-fix.patch
+          git apply /tmp/s19-e2e-fix.patch
+
           git rm -f \
             .s19-stage.part00 \
             .s19-stage.part01 \
             .s19-stage.part02 \
             .s19-stage.part03 \
             .s19-stage.part04-05 \
-            .s19-stage.part06-07
+            .s19-stage.part06-07 \
+            .s19-e2e-fix.patch.b64
           git rm -f .github/workflows/s19-workspace.yml
 
       - name: Check formatting
