@@ -20,12 +20,17 @@
     "test:unit": "vitest run",
     "benchmark:pdf": "vitest run --config vitest.benchmark.config.ts --reporter=verbose",
     "test:smoke": "node tests/smoke/extension-smoke.mjs",
-    "package": "pnpm build && node scripts/package-extension.mjs",
+    "test:release": "node tests/release/packaged-lifecycle.mjs --report artifacts/packaged-lifecycle-playwright.json",
+    "package": "pnpm build && node scripts/package-extension.mjs && node scripts/verify-release-package.mjs",
+    "package:verify": "pnpm build && node scripts/verify-reproducible-package.mjs",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "audit:privacy": "node scripts/audit-privacy.mjs",
     "audit:dependencies": "node scripts/audit-dependencies.mjs",
-    "audit": "pnpm audit:privacy && pnpm audit:dependencies"
+    "audit:release": "node scripts/audit-release.mjs",
+    "audit:security": "pnpm audit --audit-level=critical",
+    "audit": "pnpm audit:privacy && pnpm audit:dependencies && pnpm audit:release",
+    "release:verify": "pnpm audit:security && pnpm package:verify && pnpm test:release"
   },
   "dependencies": {
     "pdf-lib": "1.17.1",

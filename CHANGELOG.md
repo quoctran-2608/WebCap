@@ -6,8 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+No unreleased changes.
+
+## [0.1.0] - 2026-08-04
+
 ### Added
 
+- Deterministic Chrome Web Store ZIP creation with fixed entry ordering, timestamps, Unix modes, CRC32 values, safe paths, root manifest placement, per-entry SHA-256 hashes, release manifest, checksum file, and byte-for-byte two-run reproducibility verification.
+- Release metadata audit for synchronized version `0.1.0`, minimum Chrome 116, exact required and optional permissions, Vietnamese/English locales, icon dimensions, and forbidden package/store fields.
+- Packaged clean-profile lifecycle validation for install, optional-host-permission absence, simulated update from 0.0.9 to 0.1.0 with stable extension ID and preserved `chrome.storage.local`, self-uninstall, and same-profile relaunch verification.
+- Release Candidate workflow with read-only permissions, retained release evidence, Linux/Windows/macOS lifecycle coverage, and headed packaged compatibility checks on Chrome for Testing 116.0.5845.96 and 151.0.7922.71.
+- Chrome Web Store handoff documents, bilingual listing copy, release checklist, known-limitations workarounds, release notes, and MUST acceptance-criteria traceability without creating a tag, GitHub Release, or store submission.
+- The final S20 gate passes formatting, ESLint, strict TypeScript, privacy/license/release/critical-security audits, 279 unit tests across 79 files, four PDF benchmarks, a verified Manifest V3 build, and 38 Playwright E2E cases including DPR 1/1.5/2 at 80/100/125/150% zoom. The 24-entry `webcap-0.1.0.zip` is 1,097,035 bytes with SHA-256 `630c44c07e72da0d5edc1c82c013ecf6caf995e0542ee19679380081e7b0cb7a`.
 - Persisted Vietnamese and English localization shared by the popup, PDF editor, region selector, element selector, restricted-page guidance, permission rationale, and every user-facing WebCap error code, with deterministic fallback that never exposes raw translation keys.
 - Copyable versioned diagnostics JSON built from an explicit technical allowlist, plus normalized remote errors that retain safe codes/details while excluding URLs, page text, selectors, credentials, tokens, cookies, image data, and binary payloads.
 - Production logger hardening with `warn` as the default threshold and a single safe-context boundary for finite counters and approved identifiers only.
