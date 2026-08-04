@@ -38,7 +38,7 @@ test("validates visible capture across the release DPR and zoom matrix @release-
       const popup = await openPopup();
       await targetPage.bringToFront();
       await popup
-        .getByRole("button", { name: "Tạo bản xem trước" })
+        .getByRole("button", { name: /^(?:Tạo bản xem trước|Chụp lại)$/u })
         .evaluate((button: HTMLButtonElement) => button.click());
       await expect(popup.getByTestId("preview-image")).toBeVisible({ timeout: 30_000 });
       const metadata = popup.getByTestId("preview-metadata");
@@ -53,6 +53,8 @@ test("validates visible capture across the release DPR and zoom matrix @release-
       await popup.close();
     }
   } finally {
-    await serviceWorker.evaluate(async (id) => chrome.tabs.setZoom(id, 1), tabId);
+    await serviceWorker
+      .evaluate(async (id) => chrome.tabs.setZoom(id, 1), tabId)
+      .catch(() => undefined);
   }
 });
