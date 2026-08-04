@@ -58,9 +58,15 @@ function integerNonNegative(value: number, name: string): number {
   return value;
 }
 
+function qualityValue(value: number): number {
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new TypeError("jpegQuality must be a finite number between 0 and 1.");
+  }
+  return value;
+}
+
 function encodedPageRatio(jpegQuality: number): number {
-  const quality = Math.min(1, Math.max(0, jpegQuality));
-  return 0.08 + quality * 0.22;
+  return 0.08 + jpegQuality * 0.22;
 }
 
 export function estimatePdfExportMemory(input: PdfMemoryGuardInput): PdfMemoryEstimate {
@@ -76,14 +82,19 @@ export function estimatePdfExportMemory(input: PdfMemoryGuardInput): PdfMemoryEs
     input.largestTilePixelArea,
     "largestTilePixelArea",
   );
-  const jpegQuality = finiteNonNegative(input.jpegQuality, "jpegQuality");
+  const jpegQuality = qualityValue(input.jpegQuality);
   const heapLimitBytes =
     input.heapLimitBytes === undefined
       ? DEFAULT_HEAP_LIMIT_BYTES
       : finitePositive(input.heapLimitBytes, "heapLimitBytes");
 
-  const totalPixels =
-    Math.ceil(widthCss * renderScaleX) * Math.ceil(heightCss * renderScaleY);
+  const pixelWidth = Math.ceil(widthCss * renderScaleX);
+  const pixelHeight = Math.ceil(heightCss * renderScaleY);
+  const totalPixels = pixelWidth * pixelHeight;
+  if (!Number.isSafeInteger(totalPixels)) {
+    throw new TypeError("The estimated PDF pixel count exceeds the safe integer range.");
+  }
+
   const estimatedPageRgbaBytes = Math.ceil(maxPagePixelArea * 4);
   const estimatedDecodedTileBytes = Math.ceil(largestTilePixelArea * 4);
   const estimatedEncodedPageBytes = Math.ceil(
@@ -119,9 +130,7 @@ export function estimatePdfExportMemory(input: PdfMemoryGuardInput): PdfMemoryEs
   };
 }
 
-export function assertPdfExportMemorySafe(
-  input: PdfMemoryGuardInput,
-): PdfMemoryEstimate {
+export function assertPdfExportMemorySafe(input: PdfMemoryGuardInput): PdfMemoryEstimate {
   const estimate = estimatePdfExportMemory(input);
   if (!estimate.shouldBlock) return estimate;
 
@@ -130,7 +139,7 @@ export function assertPdfExportMemorySafe(
       code: "E_MEMORY_GUARD",
       stage: "export",
       message:
-        "The PDF export estimate exceeds the safe local memory budget. Reduce JPEG quality, split the output, or keep a smaller multi-page PDF selection before retrying.",
+        "The PDF export estimate exceeds the safe local memory budget. Reduce JPEG quality, split the selected pages into smaller files, or switch from fit-width to a multi-page A4/Letter layout before retrying.",
       userMessageKey: "errors.memoryGuard",
       retryable: true,
       fallbackAllowed: true,
