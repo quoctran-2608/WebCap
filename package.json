@@ -22,7 +22,10 @@
     "test:smoke": "node tests/smoke/extension-smoke.mjs",
     "package": "pnpm build && node scripts/package-extension.mjs",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "audit:privacy": "node scripts/audit-privacy.mjs",
+    "audit:dependencies": "node scripts/audit-dependencies.mjs",
+    "audit": "pnpm audit:privacy && pnpm audit:dependencies"
   },
   "dependencies": {
     "pdf-lib": "1.17.1",

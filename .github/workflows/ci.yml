@@ -46,6 +46,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Privacy and dependency audit
+        run: pnpm run audit
+
       - name: Unit tests
         run: pnpm test:unit
 

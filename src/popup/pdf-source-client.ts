@@ -1,3 +1,4 @@
+import { throwRemoteWebCapError } from "@shared/errors/remote-error";
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@shared/constants";
 import {
   createPdfSourceDownloadMessage,
@@ -52,9 +53,7 @@ async function send(
 
 function throwRemoteError(response: unknown): void {
   if (isPdfSourceErrorMessage(response)) {
-    const error = new Error(response.payload.message);
-    error.name = response.payload.code;
-    throw error;
+    throwRemoteWebCapError(response.payload);
   }
 }
 

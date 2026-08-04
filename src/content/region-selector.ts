@@ -1,4 +1,5 @@
 import type { Rect } from "@shared/contracts/domain";
+import { DEFAULT_UI_LOCALE, t, type UiLocale } from "@shared/i18n";
 
 import {
   CoordinateSpace,
@@ -33,6 +34,7 @@ export interface RegionSelectorController {
 export interface OpenRegionSelectorOptions {
   jobId: string;
   minimumSizeCss?: number;
+  locale?: UiLocale;
   onCommit(rect: Rect): Promise<void> | void;
   onCancel(reason: string): Promise<void> | void;
 }
@@ -77,6 +79,7 @@ export function openRegionSelector(options: OpenRegionSelectorOptions): RegionSe
     REGION_SELECTOR_MINIMUM_SIZE_CSS,
     options.minimumSizeCss ?? REGION_SELECTOR_MINIMUM_SIZE_CSS,
   );
+  const locale = options.locale ?? DEFAULT_UI_LOCALE;
   const originalScroll = { x: window.scrollX, y: window.scrollY };
   const originalFocus =
     document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
@@ -184,19 +187,19 @@ export function openRegionSelector(options: OpenRegionSelectorOptions): RegionSe
         .instructions { white-space: normal; }
       }
     </style>
-    <div class="stage" tabindex="0" role="dialog" aria-label="Chọn vùng cần chụp">
+    <div class="stage" tabindex="0" role="dialog" aria-label="${t(locale, "selector.region.dialog")}">
       <div class="toolbar" data-toolbar>
-        <p class="instructions">Kéo để chọn · kéo khung để di chuyển · phím mũi tên để tinh chỉnh · Enter xác nhận · Esc hủy</p>
+        <p class="instructions">${t(locale, "selector.region.instructions")}</p>
         <div class="actions">
-          <button type="button" data-cancel>Hủy</button>
-          <button type="button" data-confirm disabled>Chụp vùng</button>
+          <button type="button" data-cancel>${t(locale, "common.cancel")}</button>
+          <button type="button" data-confirm disabled>${t(locale, "selector.region.confirm")}</button>
         </div>
       </div>
       <div class="selection" data-selection>
-        <span class="dimensions" data-dimensions>0 × 0</span>
+        <span class="dimensions" data-dimensions aria-live="polite">0 × 0</span>
         ${HANDLES.map(
           (handle) =>
-            `<button class="handle" type="button" tabindex="-1" aria-label="Resize ${handle}" data-handle="${handle}"></button>`,
+            `<button class="handle" type="button" tabindex="-1" aria-label="${t(locale, "selector.resizeHandle", { handle })}" data-handle="${handle}"></button>`,
         ).join("")}
       </div>
     </div>

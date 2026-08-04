@@ -1,0 +1,7 @@
+{
+  "appName": { "message": "WebCap" },
+  "appDescription": {
+    "message": "Capture the visible area, full page, region, element, or scrollable area and export images/PDFs locally."
+  },
+  "actionTitle": { "message": "Open WebCap" }
+}

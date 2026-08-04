@@ -1,0 +1,726 @@
+import type { WebCapErrorCode, WebCapErrorData } from "@shared/errors/error";
+
+export const SUPPORTED_LOCALES = ["vi", "en"] as const;
+export type UiLocale = (typeof SUPPORTED_LOCALES)[number];
+export const DEFAULT_UI_LOCALE: UiLocale = "vi";
+
+const VI = {
+  "common.available": "Khả dụng",
+  "common.unavailable": "Chưa khả dụng",
+  "common.cancel": "Hủy",
+  "common.retry": "Thử lại",
+  "common.download": "Tải xuống",
+  "common.copyDiagnostics": "Sao chép thông tin chẩn đoán",
+  "common.diagnosticsCopied": "Đã sao chép JSON chẩn đoán an toàn.",
+  "common.diagnosticsCopyFailed": "Không thể sao chép tự động. Hãy thử lại.",
+  "common.language": "Ngôn ngữ",
+  "common.vietnamese": "Tiếng Việt",
+  "common.english": "English",
+  "common.localOnly": "Dữ liệu chỉ được xử lý trên thiết bị",
+  "common.noAnalytics": "Không thu thập analytics mặc định",
+  "common.privacy": "Quyền riêng tư và quyền truy cập",
+  "common.permissions": "Các quyền WebCap sử dụng",
+  "common.close": "Đóng",
+  "popup.brandEyebrow": "TIỆN ÍCH CHROME",
+  "popup.workerLabel": "Service worker",
+  "popup.extensionStatus": "Trạng thái extension",
+  "popup.version": "Phiên bản",
+  "popup.currentTab": "Tab hiện tại",
+  "popup.worker.checking": "Đang kết nối…",
+  "popup.worker.connected": "Đã kết nối",
+  "popup.worker.unavailable": "Không thể kết nối",
+  "popup.tab.supported": "Có thể chụp",
+  "popup.tab.unsupported": "Trang bị Chrome hạn chế",
+  "popup.tab.unavailable": "Không có tab hoạt động",
+  "popup.tab.unsupportedDetail":
+    "Chrome không cho phép extension chụp trang nội bộ hoặc trang bị hạn chế. Hãy mở một trang web thông thường; chụp vùng đang xem chỉ khả dụng khi Chrome cấp activeTab.",
+  "popup.captureModes": "Các chế độ chụp",
+  "popup.captureModeEyebrow": "CHẾ ĐỘ CHỤP",
+  "popup.mode.visible": "Vùng đang xem",
+  "popup.mode.full-page": "Toàn bộ trang",
+  "popup.mode.region": "Vùng tự chọn",
+  "popup.mode.element": "Phần tử",
+  "popup.mode.scroll-area": "Vùng cuộn",
+  "popup.title.visible": "Chụp vùng đang xem",
+  "popup.title.full-page": "Chụp toàn bộ trang",
+  "popup.title.region": "Chụp vùng tự chọn",
+  "popup.title.element": "Chụp phần tử",
+  "popup.title.scroll-area": "Chụp toàn bộ vùng cuộn",
+  "popup.outputFormat": "Định dạng đầu ra",
+  "popup.pdfOutputHint":
+    "Đầu ra: PDF nhiều trang · chỉnh khổ giấy, lề, chất lượng và thứ tự sau khi chụp.",
+  "popup.start.visible": "Tạo bản xem trước",
+  "popup.start.full-page": "Bắt đầu chụp toàn trang",
+  "popup.start.region": "Bắt đầu chọn vùng",
+  "popup.start.element": "Bắt đầu chọn phần tử",
+  "popup.start.scroll-area": "Bắt đầu chọn vùng cuộn",
+  "popup.stopKeep": "Dừng và giữ {count} tile",
+  "popup.cancelDiscard": "Hủy và xóa phần tạm",
+  "popup.cancelCapture": "Hủy chụp",
+  "popup.capture.capturing": "Đang chụp tab hiện tại…",
+  "popup.capture.captured": "Đã chụp xong, chuẩn bị mã hóa…",
+  "popup.capture.processing": "Đang tạo ảnh xem trước…",
+  "popup.capture.ready": "Bản xem trước đã sẵn sàng.",
+  "popup.capture.downloading": "Đang bắt đầu tải xuống…",
+  "popup.capture.completed": "Tệp đã được gửi tới Chrome Downloads.",
+  "popup.capture.cancelled": "Đã hủy thao tác chụp.",
+  "popup.capture.error": "Không thể hoàn tất thao tác.",
+  "popup.job.created": "Đang khởi tạo phiên chụp…",
+  "popup.job.preparing": "Đang chuẩn bị và làm ổn định trang…",
+  "popup.job.capturing": "Đang chụp các tile; WebCap tự chuyển sang scroll fallback khi cần…",
+  "popup.job.processing": "Đang xác nhận tile set…",
+  "popup.job.ready": "Tile set toàn trang đã sẵn sàng.",
+  "popup.job.exporting": "Đang tạo PDF từng trang…",
+  "popup.job.completed": "PDF đã sẵn sàng để tải xuống.",
+  "popup.job.failed": "Không thể hoàn tất chụp toàn trang.",
+  "popup.job.cancelling": "Đang hủy và phục hồi trang…",
+  "popup.job.cancelled": "Đã hủy chụp toàn trang.",
+  "popup.job.element.created": "Chọn phần tử trực tiếp trên trang…",
+  "popup.job.element.ready": "Tile set phần tử đã sẵn sàng.",
+  "popup.job.element.failed": "Không thể hoàn tất chụp phần tử.",
+  "popup.job.element.cancelled": "Đã hủy chọn phần tử.",
+  "popup.job.region.created": "Chọn vùng trực tiếp trên trang…",
+  "popup.job.region.ready": "Tile set vùng chọn đã sẵn sàng.",
+  "popup.job.region.failed": "Không thể hoàn tất chụp vùng chọn.",
+  "popup.job.region.cancelled": "Đã hủy chọn vùng.",
+  "popup.job.scroll-area.created": "Chọn một khung có nội dung cuộn trên trang…",
+  "popup.job.scroll-area.preparing": "Đang đo toàn bộ nội dung bên trong vùng cuộn…",
+  "popup.job.scroll-area.capturing": "Đang cuộn và chụp từng phần bên trong khung…",
+  "popup.job.scroll-area.ready": "Tile set toàn bộ vùng cuộn đã sẵn sàng.",
+  "popup.job.scroll-area.failed": "Không thể hoàn tất chụp vùng cuộn.",
+  "popup.job.scroll-area.cancelled": "Đã hủy chọn vùng cuộn.",
+  "popup.partial.max-css-height":
+    "WebCap đã chụp đến giới hạn chiều cao cấu hình. Phần tile hiện có vẫn có thể xuất PDF.",
+  "popup.partial.max-duration":
+    "Trang tiếp tục tăng sau thời gian chuẩn bị tối đa. WebCap đã giữ phần nội dung ổn định đã chụp được.",
+  "popup.partial.max-tiles":
+    "Trang vượt giới hạn số tile an toàn. WebCap đã giữ phần liên tục từ đầu trang thay vì cắt im lặng.",
+  "popup.partial.user-stop": "Bạn đã dừng sớm và giữ phần tile liên tục đã chụp được.",
+  "popup.progress.region": "Tiến độ chụp vùng chọn",
+  "popup.progress.element": "Tiến độ chụp phần tử",
+  "popup.progress.scroll-area": "Tiến độ chụp vùng cuộn",
+  "popup.progress.full-page": "Tiến độ chụp toàn trang",
+  "popup.estimate": "Ước tính {format} · {bytes}",
+  "popup.preview.loading": "Đang tải bản xem trước…",
+  "popup.preview.alt": "Bản xem trước ảnh chụp vùng đang xem",
+  "popup.preview.title": "Bản xem trước",
+  "popup.preview.dimensions": "Kích thước",
+  "popup.preview.format": "Định dạng",
+  "popup.preview.size": "Dung lượng",
+  "popup.preview.downloading": "Đang tải…",
+  "popup.preview.reformat": "Tạo lại định dạng",
+  "popup.preview.recapture": "Chụp lại",
+  "popup.ready.region": "Đã lưu tile vùng chọn",
+  "popup.ready.element": "Đã lưu tile phần tử",
+  "popup.ready.scroll-area": "Đã lưu toàn bộ tile vùng cuộn",
+  "popup.ready.full-page": "Đã lưu đầy đủ tile",
+  "popup.ready.detail":
+    "{count} source tile đang được giữ cục bộ. Mở editor để xem thumbnail, đổi khổ giấy, sắp xếp hoặc bỏ trang và tạo PDF mà không chụp lại.",
+  "popup.openEditor": "Mở trình biên tập PDF",
+  "popup.pdfReady": "PDF đã sẵn sàng",
+  "popup.pdfReadyDetail": "Mở editor để tải file PDF đã tạo.",
+  "popup.openDownloadPdf": "Mở và tải PDF",
+  "popup.failed": "Không thể hoàn tất",
+  "popup.failed.region": "Không thể hoàn tất chụp vùng chọn",
+  "popup.failed.element": "Không thể hoàn tất chụp phần tử",
+  "popup.failed.scroll-area": "Không thể hoàn tất chụp vùng cuộn",
+  "popup.failed.full-page": "Không thể hoàn tất chụp toàn trang",
+  "popup.scrollRestored": "Scroll fallback đã dừng an toàn và trang đã được phục hồi.",
+  "popup.scrollAreaRestored": "Vùng cuộn đã dừng an toàn và trạng thái cuộn đã được phục hồi.",
+  "popup.retryExport": "Mở editor để thử xuất lại",
+  "popup.reselect.region": "Chọn lại vùng",
+  "popup.reselect.element": "Chọn lại phần tử",
+  "popup.reselect.scroll-area": "Chọn lại vùng cuộn",
+  "popup.retryFullPage": "Thử lại chụp toàn trang",
+  "popup.pdf.sourceEyebrow": "NGUỒN PDF",
+  "popup.pdf.checking": "Đang kiểm tra nguồn PDF…",
+  "popup.pdf.source": "Nguồn PDF",
+  "popup.pdf.sourceLabel": "Nguồn",
+  "popup.pdf.fileLabel": "Tệp",
+  "popup.pdf.currentTab": "Tab hiện tại",
+  "popup.pdf.authTitle": "Nguồn PDF cần đăng nhập",
+  "popup.pdf.authDetail":
+    "Đăng nhập trong tab hiện tại rồi kiểm tra lại. WebCap không đọc hoặc ghi log thông tin đăng nhập.",
+  "popup.pdf.viewerTitle": "Không thể lấy byte PDF gốc",
+  "popup.pdf.viewerDetail":
+    "Bạn vẫn có thể chụp phần PDF đang hiển thị bằng chế độ toàn trang, vùng chọn hoặc vùng cuộn.",
+  "popup.pdf.unsupportedTitle": "Nguồn PDF không được hỗ trợ",
+  "popup.pdf.unsupportedDetail":
+    "Chrome không cho phép WebCap truy cập trực tiếp nguồn này. Có thể dùng chụp ảnh nếu tab vẫn hiển thị nội dung.",
+  "popup.pdf.filePermissionTitle": "Cần bật quyền truy cập file",
+  "popup.pdf.filePermissionDetail":
+    "Mở trang quản lý tiện ích của Chrome, bật “Cho phép truy cập vào URL của tệp”, rồi mở lại popup.",
+  "popup.pdf.originalTitle": "Có thể tải PDF nguyên bản",
+  "popup.pdf.hostPermissionDetail":
+    "WebCap chỉ xin quyền cho đúng nguồn PDF này khi bạn bấm tải; byte tài liệu không được gửi lên máy chủ.",
+  "popup.pdf.originalDetail":
+    "WebCap sẽ giữ nguyên byte PDF, kiểm tra chữ ký và tải xuống mà không rasterize lại.",
+  "popup.pdf.downloadChecking": "Đang kiểm tra và tải PDF…",
+  "popup.pdf.allowAndDownload": "Cho phép nguồn và tải PDF gốc",
+  "popup.pdf.checkFileAndDownload": "Kiểm tra quyền file và tải PDF gốc",
+  "popup.pdf.downloadOriginal": "Tải PDF gốc",
+  "popup.pdf.recheck": "Kiểm tra lại nguồn PDF",
+  "popup.pdf.downloadSuccess": "PDF nguyên bản đã được gửi tới Chrome Downloads.",
+  "popup.pdf.permissionDenied":
+    "Bạn đã từ chối quyền cho nguồn PDF. Luồng chụp ảnh của WebCap vẫn sử dụng được.",
+  "popup.pdf.fileDenied":
+    "Chrome chưa cho phép WebCap đọc file cục bộ. Bật quyền truy cập URL của tệp trong trang quản lý tiện ích rồi thử lại.",
+  "popup.pdf.permissionMissing": "Chrome chưa cấp quyền cần thiết cho nguồn PDF này.",
+  "popup.footer": "Ảnh, source tiles và PDF được xử lý cục bộ; không tải lên máy chủ.",
+  "popup.trust.activeTab": "activeTab: truy cập tạm thời tab sau thao tác của bạn.",
+  "popup.trust.debugger":
+    "debugger: chỉ gắn trong lúc đo/chụp toàn trang và luôn tháo khi kết thúc.",
+  "popup.trust.scripting": "scripting: chỉ inject selector/chuẩn bị trang khi job bắt đầu.",
+  "popup.trust.local":
+    "storage/offscreen/downloads: giữ Blob cục bộ, xử lý file và tải kết quả theo yêu cầu.",
+  "popup.trust.optional":
+    "Quyền website/file là tùy chọn và chỉ được hỏi đúng lúc cần tải PDF gốc.",
+  "editor.title": "Trình biên tập PDF",
+  "editor.invalidJob": "URL editor không chứa jobId hợp lệ.",
+  "editor.loading": "Đang tải dữ liệu biên tập…",
+  "editor.autosaved": "Bản chỉnh sửa được lưu tự động trong trình duyệt.",
+  "editor.previewFailed": "Không tạo được ảnh xem trước",
+  "editor.previewLoading": "Đang tải ảnh xem trước…",
+  "editor.previewAlt": "Ảnh xem trước {page}",
+  "editor.fallbackTitle": "Bản chụp trang web",
+  "editor.summary": "Tóm tắt tài liệu",
+  "editor.pagesCount": "{count} trang",
+  "editor.approxEstimate": "Ước tính xấp xỉ {bytes}",
+  "editor.layout": "Bố cục",
+  "editor.pages": "Các trang PDF",
+  "editor.keyboardHint": "Alt + ↑/↓ để đổi vị trí",
+  "editor.pageLabel": "Trang {page} trong {total}",
+  "editor.page": "Trang {page}",
+  "editor.source": "Nguồn #{source}",
+  "editor.pageActions": "Thao tác trang {page}",
+  "editor.moveBefore": "Đưa trang {page} lên trước",
+  "editor.moveAfter": "Đưa trang {page} xuống sau",
+  "editor.delete": "Xóa",
+  "editor.settings": "Thiết lập",
+  "editor.exportOptions": "Tùy chọn xuất PDF",
+  "editor.pageSize": "Khổ giấy",
+  "editor.fitWidth": "Vừa chiều rộng",
+  "editor.orientation": "Hướng giấy",
+  "editor.portrait": "Dọc",
+  "editor.landscape": "Ngang",
+  "editor.margin": "Lề trang: {value} mm",
+  "editor.jpegQuality": "Chất lượng JPEG: {value}%",
+  "editor.apply": "Áp dụng tùy chọn",
+  "editor.approxSize": "Kích thước xấp xỉ",
+  "editor.estimateDetail":
+    "Ước tính từ source tiles, chất lượng và số trang; file thực tế có thể khác.",
+  "editor.exporting": "Đang tạo PDF",
+  "editor.exportPage": "Trang {completed}/{total}",
+  "editor.stopExport": "Dừng xuất",
+  "editor.downloadPdf": "Tải PDF xuống",
+  "editor.retryExport": "Thử xuất lại",
+  "editor.createPdf": "Tạo PDF",
+  "editor.downloadStarted": "Đã bắt đầu tải PDF.",
+  "editor.orderUpdated": "Đã cập nhật thứ tự trang.",
+  "editor.pageRemoved": "Đã loại trang khỏi bản PDF. Source tile gốc không bị xóa.",
+  "editor.settingsApplied": "Đã áp dụng tùy chọn và tính lại danh sách trang.",
+  "editor.stopRequested": "Đã yêu cầu dừng xuất PDF.",
+  "editor.retryStarted": "Đang thử lại export từ source tiles đã lưu.",
+  "editor.exportStarted": "Đã bắt đầu tạo PDF.",
+  "editor.exportCompleted": "PDF đã sẵn sàng để tải xuống.",
+  "editor.exportFailed": "Xuất PDF thất bại. Source tiles vẫn được giữ để thử lại.",
+  "editor.memoryGuard":
+    "Tài liệu vượt ngưỡng bộ nhớ an toàn. Hãy giảm chất lượng JPEG, đổi Vừa chiều rộng sang A4/Letter hoặc xuất ít trang hơn. Source tiles vẫn được giữ để thử lại mà không cần chụp lại.",
+  "editor.exportCancelled": "Đã dừng xuất PDF; bạn có thể chỉnh sửa hoặc xuất lại.",
+  "selector.region.dialog": "Chọn vùng cần chụp",
+  "selector.region.instructions":
+    "Kéo để chọn · kéo khung để di chuyển · phím mũi tên để tinh chỉnh · Enter xác nhận · Esc hủy",
+  "selector.region.confirm": "Chụp vùng",
+  "selector.element.dialog": "Chọn phần tử cần chụp",
+  "selector.element.instructions":
+    "Di chuột để xem · nhấp để chọn · ↑ cha · ↓ phần tử con trước · Enter xác nhận · Esc hủy",
+  "selector.element.confirm": "Chụp phần tử",
+  "selector.scroll.dialog": "Chọn vùng cuộn cần chụp",
+  "selector.scroll.instructions":
+    "Di chuột để tìm khung cuộn · nhấp để chọn · ↑ khung cuộn cha · ↓ quay lại · Enter xác nhận · Esc hủy",
+  "selector.scroll.confirm": "Chụp toàn bộ vùng cuộn",
+  "selector.stale": " · mục đã chọn không còn tồn tại",
+  "selector.contentDimensions": "{width} × {height} nội dung",
+  "selector.selected": " · đã chọn {summary}",
+  "selector.resizeHandle": "Điều chỉnh cạnh {handle}",
+} as const;
+
+export type MessageKey = keyof typeof VI;
+
+const EN: Record<MessageKey, string> = {
+  "common.available": "Available",
+  "common.unavailable": "Unavailable",
+  "common.cancel": "Cancel",
+  "common.retry": "Retry",
+  "common.download": "Download",
+  "common.copyDiagnostics": "Copy diagnostic information",
+  "common.diagnosticsCopied": "Safe diagnostics JSON copied.",
+  "common.diagnosticsCopyFailed": "Could not copy automatically. Please try again.",
+  "common.language": "Language",
+  "common.vietnamese": "Tiếng Việt",
+  "common.english": "English",
+  "common.localOnly": "Data is processed only on this device",
+  "common.noAnalytics": "No analytics by default",
+  "common.privacy": "Privacy and permissions",
+  "common.permissions": "Permissions WebCap uses",
+  "common.close": "Close",
+  "popup.brandEyebrow": "CHROME EXTENSION",
+  "popup.workerLabel": "Service worker",
+  "popup.extensionStatus": "Extension status",
+  "popup.version": "Version",
+  "popup.currentTab": "Current tab",
+  "popup.worker.checking": "Connecting…",
+  "popup.worker.connected": "Connected",
+  "popup.worker.unavailable": "Unable to connect",
+  "popup.tab.supported": "Ready to capture",
+  "popup.tab.unsupported": "Chrome-restricted page",
+  "popup.tab.unavailable": "No active tab",
+  "popup.tab.unsupportedDetail":
+    "Chrome does not let extensions capture internal or restricted pages. Open a normal website; visible capture is available only when Chrome grants activeTab.",
+  "popup.captureModes": "Capture modes",
+  "popup.captureModeEyebrow": "CAPTURE MODE",
+  "popup.mode.visible": "Visible area",
+  "popup.mode.full-page": "Full page",
+  "popup.mode.region": "Custom region",
+  "popup.mode.element": "Element",
+  "popup.mode.scroll-area": "Scrollable area",
+  "popup.title.visible": "Capture visible area",
+  "popup.title.full-page": "Capture full page",
+  "popup.title.region": "Capture custom region",
+  "popup.title.element": "Capture element",
+  "popup.title.scroll-area": "Capture full scrollable area",
+  "popup.outputFormat": "Output format",
+  "popup.pdfOutputHint":
+    "Output: multi-page PDF · adjust paper, margins, quality, and order after capture.",
+  "popup.start.visible": "Create preview",
+  "popup.start.full-page": "Start full-page capture",
+  "popup.start.region": "Start region selection",
+  "popup.start.element": "Start element selection",
+  "popup.start.scroll-area": "Start scroll-area selection",
+  "popup.stopKeep": "Stop and keep {count} tiles",
+  "popup.cancelDiscard": "Cancel and delete temporary data",
+  "popup.cancelCapture": "Cancel capture",
+  "popup.capture.capturing": "Capturing the current tab…",
+  "popup.capture.captured": "Capture complete; preparing encoding…",
+  "popup.capture.processing": "Creating preview…",
+  "popup.capture.ready": "Preview is ready.",
+  "popup.capture.downloading": "Starting download…",
+  "popup.capture.completed": "The file was sent to Chrome Downloads.",
+  "popup.capture.cancelled": "Capture cancelled.",
+  "popup.capture.error": "The operation could not be completed.",
+  "popup.job.created": "Creating capture session…",
+  "popup.job.preparing": "Preparing and stabilizing the page…",
+  "popup.job.capturing": "Capturing tiles; WebCap switches to scroll fallback when needed…",
+  "popup.job.processing": "Validating the tile set…",
+  "popup.job.ready": "The full-page tile set is ready.",
+  "popup.job.exporting": "Creating PDF pages…",
+  "popup.job.completed": "The PDF is ready to download.",
+  "popup.job.failed": "Full-page capture could not be completed.",
+  "popup.job.cancelling": "Cancelling and restoring the page…",
+  "popup.job.cancelled": "Full-page capture cancelled.",
+  "popup.job.element.created": "Select an element directly on the page…",
+  "popup.job.element.ready": "The element tile set is ready.",
+  "popup.job.element.failed": "Element capture could not be completed.",
+  "popup.job.element.cancelled": "Element selection cancelled.",
+  "popup.job.region.created": "Select a region directly on the page…",
+  "popup.job.region.ready": "The region tile set is ready.",
+  "popup.job.region.failed": "Region capture could not be completed.",
+  "popup.job.region.cancelled": "Region selection cancelled.",
+  "popup.job.scroll-area.created": "Select a scrollable container on the page…",
+  "popup.job.scroll-area.preparing": "Measuring all content inside the scrollable area…",
+  "popup.job.scroll-area.capturing": "Scrolling and capturing the container in sections…",
+  "popup.job.scroll-area.ready": "The complete scroll-area tile set is ready.",
+  "popup.job.scroll-area.failed": "Scrollable-area capture could not be completed.",
+  "popup.job.scroll-area.cancelled": "Scrollable-area selection cancelled.",
+  "popup.partial.max-css-height":
+    "WebCap reached the configured height limit. The available tiles can still be exported to PDF.",
+  "popup.partial.max-duration":
+    "The page kept growing after the preparation time limit. WebCap kept the stable content captured so far.",
+  "popup.partial.max-tiles":
+    "The page exceeded the safe tile limit. WebCap kept a continuous prefix instead of truncating silently.",
+  "popup.partial.user-stop": "You stopped early and kept the continuous tiles captured so far.",
+  "popup.progress.region": "Region capture progress",
+  "popup.progress.element": "Element capture progress",
+  "popup.progress.scroll-area": "Scrollable-area capture progress",
+  "popup.progress.full-page": "Full-page capture progress",
+  "popup.estimate": "Estimated {format} · {bytes}",
+  "popup.preview.loading": "Loading preview…",
+  "popup.preview.alt": "Preview of the visible-area capture",
+  "popup.preview.title": "Preview",
+  "popup.preview.dimensions": "Dimensions",
+  "popup.preview.format": "Format",
+  "popup.preview.size": "Size",
+  "popup.preview.downloading": "Downloading…",
+  "popup.preview.reformat": "Recreate format",
+  "popup.preview.recapture": "Capture again",
+  "popup.ready.region": "Region tiles saved",
+  "popup.ready.element": "Element tiles saved",
+  "popup.ready.scroll-area": "All scroll-area tiles saved",
+  "popup.ready.full-page": "All tiles saved",
+  "popup.ready.detail":
+    "{count} source tiles are stored locally. Open the editor to preview, change paper, reorder or remove pages, and create a PDF without recapturing.",
+  "popup.openEditor": "Open PDF editor",
+  "popup.pdfReady": "PDF is ready",
+  "popup.pdfReadyDetail": "Open the editor to download the generated PDF.",
+  "popup.openDownloadPdf": "Open and download PDF",
+  "popup.failed": "Unable to complete",
+  "popup.failed.region": "Region capture could not be completed",
+  "popup.failed.element": "Element capture could not be completed",
+  "popup.failed.scroll-area": "Scrollable-area capture could not be completed",
+  "popup.failed.full-page": "Full-page capture could not be completed",
+  "popup.scrollRestored": "Scroll fallback stopped safely and the page was restored.",
+  "popup.scrollAreaRestored":
+    "Scrollable-area capture stopped safely and the scroll state was restored.",
+  "popup.retryExport": "Open editor to retry export",
+  "popup.reselect.region": "Select region again",
+  "popup.reselect.element": "Select element again",
+  "popup.reselect.scroll-area": "Select scrollable area again",
+  "popup.retryFullPage": "Retry full-page capture",
+  "popup.pdf.sourceEyebrow": "PDF SOURCE",
+  "popup.pdf.checking": "Checking PDF source…",
+  "popup.pdf.source": "PDF source",
+  "popup.pdf.sourceLabel": "Source",
+  "popup.pdf.fileLabel": "File",
+  "popup.pdf.currentTab": "Current tab",
+  "popup.pdf.authTitle": "PDF source requires sign-in",
+  "popup.pdf.authDetail":
+    "Sign in within the current tab, then check again. WebCap never reads or logs credentials.",
+  "popup.pdf.viewerTitle": "Original PDF bytes unavailable",
+  "popup.pdf.viewerDetail":
+    "You can still capture the displayed PDF using full-page, region, or scroll-area mode.",
+  "popup.pdf.unsupportedTitle": "Unsupported PDF source",
+  "popup.pdf.unsupportedDetail":
+    "Chrome does not let WebCap access this source directly. Image capture may still work if the tab displays the content.",
+  "popup.pdf.filePermissionTitle": "File access must be enabled",
+  "popup.pdf.filePermissionDetail":
+    "Open Chrome's extension details, enable “Allow access to file URLs,” then reopen the popup.",
+  "popup.pdf.originalTitle": "Original PDF can be downloaded",
+  "popup.pdf.hostPermissionDetail":
+    "WebCap requests access only to this PDF origin when you click download; document bytes are never sent to a server.",
+  "popup.pdf.originalDetail":
+    "WebCap preserves the original PDF bytes, verifies the signature, and downloads them without rasterizing.",
+  "popup.pdf.downloadChecking": "Verifying and downloading PDF…",
+  "popup.pdf.allowAndDownload": "Allow source and download original PDF",
+  "popup.pdf.checkFileAndDownload": "Check file access and download original PDF",
+  "popup.pdf.downloadOriginal": "Download original PDF",
+  "popup.pdf.recheck": "Check PDF source again",
+  "popup.pdf.downloadSuccess": "The original PDF was sent to Chrome Downloads.",
+  "popup.pdf.permissionDenied":
+    "You denied access to the PDF source. WebCap image capture is still available.",
+  "popup.pdf.fileDenied":
+    "Chrome has not allowed WebCap to read local files. Enable file URL access in the extension details and try again.",
+  "popup.pdf.permissionMissing": "Chrome has not granted the required access for this PDF source.",
+  "popup.footer": "Images, source tiles, and PDFs are processed locally and are never uploaded.",
+  "popup.trust.activeTab": "activeTab: temporary access after your explicit action.",
+  "popup.trust.debugger":
+    "debugger: attached only while measuring/capturing a full page, then always detached.",
+  "popup.trust.scripting": "scripting: injects selectors/page preparation only when a job starts.",
+  "popup.trust.local":
+    "storage/offscreen/downloads: keeps local Blobs, processes files, and downloads results on request.",
+  "popup.trust.optional":
+    "Website/file access is optional and requested only when downloading an original PDF requires it.",
+  "editor.title": "PDF editor",
+  "editor.invalidJob": "The editor URL does not contain a valid jobId.",
+  "editor.loading": "Loading editor data…",
+  "editor.autosaved": "Edits are saved automatically in this browser.",
+  "editor.previewFailed": "Preview could not be created",
+  "editor.previewLoading": "Loading preview…",
+  "editor.previewAlt": "Preview {page}",
+  "editor.fallbackTitle": "Web page capture",
+  "editor.summary": "Document summary",
+  "editor.pagesCount": "{count} pages",
+  "editor.approxEstimate": "Approximately {bytes}",
+  "editor.layout": "Layout",
+  "editor.pages": "PDF pages",
+  "editor.keyboardHint": "Alt + ↑/↓ to reorder",
+  "editor.pageLabel": "Page {page} of {total}",
+  "editor.page": "Page {page}",
+  "editor.source": "Source #{source}",
+  "editor.pageActions": "Page {page} actions",
+  "editor.moveBefore": "Move page {page} earlier",
+  "editor.moveAfter": "Move page {page} later",
+  "editor.delete": "Delete",
+  "editor.settings": "Settings",
+  "editor.exportOptions": "PDF export options",
+  "editor.pageSize": "Paper size",
+  "editor.fitWidth": "Fit width",
+  "editor.orientation": "Orientation",
+  "editor.portrait": "Portrait",
+  "editor.landscape": "Landscape",
+  "editor.margin": "Page margin: {value} mm",
+  "editor.jpegQuality": "JPEG quality: {value}%",
+  "editor.apply": "Apply options",
+  "editor.approxSize": "Approximate size",
+  "editor.estimateDetail":
+    "Estimated from source tiles, quality, and page count; the actual file may differ.",
+  "editor.exporting": "Creating PDF",
+  "editor.exportPage": "Page {completed}/{total}",
+  "editor.stopExport": "Stop export",
+  "editor.downloadPdf": "Download PDF",
+  "editor.retryExport": "Retry export",
+  "editor.createPdf": "Create PDF",
+  "editor.downloadStarted": "PDF download started.",
+  "editor.orderUpdated": "Page order updated.",
+  "editor.pageRemoved": "Page removed from the PDF. Original source tiles were not deleted.",
+  "editor.settingsApplied": "Options applied and the page list recalculated.",
+  "editor.stopRequested": "PDF export stop requested.",
+  "editor.retryStarted": "Retrying export from stored source tiles.",
+  "editor.exportStarted": "PDF creation started.",
+  "editor.exportCompleted": "The PDF is ready to download.",
+  "editor.exportFailed": "PDF export failed. Source tiles are retained for retry.",
+  "editor.memoryGuard":
+    "The document exceeds the safe memory budget. Lower JPEG quality, switch Fit width to A4/Letter, or export fewer pages. Source tiles are retained for retry without recapture.",
+  "editor.exportCancelled": "PDF export stopped; you can edit or export again.",
+  "selector.region.dialog": "Select a region to capture",
+  "selector.region.instructions":
+    "Drag to select · drag the box to move · arrow keys to refine · Enter to confirm · Esc to cancel",
+  "selector.region.confirm": "Capture region",
+  "selector.element.dialog": "Select an element to capture",
+  "selector.element.instructions":
+    "Hover to inspect · click to select · ↑ parent · ↓ previous child · Enter to confirm · Esc to cancel",
+  "selector.element.confirm": "Capture element",
+  "selector.scroll.dialog": "Select a scrollable area to capture",
+  "selector.scroll.instructions":
+    "Hover for scrollable containers · click to select · ↑ scrollable parent · ↓ return · Enter to confirm · Esc to cancel",
+  "selector.scroll.confirm": "Capture full scrollable area",
+  "selector.stale": " · selected item no longer exists",
+  "selector.contentDimensions": "{width} × {height} content",
+  "selector.selected": " · selected {summary}",
+  "selector.resizeHandle": "Resize handle {handle}",
+};
+
+const ERROR_COPY: Record<
+  UiLocale,
+  Partial<Record<WebCapErrorCode, { message: string; action: string }>>
+> = {
+  vi: {
+    E_PERMISSION_DENIED: {
+      message: "Chrome chưa cấp quyền cần thiết cho thao tác này.",
+      action:
+        "Đọc phần giải thích quyền, cấp đúng quyền được hỏi rồi thử lại; các chế độ ảnh khác vẫn khả dụng khi quyền PDF bị từ chối.",
+    },
+    E_UNSUPPORTED_URL: {
+      message: "Chrome không cho phép WebCap chạy trên URL hoặc trang này.",
+      action: "Mở một trang web thông thường hoặc dùng phương án chụp mà Chrome cho phép.",
+    },
+    E_TAB_NOT_ACTIVE: {
+      message: "Tab nguồn không còn hoạt động.",
+      action: "Quay lại tab cần chụp, giữ tab đó ở trạng thái hoạt động rồi thử lại.",
+    },
+    E_DEBUGGER_ATTACH: {
+      message: "WebCap không thể gắn trình đo toàn trang.",
+      action: "Đóng DevTools/debugger khác hoặc thử lại để WebCap dùng scroll fallback.",
+    },
+    E_DEBUGGER_DETACHED: {
+      message: "Kết nối đo toàn trang bị ngắt.",
+      action: "Giữ tab mở, đóng debugger khác và thử lại.",
+    },
+    E_CDP_COMMAND: {
+      message: "Chrome không hoàn tất lệnh chụp toàn trang.",
+      action: "Thử lại; WebCap sẽ dùng fallback khi lỗi cho phép.",
+    },
+    E_LAYOUT_UNSTABLE: {
+      message: "Trang thay đổi liên tục và chưa đạt trạng thái ổn định.",
+      action: "Dừng animation/tải tự động trên trang hoặc thử lại với giới hạn nội dung nhỏ hơn.",
+    },
+    E_TARGET_STALE: {
+      message: "Vùng hoặc phần tử đã chọn không còn tồn tại.",
+      action: "Chọn lại mục cần chụp.",
+    },
+    E_TILE_PLAN: {
+      message: "Nội dung vượt giới hạn lập kế hoạch tile an toàn.",
+      action: "Giảm phạm vi, dừng và giữ phần đã chụp, hoặc xuất theo nhiều phần.",
+    },
+    E_CAPTURE_RATE_LIMIT: {
+      message: "Chrome đang giới hạn tốc độ chụp.",
+      action: "Chờ một chút rồi thử lại.",
+    },
+    E_CAPTURE_EMPTY: {
+      message: "Chrome trả về ảnh chụp rỗng.",
+      action: "Đảm bảo tab đang hiển thị và thử lại.",
+    },
+    E_STORAGE_QUOTA: {
+      message: "Không đủ dung lượng lưu trữ cục bộ cho kết quả.",
+      action: "Xóa dữ liệu tạm cũ hoặc giảm phạm vi/chất lượng rồi thử lại.",
+    },
+    E_STORAGE_READ: {
+      message: "Không đọc được dữ liệu WebCap đã lưu.",
+      action: "Mở lại extension và thử lại; nếu lỗi tiếp diễn, tạo bản chụp mới.",
+    },
+    E_STORAGE_WRITE: {
+      message: "Không lưu được dữ liệu tạm trên thiết bị.",
+      action: "Giải phóng dung lượng trình duyệt rồi thử lại.",
+    },
+    E_SETTINGS_INVALID: {
+      message: "Thiết lập lưu trữ không hợp lệ.",
+      action: "Khôi phục tùy chọn mặc định hoặc lưu lại thiết lập.",
+    },
+    E_MEMORY_GUARD: {
+      message: "Kết quả vượt ngưỡng bộ nhớ an toàn.",
+      action: "Giảm chất lượng JPEG, dùng A4/Letter, giảm số trang hoặc chia file.",
+    },
+    E_OFFSCREEN_UNAVAILABLE: {
+      message: "Bộ xử lý file cục bộ chưa sẵn sàng.",
+      action: "Mở lại extension và thử lại mà không cần chụp lại nếu source tiles còn tồn tại.",
+    },
+    E_EXPORT_FAILED: {
+      message: "Không thể tạo file đầu ra.",
+      action: "Thử export lại; WebCap giữ source tiles khi có thể.",
+    },
+    E_DOWNLOAD_FAILED: {
+      message: "Chrome không bắt đầu được lượt tải xuống.",
+      action: "Kiểm tra cài đặt Downloads của Chrome rồi thử lại.",
+    },
+    E_CANCELLED: { message: "Thao tác đã được hủy.", action: "Bắt đầu lại khi bạn sẵn sàng." },
+    E_CLEANUP_PARTIAL: {
+      message: "WebCap không thể phục hồi toàn bộ giá trị mà nó đã thay đổi.",
+      action: "Tải lại trang nếu trạng thái hiển thị chưa đúng.",
+    },
+    E_PROTOCOL_VERSION: {
+      message: "Các thành phần WebCap đang dùng phiên bản giao thức không khớp.",
+      action: "Tải lại extension và mở lại tab.",
+    },
+    E_PROTOCOL_MESSAGE: {
+      message: "WebCap nhận được phản hồi nội bộ không hợp lệ.",
+      action: "Tải lại extension rồi thử lại.",
+    },
+    E_UNKNOWN: {
+      message: "WebCap gặp lỗi không xác định.",
+      action: "Sao chép thông tin chẩn đoán an toàn, tải lại extension và thử lại.",
+    },
+  },
+  en: {
+    E_PERMISSION_DENIED: {
+      message: "Chrome has not granted the access required for this action.",
+      action:
+        "Review the permission explanation, grant only the requested access, and retry; image modes remain available if PDF access is denied.",
+    },
+    E_UNSUPPORTED_URL: {
+      message: "Chrome does not allow WebCap to run on this URL or page.",
+      action: "Open a normal website or use a capture method Chrome permits.",
+    },
+    E_TAB_NOT_ACTIVE: {
+      message: "The source tab is no longer active.",
+      action: "Return to the tab, keep it active, and retry.",
+    },
+    E_DEBUGGER_ATTACH: {
+      message: "WebCap could not attach the full-page measurement session.",
+      action: "Close another DevTools/debugger session or retry so WebCap can use scroll fallback.",
+    },
+    E_DEBUGGER_DETACHED: {
+      message: "The full-page measurement connection was interrupted.",
+      action: "Keep the tab open, close other debuggers, and retry.",
+    },
+    E_CDP_COMMAND: {
+      message: "Chrome could not complete the full-page capture command.",
+      action: "Retry; WebCap will use fallback when the error allows it.",
+    },
+    E_LAYOUT_UNSTABLE: {
+      message: "The page keeps changing and did not become stable.",
+      action: "Pause page animation/automatic loading or retry with a smaller content limit.",
+    },
+    E_TARGET_STALE: {
+      message: "The selected region or element no longer exists.",
+      action: "Select the target again.",
+    },
+    E_TILE_PLAN: {
+      message: "The content exceeds the safe tile-planning limit.",
+      action: "Reduce the range, stop and keep captured content, or export in multiple parts.",
+    },
+    E_CAPTURE_RATE_LIMIT: {
+      message: "Chrome is rate-limiting screenshots.",
+      action: "Wait briefly and retry.",
+    },
+    E_CAPTURE_EMPTY: {
+      message: "Chrome returned an empty screenshot.",
+      action: "Make sure the tab is visible and retry.",
+    },
+    E_STORAGE_QUOTA: {
+      message: "There is not enough local storage for this result.",
+      action: "Remove old temporary data or reduce capture size/quality and retry.",
+    },
+    E_STORAGE_READ: {
+      message: "WebCap could not read stored data.",
+      action: "Reopen the extension and retry; create a new capture if the issue persists.",
+    },
+    E_STORAGE_WRITE: {
+      message: "WebCap could not store temporary data on this device.",
+      action: "Free browser storage and retry.",
+    },
+    E_SETTINGS_INVALID: {
+      message: "Stored settings are invalid.",
+      action: "Restore defaults or save the settings again.",
+    },
+    E_MEMORY_GUARD: {
+      message: "The result exceeds the safe memory budget.",
+      action: "Lower JPEG quality, use A4/Letter, reduce page count, or split the file.",
+    },
+    E_OFFSCREEN_UNAVAILABLE: {
+      message: "The local file processor is unavailable.",
+      action: "Reopen the extension and retry without recapturing if source tiles remain.",
+    },
+    E_EXPORT_FAILED: {
+      message: "The output file could not be created.",
+      action: "Retry export; WebCap retains source tiles when possible.",
+    },
+    E_DOWNLOAD_FAILED: {
+      message: "Chrome could not start the download.",
+      action: "Check Chrome Downloads settings and retry.",
+    },
+    E_CANCELLED: { message: "The operation was cancelled.", action: "Start again when ready." },
+    E_CLEANUP_PARTIAL: {
+      message: "WebCap could not restore every value it changed.",
+      action: "Reload the page if its display state is not correct.",
+    },
+    E_PROTOCOL_VERSION: {
+      message: "WebCap components are using incompatible protocol versions.",
+      action: "Reload the extension and reopen the tab.",
+    },
+    E_PROTOCOL_MESSAGE: {
+      message: "WebCap received an invalid internal response.",
+      action: "Reload the extension and retry.",
+    },
+    E_UNKNOWN: {
+      message: "WebCap encountered an unknown error.",
+      action: "Copy safe diagnostics, reload the extension, and retry.",
+    },
+  },
+};
+
+export interface ErrorPresentation {
+  message: string;
+  action: string;
+}
+
+export function normalizeUiLocale(value: unknown): UiLocale {
+  return value === "en" ? "en" : DEFAULT_UI_LOCALE;
+}
+
+export function t(
+  locale: UiLocale,
+  key: MessageKey,
+  params: Record<string, string | number> = {},
+): string {
+  const template = (locale === "en" ? EN : VI)[key] ?? VI[key];
+  return template.replace(/\{([a-zA-Z0-9_-]+)\}/g, (match, name: string) => {
+    const replacement = params[name];
+    return replacement === undefined ? match : String(replacement);
+  });
+}
+
+export function errorPresentation(
+  locale: UiLocale,
+  error: Pick<WebCapErrorData, "code"> | WebCapErrorCode | undefined,
+): ErrorPresentation {
+  const code = typeof error === "string" ? error : error?.code;
+  return (
+    (code === undefined ? undefined : ERROR_COPY[locale][code]) ??
+    ERROR_COPY[locale].E_UNKNOWN ?? {
+      message:
+        locale === "en"
+          ? "WebCap could not complete the operation."
+          : "WebCap không thể hoàn tất thao tác.",
+      action: locale === "en" ? "Retry the operation." : "Hãy thử lại thao tác.",
+    }
+  );
+}

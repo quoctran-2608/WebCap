@@ -1,3 +1,4 @@
+import { throwRemoteWebCapError } from "@shared/errors/remote-error";
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@shared/constants";
 import type { CaptureJob, ImageFormat } from "@shared/contracts/domain";
 import {
@@ -26,9 +27,7 @@ async function sendJobRequest(
     rejectAfter(timeoutMs),
   ]);
   if (isErrorResponseMessage(response)) {
-    const error = new Error(response.payload.message);
-    error.name = response.payload.code;
-    throw error;
+    throwRemoteWebCapError(response.payload);
   }
   if (!isJobResponseMessage(response)) {
     throw new TypeError("Service worker returned an invalid capture job response.");
@@ -119,9 +118,7 @@ export async function getActiveCaptureJob(tabId: number): Promise<CaptureJob | u
     rejectAfter(DEFAULT_REQUEST_TIMEOUT_MS),
   ]);
   if (isErrorResponseMessage(response)) {
-    const error = new Error(response.payload.message);
-    error.name = response.payload.code;
-    throw error;
+    throwRemoteWebCapError(response.payload);
   }
   if (!isJobActiveResponseMessage(response) || response.requestId !== request.requestId) {
     throw new TypeError("Service worker returned an invalid active capture response.");

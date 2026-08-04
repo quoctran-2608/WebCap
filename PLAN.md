@@ -8,7 +8,7 @@ repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.0.md
 spec: ./SPEC.md
-current_session: S19
+current_session: S20
 ---
 
 # WebCap — Session-sized Implementation Plan
@@ -117,8 +117,8 @@ Nếu session vượt dự toán vì API/browser behavior phức tạp, tôi ph�
 | S16 | M5 | Scrollable-container detection và capture | S15 | 22k–30k | DONE |
 | S17 | M5 | PDF source detection và original passthrough | S16 | 18k–26k | DONE |
 | S18 | M6 | Hardening lazy/infinite/iframe/canvas/WebGL | S17 | 22k–30k | DONE |
-| S19 | M6 | Diagnostics, i18n, privacy và permissions | S18 | 18k–26k | NEXT |
-| S20 | M6 | Release candidate, packaging và store readiness | S19 | 18k–26k | READY |
+| S19 | M6 | Diagnostics, i18n, privacy và permissions | S18 | 18k–26k | DONE |
+| S20 | M6 | Release candidate, packaging và store readiness | S19 | 18k–26k | NEXT |
 
 # 7. Session chi tiết
 
@@ -703,6 +703,8 @@ pnpm build
 
 **Commit gợi ý:** `Add diagnostics localization and privacy UX`.
 
+**Hoàn thành 2026-08-04 — PR #23 / CI `30899360894`:** catalog Việt/Anh dùng chung được lưu bền và áp dụng cho popup, editor, region/element selector, restricted-page copy, permission rationale và toàn bộ error code; fallback không lộ raw key. Diagnostics JSON versioned chỉ nhận allowlist metadata kỹ thuật và loại URL, page text, selector, credential/token/cookie cùng binary content; remote error giữ code/details an toàn, production logger mặc định `warn`. Privacy/permission docs, keyboard/live-region/semantic-label/reduced-motion pass và trust-UX browser tests đã hoàn tất. CI read-only chạy audit thường trực, xác nhận không remote executable code, analytics SDK, unsafe diagnostics field, default host permission hay direct license không tương thích; 18 dependency trực tiếp đều MIT/Apache-2.0. Gate sạch: format, lint, strict typecheck, privacy/license audit, 276 unit tests/78 files, 4 PDF benchmarks, Manifest V3 build và 35 Playwright E2E; không thêm telemetry, backend, account, cloud sync hoặc required permission.
+
 ---
 
 ## S20 — Release candidate, packaging và store readiness
@@ -833,17 +835,18 @@ Mỗi session khi hoàn thành phải thêm một dòng. Không ghi log chi ti�
 | S16 | DONE | 2026-08-04 | PR #20 / CI 30876338727 | format, lint, typecheck, 248 unit, 4 PDF benchmarks, build, 23 Playwright E2E | Candidate detection, opaque target revalidation, 2D visible-tab crop capture, sticky-child cleanup, crop-aware PDF/thumbnail và exact restore đã được xác thực trên nested scroll, wide table và stale modal/chat. |
 | S17 | DONE | 2026-08-04 | PR #21 / cdffec8 / CI 30882436209 | format, lint, typecheck, 265 unit, 4 PDF benchmarks, build, 26 Playwright E2E | URL/content-type/viewer detection, exact-origin/file permission, active-tab revalidation, original-byte integrity/hash/local Blob download và auth-required zero-artifact fallback đã được xác thực. |
 | S18 | DONE | 2026-08-04 | PR #22 / 79398f7 / CI 30889381904 | format, lint, typecheck, 268 unit, 4 PDF benchmarks, build, 33 Playwright E2E | Bounded growth, partial reason/user-stop, contiguous-prefix safety, scroll-snap/layout settle, iframe compositor pixels, Canvas/WebGL và DPR/zoom matrix đã được xác thực. |
-| S19 | NEXT | — | — | — | Sẵn sàng hoàn thiện diagnostics, Việt/Anh i18n, privacy/permission UX, accessibility và dependency/license audit. |
-| S20 | READY | — | — | — | — |
+| S19 | DONE | 2026-08-04 | PR #23 / CI 30899360894 | format, lint, typecheck, privacy/license audit, 276 unit, 4 PDF benchmarks, build, 35 Playwright E2E | Việt/Anh persisted i18n, safe diagnostics copy/redaction, warn-default logger, contextual permission/restricted-page UX, privacy/accessibility pass và direct-license audit đã được xác thực trong CI read-only. |
+| S20 | NEXT | — | — | — | Sẵn sàng tạo release candidate, deterministic ZIP, clean-profile lifecycle checks và store-readiness hồ sơ; không thêm tính năng mới. |
 
 # 12. Lệnh bắt đầu lần triển khai kế tiếp
 
-Session kế tiếp là **S18 — Hardening lazy/infinite/iframe/canvas/WebGL**.
+Session kế tiếp là **S20 — Release candidate, packaging và store readiness**.
 
 Khi được yêu cầu tiếp tục code, tôi phải:
 
-1. Đọc `PLAN.md` phần S18.
-2. Đọc PRD edge cases, SPEC §15–17, §27 fixtures và open validations.
-3. Kiểm tra repo/branch và kết quả CI S17.
-4. Chỉ triển khai S18.
-5. Kết thúc với stop conditions cho infinite scroll, lazy-growth policy, iframe pixel behavior, canvas/WebGL validation, scroll-snap/layout-shift mitigations, zoom/DPR matrix và known limitations trung thực.
+1. Đọc `PLAN.md` phần S20 và toàn bộ exit criteria/Definition of Done liên quan trong PRD/SPEC.
+2. Kiểm tra repo, branch, dependency alerts, PR và kết quả CI read-only của S19.
+3. Chỉ triển khai S20; không thêm capability mới hoặc mở rộng MVP.
+4. Chạy full selected quality suite, tạo production build và deterministic ZIP, audit manifest/version/permissions, rồi kiểm tra install/update/uninstall trên clean profile.
+5. Hoàn thiện release checklist, known limitations, privacy/store copy, CHANGELOG, version/checksum và triage mọi P0/P1/critical alert.
+6. Chuẩn bị tag/release workflow nhưng không publish Chrome Web Store khi chưa có chỉ thị cụ thể.

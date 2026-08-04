@@ -46,8 +46,18 @@ const consoleSink: LogSink = {
   },
 };
 
-function compactJobId(jobId: string | undefined): string | undefined {
-  return jobId === undefined ? undefined : jobId.slice(0, 12);
+function safeToken(value: string | undefined, maxLength: number): string | undefined {
+  if (value === undefined || /https?:|www\.|bearer|cookie|token=|authorization/iu.test(value)) {
+    return undefined;
+  }
+  const sanitized = value.replace(/[^a-zA-Z0-9._<>=-]/gu, "_").slice(0, maxLength);
+  return sanitized.length === 0 ? undefined : sanitized;
+}
+
+function safeCount(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isFinite(value) && value >= 0
+    ? Math.floor(value)
+    : undefined;
 }
 
 function safeRecord(
@@ -56,27 +66,27 @@ function safeRecord(
   timestamp: string,
   context: SafeLogContext,
 ): SafeLogRecord {
-  const jobId = compactJobId(context.jobId);
+  const eventName = safeToken(event, 120) ?? "redacted";
+  const extensionVersion = safeToken(context.extensionVersion, 80);
+  const jobId = safeToken(context.jobId, 12);
+  const tileIndex = safeCount(context.tileIndex);
+  const tileCount = safeCount(context.tileCount);
+  const durationBucket = safeToken(context.durationBucket, 40);
+  const chromeVersionBucket = safeToken(context.chromeVersionBucket, 40);
   return {
     timestamp,
     level,
-    event: event.slice(0, 120),
-    ...(context.extensionVersion === undefined
-      ? {}
-      : { extensionVersion: context.extensionVersion.slice(0, 80) }),
+    event: eventName,
+    ...(extensionVersion === undefined ? {} : { extensionVersion }),
     ...(jobId === undefined ? {} : { jobId }),
     ...(context.mode === undefined ? {} : { mode: context.mode }),
     ...(context.engine === undefined ? {} : { engine: context.engine }),
     ...(context.stage === undefined ? {} : { stage: context.stage }),
-    ...(context.tileIndex === undefined ? {} : { tileIndex: context.tileIndex }),
-    ...(context.tileCount === undefined ? {} : { tileCount: context.tileCount }),
-    ...(context.durationBucket === undefined
-      ? {}
-      : { durationBucket: context.durationBucket.slice(0, 40) }),
+    ...(tileIndex === undefined ? {} : { tileIndex }),
+    ...(tileCount === undefined ? {} : { tileCount }),
+    ...(durationBucket === undefined ? {} : { durationBucket }),
     ...(context.errorCode === undefined ? {} : { errorCode: context.errorCode }),
-    ...(context.chromeVersionBucket === undefined
-      ? {}
-      : { chromeVersionBucket: context.chromeVersionBucket.slice(0, 40) }),
+    ...(chromeVersionBucket === undefined ? {} : { chromeVersionBucket }),
   };
 }
 

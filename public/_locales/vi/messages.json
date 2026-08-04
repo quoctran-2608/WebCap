@@ -1,0 +1,7 @@
+{
+  "appName": { "message": "WebCap" },
+  "appDescription": {
+    "message": "Chụp vùng đang xem, toàn trang, vùng chọn, phần tử hoặc vùng cuộn và xuất ảnh/PDF ngay trên thiết bị."
+  },
+  "actionTitle": { "message": "Mở WebCap" }
+}

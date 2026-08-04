@@ -1,3 +1,4 @@
+import { throwRemoteWebCapError } from "@shared/errors/remote-error";
 import type { CaptureCapabilities } from "@shared/capabilities";
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@shared/constants";
 import type { ArtifactMetadata } from "@shared/contracts/artifact";
@@ -76,9 +77,7 @@ async function sendWithTimeout(
 
 function throwRemoteError(response: unknown): void {
   if (isErrorResponseMessage(response)) {
-    const error = new Error(response.payload.message);
-    error.name = response.payload.code;
-    throw error;
+    throwRemoteWebCapError(response.payload);
   }
 }
 

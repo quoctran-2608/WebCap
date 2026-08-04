@@ -26,6 +26,8 @@ const requiredFiles = [
   "icons/icon-32.png",
   "icons/icon-48.png",
   "icons/icon-128.png",
+  "_locales/vi/messages.json",
+  "_locales/en/messages.json",
 ];
 
 function assertEqual(actual, expected, label) {
@@ -43,6 +45,9 @@ for (const relativePath of requiredFiles) {
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
 assertEqual(manifest.manifest_version, 3, "manifest_version");
 assertEqual(manifest.minimum_chrome_version, "116", "minimum_chrome_version");
+assertEqual(manifest.default_locale, "vi", "default_locale");
+assertEqual(manifest.name, "__MSG_appName__", "name");
+assertEqual(manifest.description, "__MSG_appDescription__", "description");
 assertEqual(manifest.action?.default_popup, "popup.html", "action.default_popup");
 assertEqual(
   manifest.background,

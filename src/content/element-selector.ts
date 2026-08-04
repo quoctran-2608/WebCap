@@ -1,4 +1,5 @@
 import type { ElementTargetDescriptor, Rect } from "@shared/contracts/domain";
+import { DEFAULT_UI_LOCALE, t, type UiLocale } from "@shared/i18n";
 
 import { CoordinateSpace, clampRectToBounds } from "./coordinate-space";
 
@@ -29,6 +30,7 @@ export interface ElementSelectorController {
 export interface OpenElementSelectorOptions {
   jobId: string;
   captureKind: ElementTargetDescriptor["captureKind"];
+  locale?: UiLocale;
   onCommit(selection: ElementSelection): Promise<void> | void;
   onCancel(reason: string): Promise<void> | void;
 }
@@ -232,6 +234,7 @@ export function openElementSelector(
 ): ElementSelectorController {
   document.querySelector<HTMLElement>(`[${ELEMENT_SELECTOR_ROOT_ATTRIBUTE}]`)?.remove();
 
+  const locale = options.locale ?? DEFAULT_UI_LOCALE;
   const originalScroll = { x: window.scrollX, y: window.scrollY };
   const originalFocus =
     document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
@@ -244,11 +247,18 @@ export function openElementSelector(
   root.style.contain = "layout style paint";
 
   const isScrollArea = options.captureKind === "full-scroll-content";
-  const dialogLabel = isScrollArea ? "Chọn vùng cuộn cần chụp" : "Chọn phần tử cần chụp";
-  const confirmLabel = isScrollArea ? "Chụp toàn bộ vùng cuộn" : "Chụp phần tử";
-  const instructions = isScrollArea
-    ? "Di chuột để tìm khung cuộn · nhấp để chọn · ↑ khung cuộn cha · ↓ quay lại · Enter xác nhận · Esc hủy"
-    : "Di chuột để xem · nhấp để chọn · ↑ cha · ↓ phần tử con trước · Enter xác nhận · Esc hủy";
+  const dialogLabel = t(
+    locale,
+    isScrollArea ? "selector.scroll.dialog" : "selector.element.dialog",
+  );
+  const confirmLabel = t(
+    locale,
+    isScrollArea ? "selector.scroll.confirm" : "selector.element.confirm",
+  );
+  const instructions = t(
+    locale,
+    isScrollArea ? "selector.scroll.instructions" : "selector.element.instructions",
+  );
 
   const shadow = root.attachShadow({ mode: "open" });
   shadow.innerHTML = `
@@ -323,9 +333,9 @@ export function openElementSelector(
       <span class="label" data-label></span>
     </div>
     <div class="toolbar" role="dialog" aria-label="${dialogLabel}" data-toolbar>
-      <p class="instructions">${instructions} <span class="selection-copy" data-selection-copy></span></p>
+      <p class="instructions">${instructions} <span class="selection-copy" data-selection-copy aria-live="polite"></span></p>
       <div class="actions">
-        <button type="button" data-cancel>Hủy</button>
+        <button type="button" data-cancel>${t(locale, "common.cancel")}</button>
         <button type="button" data-confirm disabled>${confirmLabel}</button>
       </div>
     </div>
@@ -366,7 +376,7 @@ export function openElementSelector(
     ) {
       highlight.style.display = "none";
       confirmButton.disabled = true;
-      selectionCopy.textContent = selected === undefined ? "" : " · mục đã chọn không còn tồn tại";
+      selectionCopy.textContent = selected === undefined ? "" : t(locale, "selector.stale");
       return;
     }
     const rect = element.getBoundingClientRect();
@@ -382,10 +392,14 @@ export function openElementSelector(
     });
     const dimensions =
       isScrollArea && element instanceof HTMLElement
-        ? `${element.scrollWidth} × ${element.scrollHeight} nội dung`
+        ? t(locale, "selector.contentDimensions", {
+            width: element.scrollWidth,
+            height: element.scrollHeight,
+          })
         : `${Math.round(rect.width)} × ${Math.round(rect.height)}`;
     label.textContent = `${summary} · ${dimensions}`;
-    selectionCopy.textContent = selected === undefined ? "" : ` · đã chọn ${summary}`;
+    selectionCopy.textContent =
+      selected === undefined ? "" : t(locale, "selector.selected", { summary });
     confirmButton.disabled = selected === undefined;
   };
 

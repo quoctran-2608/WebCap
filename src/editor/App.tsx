@@ -2,11 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { downloadArtifact } from "@popup/worker-client";
 import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
+import { copyText } from "@shared/clipboard";
 import type {
   PdfEditorPage,
   PdfEditorSettings,
   PdfEditorSnapshot,
 } from "@shared/contracts/pdf-editor";
+import { serializeSafeDiagnostics } from "@shared/diagnostics";
+import { WebCapRuntimeError } from "@shared/errors/error";
+import { errorPresentation, t, type UiLocale } from "@shared/i18n";
+import { useUiLocale } from "@shared/use-ui-locale";
+
 import {
   cancelPdfEditorExport,
   getPdfEditorSnapshot,
@@ -23,29 +29,22 @@ function formatBytes(value: number): string {
   return `${(value / (1_024 * 1_024)).toFixed(1)} MB`;
 }
 
-function errorMessage(error: unknown): string {
-  if (error instanceof Error && error.message.length > 0) return error.message;
-  return "Không thể hoàn thành thao tác PDF.";
-}
-
-function exportStateNotice(snapshot: PdfEditorSnapshot): string {
-  if (snapshot.job.state === "completed") return "PDF đã sẵn sàng để tải xuống.";
-  if (snapshot.job.state === "failed") {
-    if (snapshot.job.error?.code === "E_MEMORY_GUARD") {
-      return "Tài liệu vượt ngưỡng bộ nhớ an toàn. Hãy giảm chất lượng JPEG, đổi Vừa chiều rộng sang A4/Letter hoặc xuất ít trang hơn. Source tiles vẫn được giữ để thử lại mà không cần chụp lại.";
-    }
-    return "Xuất PDF thất bại. Source tiles vẫn được giữ để thử lại.";
-  }
-  return "Đã dừng xuất PDF; bạn có thể chỉnh sửa hoặc xuất lại.";
+function localizedError(locale: UiLocale, error: unknown): string {
+  const presentation =
+    error instanceof WebCapRuntimeError
+      ? errorPresentation(locale, error.data)
+      : errorPresentation(locale, "E_UNKNOWN");
+  return `${presentation.message} ${presentation.action}`;
 }
 
 interface PageThumbnailProps {
   snapshot: PdfEditorSnapshot;
   page: PdfEditorPage;
   eager: boolean;
+  locale: UiLocale;
 }
 
-function PageThumbnail({ snapshot, page, eager }: PageThumbnailProps) {
+function PageThumbnail({ snapshot, page, eager, locale }: PageThumbnailProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [url, setUrl] = useState<string>();
   const [failed, setFailed] = useState(false);
@@ -92,16 +91,40 @@ function PageThumbnail({ snapshot, page, eager }: PageThumbnailProps) {
       observer?.disconnect();
       if (objectUrl !== undefined) URL.revokeObjectURL(objectUrl);
     };
-  }, [eager, page, snapshot.job, snapshot.manifest.revision]);
+  }, [eager, page.id, snapshot.job.id, snapshot.manifest.revision]);
 
   return (
     <div className="thumbnail" ref={containerRef} aria-busy={url === undefined && !failed}>
       {url === undefined ? (
-        <span>{failed ? "Không tạo được ảnh xem trước" : "Đang tải ảnh xem trước…"}</span>
+        <span>
+          {failed ? t(locale, "editor.previewFailed") : t(locale, "editor.previewLoading")}
+        </span>
       ) : (
-        <img src={url} alt={`Ảnh xem trước ${page.id}`} />
+        <img src={url} alt={t(locale, "editor.previewAlt", { page: page.originalIndex + 1 })} />
       )}
     </div>
+  );
+}
+
+export function InvalidPdfEditor(): React.JSX.Element {
+  const { locale, setLocale } = useUiLocale();
+  return (
+    <main className="editor-shell loading-shell">
+      <div className="loading-card">
+        <h1>{t(locale, "editor.title")}</h1>
+        <p role="alert">{t(locale, "editor.invalidJob")}</p>
+        <label className="editor-locale-control">
+          <span>{t(locale, "common.language")}</span>
+          <select
+            value={locale}
+            onChange={(event) => void setLocale(event.target.value as UiLocale)}
+          >
+            <option value="vi">{t(locale, "common.vietnamese")}</option>
+            <option value="en">{t(locale, "common.english")}</option>
+          </select>
+        </label>
+      </div>
+    </main>
   );
 }
 
@@ -110,12 +133,14 @@ export interface PdfEditorAppProps {
 }
 
 export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
+  const { locale, setLocale } = useUiLocale();
   const [snapshot, setSnapshot] = useState<PdfEditorSnapshot>();
   const [draftSettings, setDraftSettings] = useState<PdfEditorSettings>();
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("Đang tải dữ liệu biên tập…");
+  const [noticeKey, setNoticeKey] = useState<Parameters<typeof t>[1]>("editor.loading");
   const [error, setError] = useState<string>();
   const [downloadId, setDownloadId] = useState<number>();
+  const [diagnosticsNotice, setDiagnosticsNotice] = useState<string>();
 
   const refresh = useCallback(async () => {
     const next = await getPdfEditorSnapshot(jobId);
@@ -128,15 +153,15 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
     let active = true;
     void refresh()
       .then(() => {
-        if (active) setNotice("Bản chỉnh sửa được lưu tự động trong trình duyệt.");
+        if (active) setNoticeKey("editor.autosaved");
       })
-      .catch((cause) => {
-        if (active) setError(errorMessage(cause));
+      .catch((cause: unknown) => {
+        if (active) setError(localizedError(locale, cause));
       });
     return () => {
       active = false;
     };
-  }, [refresh]);
+  }, [locale, refresh]);
 
   useEffect(() => {
     if (snapshot?.job.state !== "exporting") return;
@@ -146,13 +171,22 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
           setSnapshot(next);
           if (next.job.state !== "exporting") {
             setDraftSettings(next.manifest.settings);
-            setNotice(exportStateNotice(next));
+            setError(undefined);
+            setNoticeKey(
+              next.job.state === "completed"
+                ? "editor.exportCompleted"
+                : next.job.state === "failed"
+                  ? next.job.error?.code === "E_MEMORY_GUARD"
+                    ? "editor.memoryGuard"
+                    : "editor.exportFailed"
+                  : "editor.exportCancelled",
+            );
           }
         })
-        .catch((cause) => setError(errorMessage(cause)));
+        .catch((cause: unknown) => setError(localizedError(locale, cause)));
     }, 400);
     return () => globalThis.clearInterval(timer);
-  }, [jobId, snapshot?.job.state]);
+  }, [jobId, locale, snapshot?.job.state]);
 
   const progress = useMemo(() => {
     const current = snapshot?.job.exportProgress;
@@ -161,21 +195,21 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
   }, [snapshot?.job.exportProgress]);
 
   const mutate = useCallback(
-    async (operation: () => Promise<PdfEditorSnapshot>, success: string) => {
+    async (operation: () => Promise<PdfEditorSnapshot>, successKey: Parameters<typeof t>[1]) => {
       setBusy(true);
       setError(undefined);
       try {
         const next = await operation();
         setSnapshot(next);
         setDraftSettings(next.manifest.settings);
-        setNotice(success);
+        setNoticeKey(successKey);
       } catch (cause) {
-        setError(errorMessage(cause));
+        setError(localizedError(locale, cause));
       } finally {
         setBusy(false);
       }
     },
-    [],
+    [locale],
   );
 
   const downloadPdf = useCallback(async () => {
@@ -187,16 +221,16 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
     try {
       const nextDownloadId = await downloadArtifact(artifactId);
       setDownloadId(nextDownloadId);
-      setNotice("Đã bắt đầu tải PDF.");
+      setNoticeKey("editor.downloadStarted");
     } catch (cause) {
-      setError(errorMessage(cause));
+      setError(localizedError(locale, cause));
     } finally {
       setBusy(false);
     }
-  }, [snapshot?.job.outputArtifactId]);
+  }, [locale, snapshot?.job.outputArtifactId]);
 
   const updatePageIds = useCallback(
-    (pageIds: string[], success: string) => {
+    (pageIds: string[], successKey: Parameters<typeof t>[1]) => {
       if (snapshot === undefined) return;
       void mutate(
         () =>
@@ -204,7 +238,7 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
             kind: "pages",
             pageIds,
           }),
-        success,
+        successKey,
       );
     },
     [mutate, snapshot],
@@ -221,7 +255,7 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
       if (current === undefined || adjacent === undefined) return;
       pageIds[index] = adjacent;
       pageIds[target] = current;
-      updatePageIds(pageIds, "Đã cập nhật thứ tự trang.");
+      updatePageIds(pageIds, "editor.orderUpdated");
     },
     [snapshot, updatePageIds],
   );
@@ -231,17 +265,54 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
       if (snapshot === undefined || snapshot.manifest.pages.length <= 1) return;
       updatePageIds(
         snapshot.manifest.pages.filter((page) => page.id !== pageId).map((page) => page.id),
-        "Đã loại trang khỏi bản PDF. Source tile gốc không bị xóa.",
+        "editor.pageRemoved",
       );
     },
     [snapshot, updatePageIds],
   );
 
+  const diagnosticsJson = useMemo(
+    () =>
+      serializeSafeDiagnostics({
+        extensionVersion: chrome.runtime.getManifest().version,
+        locale,
+        surface: "editor",
+        chromeVersion: navigator.userAgent,
+        ...(snapshot === undefined
+          ? {}
+          : {
+              job: {
+                id: snapshot.job.id,
+                mode: snapshot.job.mode,
+                state: snapshot.job.state,
+                ...(snapshot.job.activeEngine === undefined
+                  ? {}
+                  : { engine: snapshot.job.activeEngine }),
+                completedTiles: snapshot.job.completedTiles,
+                totalTiles: snapshot.job.totalTiles,
+                ...(snapshot.job.error === undefined ? {} : { errorCode: snapshot.job.error.code }),
+              },
+            }),
+      }),
+    [locale, snapshot],
+  );
+
+  const copyDiagnostics = useCallback(async () => {
+    try {
+      await copyText(diagnosticsJson);
+      setDiagnosticsNotice(t(locale, "common.diagnosticsCopied"));
+    } catch {
+      setDiagnosticsNotice(t(locale, "common.diagnosticsCopyFailed"));
+    }
+  }, [diagnosticsJson, locale]);
+
   if (snapshot === undefined || draftSettings === undefined) {
     return (
       <main className="editor-shell loading-shell">
-        <h1>Trình biên tập PDF</h1>
-        <p role={error === undefined ? "status" : "alert"}>{error ?? notice}</p>
+        <div className="loading-card">
+          <h1>{t(locale, "editor.title")}</h1>
+          <p role={error === undefined ? "status" : "alert"}>{error ?? t(locale, noticeKey)}</p>
+        </div>
       </main>
     );
   }
@@ -250,7 +321,6 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
   const completed = snapshot.job.state === "completed";
   const canEdit = !exporting && !completed && !busy;
   const canExport = ["ready", "failed"].includes(snapshot.job.state) && !busy;
-
   const applySettings = () => {
     void mutate(
       () =>
@@ -258,7 +328,7 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
           kind: "settings",
           settings: draftSettings,
         }),
-      "Đã áp dụng tùy chọn và tính lại danh sách trang.",
+      "editor.settingsApplied",
     );
   };
 
@@ -267,12 +337,44 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
       <header className="editor-header">
         <div>
           <span className="eyebrow">WEBCAP · PDF</span>
-          <h1>Trình biên tập PDF</h1>
-          <p>{snapshot.job.source.title ?? "Bản chụp trang web"}</p>
+          <h1>{t(locale, "editor.title")}</h1>
+          <p>{snapshot.job.source.title ?? t(locale, "editor.fallbackTitle")}</p>
         </div>
-        <div className="header-summary" aria-label="Tóm tắt tài liệu">
-          <strong>{snapshot.manifest.pages.length} trang</strong>
-          <span>Ước tính xấp xỉ {formatBytes(snapshot.estimate.estimatedBytes)}</span>
+        <div className="editor-header-actions">
+          <label className="editor-locale-control">
+            <span>{t(locale, "common.language")}</span>
+            <select
+              value={locale}
+              data-testid="editor-locale-select"
+              onChange={(event) => void setLocale(event.target.value as UiLocale)}
+            >
+              <option value="vi">{t(locale, "common.vietnamese")}</option>
+              <option value="en">{t(locale, "common.english")}</option>
+            </select>
+          </label>
+          <button
+            className="secondary-action compact-action"
+            type="button"
+            data-testid="editor-copy-diagnostics"
+            onClick={() => void copyDiagnostics()}
+          >
+            {t(locale, "common.copyDiagnostics")}
+          </button>
+          {diagnosticsNotice !== undefined && (
+            <span className="diagnostics-notice" role="status" aria-live="polite">
+              {diagnosticsNotice}
+            </span>
+          )}
+          <div className="header-summary" aria-label={t(locale, "editor.summary")}>
+            <strong>
+              {t(locale, "editor.pagesCount", { count: snapshot.manifest.pages.length })}
+            </strong>
+            <span>
+              {t(locale, "editor.approxEstimate", {
+                bytes: formatBytes(snapshot.estimate.estimatedBytes),
+              })}
+            </span>
+          </div>
         </div>
       </header>
 
@@ -280,10 +382,10 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
         <section className="pages-panel" aria-labelledby="pages-heading">
           <div className="section-heading">
             <div>
-              <span className="section-kicker">Bố cục</span>
-              <h2 id="pages-heading">Các trang PDF</h2>
+              <span className="section-kicker">{t(locale, "editor.layout")}</span>
+              <h2 id="pages-heading">{t(locale, "editor.pages")}</h2>
             </div>
-            <span className="keyboard-hint">Alt + ↑/↓ để đổi vị trí</span>
+            <span className="keyboard-hint">{t(locale, "editor.keyboardHint")}</span>
           </div>
 
           <div className="page-grid">
@@ -292,7 +394,10 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
                 className="page-card"
                 key={page.id}
                 tabIndex={0}
-                aria-label={`Trang ${index + 1} trong ${snapshot.manifest.pages.length}`}
+                aria-label={t(locale, "editor.pageLabel", {
+                  page: index + 1,
+                  total: snapshot.manifest.pages.length,
+                })}
                 onKeyDown={(event) => {
                   if (!canEdit || !event.altKey) return;
                   if (event.key === "ArrowUp") {
@@ -304,18 +409,26 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
                   }
                 }}
               >
-                <PageThumbnail snapshot={snapshot} page={page} eager={index === 0} />
+                <PageThumbnail
+                  snapshot={snapshot}
+                  page={page}
+                  eager={index === 0}
+                  locale={locale}
+                />
                 <div className="page-card-body">
                   <div>
-                    <strong>Trang {index + 1}</strong>
-                    <span>Nguồn #{page.originalIndex + 1}</span>
+                    <strong>{t(locale, "editor.page", { page: index + 1 })}</strong>
+                    <span>{t(locale, "editor.source", { source: page.originalIndex + 1 })}</span>
                   </div>
-                  <div className="page-actions" aria-label={`Thao tác trang ${index + 1}`}>
+                  <div
+                    className="page-actions"
+                    aria-label={t(locale, "editor.pageActions", { page: index + 1 })}
+                  >
                     <button
                       type="button"
                       onClick={() => movePage(index, -1)}
                       disabled={!canEdit || index === 0}
-                      aria-label={`Đưa trang ${index + 1} lên trước`}
+                      aria-label={t(locale, "editor.moveBefore", { page: index + 1 })}
                     >
                       ↑
                     </button>
@@ -323,7 +436,7 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
                       type="button"
                       onClick={() => movePage(index, 1)}
                       disabled={!canEdit || index === snapshot.manifest.pages.length - 1}
-                      aria-label={`Đưa trang ${index + 1} xuống sau`}
+                      aria-label={t(locale, "editor.moveAfter", { page: index + 1 })}
                     >
                       ↓
                     </button>
@@ -333,7 +446,7 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
                       onClick={() => removePage(page.id)}
                       disabled={!canEdit || snapshot.manifest.pages.length <= 1}
                     >
-                      Xóa
+                      {t(locale, "editor.delete")}
                     </button>
                   </div>
                 </div>
@@ -343,11 +456,11 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
         </section>
 
         <aside className="settings-panel" aria-labelledby="settings-heading">
-          <span className="section-kicker">Thiết lập</span>
-          <h2 id="settings-heading">Tùy chọn xuất PDF</h2>
+          <span className="section-kicker">{t(locale, "editor.settings")}</span>
+          <h2 id="settings-heading">{t(locale, "editor.exportOptions")}</h2>
 
           <label>
-            Khổ giấy
+            {t(locale, "editor.pageSize")}
             <select
               value={draftSettings.pageSize}
               onChange={(event) =>
@@ -360,12 +473,12 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
             >
               <option value="a4">A4</option>
               <option value="letter">Letter</option>
-              <option value="fit-width">Vừa chiều rộng</option>
+              <option value="fit-width">{t(locale, "editor.fitWidth")}</option>
             </select>
           </label>
 
           <label>
-            Hướng giấy
+            {t(locale, "editor.orientation")}
             <select
               value={draftSettings.orientation}
               onChange={(event) =>
@@ -376,13 +489,13 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
               }
               disabled={!canEdit}
             >
-              <option value="portrait">Dọc</option>
-              <option value="landscape">Ngang</option>
+              <option value="portrait">{t(locale, "editor.portrait")}</option>
+              <option value="landscape">{t(locale, "editor.landscape")}</option>
             </select>
           </label>
 
           <label>
-            Lề trang: {draftSettings.marginMm} mm
+            {t(locale, "editor.margin", { value: draftSettings.marginMm })}
             <input
               type="range"
               min="0"
@@ -397,7 +510,9 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
           </label>
 
           <label>
-            Chất lượng JPEG: {Math.round(draftSettings.jpegQuality * 100)}%
+            {t(locale, "editor.jpegQuality", {
+              value: Math.round(draftSettings.jpegQuality * 100),
+            })}
             <input
               type="range"
               min="0.4"
@@ -417,40 +532,37 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
             onClick={applySettings}
             disabled={!canEdit}
           >
-            Áp dụng tùy chọn
+            {t(locale, "editor.apply")}
           </button>
 
           <div className="estimate-card">
-            <span>Kích thước xấp xỉ</span>
+            <span>{t(locale, "editor.approxSize")}</span>
             <strong>{formatBytes(snapshot.estimate.estimatedBytes)}</strong>
-            <small>
-              Ước tính từ source tiles, chất lượng và số trang; file thực tế có thể khác.
-            </small>
+            <small>{t(locale, "editor.estimateDetail")}</small>
           </div>
 
           {exporting ? (
             <div className="export-progress" aria-live="polite">
               <div>
-                <strong>Đang tạo PDF</strong>
+                <strong>{t(locale, "editor.exporting")}</strong>
                 <span>{progress}%</span>
               </div>
               <progress value={progress} max="100" />
               <p>
-                Trang {snapshot.job.exportProgress?.completedPages ?? 0}/
-                {snapshot.job.exportProgress?.totalPages ?? snapshot.manifest.pages.length}
+                {t(locale, "editor.exportPage", {
+                  completed: snapshot.job.exportProgress?.completedPages ?? 0,
+                  total: snapshot.job.exportProgress?.totalPages ?? snapshot.manifest.pages.length,
+                })}
               </p>
               <button
                 type="button"
                 className="danger-action"
                 onClick={() =>
-                  void mutate(
-                    () => cancelPdfEditorExport(snapshot.job.id),
-                    "Đã yêu cầu dừng xuất PDF.",
-                  )
+                  void mutate(() => cancelPdfEditorExport(snapshot.job.id), "editor.stopRequested")
                 }
                 disabled={busy}
               >
-                Dừng xuất
+                {t(locale, "editor.stopExport")}
               </button>
             </div>
           ) : completed && snapshot.job.outputArtifactId !== undefined ? (
@@ -460,7 +572,7 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
               onClick={() => void downloadPdf()}
               disabled={busy}
             >
-              Tải PDF xuống
+              {t(locale, "editor.downloadPdf")}
             </button>
           ) : (
             <button
@@ -469,14 +581,14 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
               onClick={() =>
                 void mutate(
                   () => startPdfEditorExport(snapshot.job.id),
-                  snapshot.job.state === "failed"
-                    ? "Đang thử lại export từ source tiles đã lưu."
-                    : "Đã bắt đầu tạo PDF.",
+                  snapshot.job.state === "failed" ? "editor.retryStarted" : "editor.exportStarted",
                 )
               }
               disabled={!canExport}
             >
-              {snapshot.job.state === "failed" ? "Thử xuất lại" : "Tạo PDF"}
+              {snapshot.job.state === "failed"
+                ? t(locale, "editor.retryExport")
+                : t(locale, "editor.createPdf")}
             </button>
           )}
 
@@ -485,8 +597,9 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
             data-testid="download-status"
             data-download-id={downloadId}
             role={error === undefined ? "status" : "alert"}
+            aria-live="polite"
           >
-            {error ?? notice}
+            {error ?? t(locale, noticeKey)}
           </p>
         </aside>
       </div>
