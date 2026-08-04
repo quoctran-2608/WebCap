@@ -22,33 +22,119 @@ index 3e7e93c..4d80ba0 100644
  
  function cleanupWarning(jobId: string, failedOperations: string[]): WebCapErrorData | undefined {
 diff --git a/tests/unit/capture-data-cleanup-service.test.ts b/tests/unit/capture-data-cleanup-service.test.ts
-index 5dee82e..3ba5aab 100644
+index 5dee82e..20475b0 100644
 --- a/tests/unit/capture-data-cleanup-service.test.ts
 +++ b/tests/unit/capture-data-cleanup-service.test.ts
-@@ -49,8 +49,8 @@ describe("CaptureOwnedDataCleanupService", () => {
+@@ -9,6 +9,7 @@ function dependencies(options: { failArtifacts?: boolean } = {}) {
+   const jobs = {
+     delete: vi.fn(() => Promise.resolve(true)),
+   } as unknown as JobRepositoryPort;
++  const deleteSessionJob = vi.fn(() => Promise.resolve());
+   const sessions = {
+     getSummary: vi.fn(() =>
+       Promise.resolve({ jobId: "job-1", tabId: 7 } as Awaited<
+@@ -20,11 +21,12 @@ function dependencies(options: { failArtifacts?: boolean } = {}) {
+         ReturnType<JobSessionRepositoryPort["getTabLock"]>
+       >),
+     ),
+-    deleteJob: vi.fn(() => Promise.resolve()),
++    deleteJob: deleteSessionJob,
+   } as unknown as JobSessionRepositoryPort;
++  const deleteManifest = vi.fn(() => Promise.resolve());
+   const manifests = {
+     load: vi.fn(() => Promise.resolve({ jobId: "job-1" })),
+-    delete: vi.fn(() => Promise.resolve()),
++    delete: deleteManifest,
+   } as unknown as PdfEditManifestRepositoryPort;
+   const tiles = { deleteByJob: vi.fn(() => Promise.resolve(5)) };
+   const artifacts = {
+@@ -32,7 +34,7 @@ function dependencies(options: { failArtifacts?: boolean } = {}) {
+       options.failArtifacts ? Promise.reject(new Error("artifact failure")) : Promise.resolve(3),
+     ),
+   };
+-  return { jobs, sessions, manifests, tiles, artifacts };
++  return { jobs, sessions, manifests, tiles, artifacts, deleteSessionJob, deleteManifest };
+ }
+ 
+ describe("CaptureOwnedDataCleanupService", () => {
+@@ -49,8 +51,8 @@ describe("CaptureOwnedDataCleanupService", () => {
        deletedManifests: 1,
        clearedSessions: 1,
      });
 -    expect(current.manifests.delete).toHaveBeenCalledWith("job-1");
 -    expect(current.sessions.deleteJob).toHaveBeenCalledWith("job-1");
-+    expect(vi.mocked(current.manifests.delete)).toHaveBeenCalledWith("job-1");
-+    expect(vi.mocked(current.sessions.deleteJob)).toHaveBeenCalledWith("job-1");
++    expect(current.deleteManifest).toHaveBeenCalledWith("job-1");
++    expect(current.deleteSessionJob).toHaveBeenCalledWith("job-1");
    });
  
    it("continues best-effort cleanup and returns a safe partial warning", async () => {
-@@ -65,6 +65,6 @@ describe("CaptureOwnedDataCleanupService", () => {
+@@ -65,6 +67,6 @@ describe("CaptureOwnedDataCleanupService", () => {
        code: "E_CLEANUP_PARTIAL",
        causeCode: "CaptureOwnedDataCleanupPartial",
      });
 -    expect(current.sessions.deleteJob).toHaveBeenCalledTimes(1);
-+    expect(vi.mocked(current.sessions.deleteJob)).toHaveBeenCalledTimes(1);
++    expect(current.deleteSessionJob).toHaveBeenCalledTimes(1);
    });
  });
 diff --git a/tests/unit/capture-reset-service.test.ts b/tests/unit/capture-reset-service.test.ts
-index 07287e5..cef9294 100644
+index 07287e5..3128176 100644
 --- a/tests/unit/capture-reset-service.test.ts
 +++ b/tests/unit/capture-reset-service.test.ts
-@@ -135,9 +135,9 @@ describe("CaptureResetService", () => {
+@@ -43,17 +43,16 @@ function createFixture(options: {
+     getActiveForTab: vi.fn(() => Promise.resolve(currentJob)),
+     cancel: vi.fn(() => Promise.resolve({ ...(currentJob ?? job()), state: "cancelled" as const })),
+   } as unknown as PersistentJobCoordinatorPort;
+-  const cleanup: CaptureOwnedDataCleanupPort = {
+-    cleanupJob: vi.fn(() =>
+-      Promise.resolve({
+-        deletedJobs: currentJob === undefined ? 0 : 1,
+-        deletedTiles: currentJob === undefined ? 0 : 4,
+-        deletedArtifacts: currentJob === undefined ? 0 : 2,
+-        deletedManifests: currentJob === undefined ? 0 : 1,
+-        clearedSessions: currentJob === undefined ? 0 : 1,
+-      }),
+-    ),
+-  };
++  const cleanupJob = vi.fn(() =>
++    Promise.resolve({
++      deletedJobs: currentJob === undefined ? 0 : 1,
++      deletedTiles: currentJob === undefined ? 0 : 4,
++      deletedArtifacts: currentJob === undefined ? 0 : 2,
++      deletedManifests: currentJob === undefined ? 0 : 1,
++      clearedSessions: currentJob === undefined ? 0 : 1,
++    }),
++  );
++  const cleanup: CaptureOwnedDataCleanupPort = { cleanupJob };
+   const captures = {
+     cancel: vi.fn(() => Promise.resolve({ ...(currentJob ?? job()), state: "cancelled" as const })),
+     waitForIdle: vi.fn(() => Promise.resolve()),
+@@ -69,11 +68,12 @@ function createFixture(options: {
+       return Promise.resolve();
+     }),
+   };
++  const releaseCapture = vi.fn(() => true);
+   const visibleCapture = {
+     start: vi.fn(),
+     cancel: vi.fn(() => true),
+     waitForIdle: vi.fn(() => Promise.resolve()),
+-    releaseCapture: vi.fn(() => true),
++    releaseCapture,
+   };
+   const imageExport = { cancelBySourceArtifactId: vi.fn(() => Promise.resolve()) };
+   const artifacts = { delete: vi.fn(() => Promise.resolve(true)) };
+@@ -97,9 +97,11 @@ function createFixture(options: {
+     service,
+     jobs,
+     cleanup,
++    cleanupJob,
+     captures,
+     visibleSessions,
+     visibleCapture,
++    releaseCapture,
+     imageExport,
+     artifactsByJob,
+     getVisibleSession: () => visibleSession,
+@@ -135,9 +137,9 @@ describe("CaptureResetService", () => {
  
      expect(current.captures.cancel).toHaveBeenCalledWith("job-1", "capture reset", "discard");
      expect(current.captures.waitForIdle).toHaveBeenCalledWith("job-1");
@@ -56,26 +142,26 @@ index 07287e5..cef9294 100644
 -      current.captures.waitForIdle.mock.invocationCallOrder[0],
 -    );
 +    expect(
-+      vi.mocked(current.cleanup.cleanupJob).mock.invocationCallOrder[0] ?? 0,
++      current.cleanupJob.mock.invocationCallOrder[0] ?? 0,
 +    ).toBeGreaterThan(current.captures.waitForIdle.mock.invocationCallOrder[0] ?? 0);
    });
  
    it("is idempotent when the job record is already missing", async () => {
-@@ -146,7 +146,7 @@ describe("CaptureResetService", () => {
+@@ -146,7 +148,7 @@ describe("CaptureResetService", () => {
        createCaptureResetRequest({ requestId: "reset-missing", sentAt: now, scope: "job", jobId: "missing" }),
      );
      expect(report).toMatchObject({ deletedJobs: 0, cancellationAttempted: false });
 -    expect(current.cleanup.cleanupJob).toHaveBeenCalledWith("missing", undefined);
-+    expect(vi.mocked(current.cleanup.cleanupJob)).toHaveBeenCalledWith("missing", undefined);
++    expect(current.cleanupJob).toHaveBeenCalledWith("missing", undefined);
    });
  
    it("cancels visible processing, removes all artifacts linked to the source, and clears session", async () => {
-@@ -176,7 +176,7 @@ describe("CaptureResetService", () => {
+@@ -176,7 +178,7 @@ describe("CaptureResetService", () => {
  
      expect(current.imageExport.cancelBySourceArtifactId).toHaveBeenCalledWith("capture-1");
      expect(current.artifactsByJob.deleteByJob).toHaveBeenCalledWith("capture-1");
 -    expect(current.visibleCapture.releaseCapture).toHaveBeenCalledWith("capture-1");
-+    expect(vi.mocked(current.visibleCapture.releaseCapture)).toHaveBeenCalledWith("capture-1");
++    expect(current.releaseCapture).toHaveBeenCalledWith("capture-1");
      expect(current.getVisibleSession()).toBeUndefined();
      expect(report).toMatchObject({
        cancellationAttempted: true,
