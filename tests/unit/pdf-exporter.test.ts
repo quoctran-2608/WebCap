@@ -62,7 +62,8 @@ function repositories(records: StoredTileRecord[]): {
   return {
     tiles: {
       put: () => Promise.resolve(),
-      get: () => Promise.resolve(undefined),
+      get: (_jobId, index) =>
+        Promise.resolve(records.find((record) => record.index === index)),
       listByJob: () => Promise.resolve(records),
       deleteByJob: () => Promise.resolve(0),
     },
@@ -96,6 +97,27 @@ async function realPdfDocument(): Promise<PdfDocumentPort> {
   };
 }
 
+function pageEnvironment(): PdfExportEnvironment {
+  return {
+    decode: () =>
+      Promise.resolve({
+        width: 100,
+        height: 300,
+        source: {} as CanvasImageSource,
+        close: () => undefined,
+      }),
+    createCanvas: (width, height) => ({
+      width,
+      height,
+      getContext: () => ({ fillWhite: () => undefined, drawImage: () => undefined }),
+      convertToJpeg: () =>
+        Promise.resolve(new Blob([Uint8Array.from(ONE_PIXEL_JPEG)], { type: "image/jpeg" })),
+      release: () => undefined,
+    }),
+    createDocument: realPdfDocument,
+  };
+}
+
 describe("PdfExporter", () => {
   it("creates a loadable multi-page PDF while holding one decoded tile and one page canvas", async () => {
     const source = storedTile();
@@ -104,6 +126,7 @@ describe("PdfExporter", () => {
     let drawCount = 0;
     let closeCount = 0;
     let releaseCount = 0;
+    let clock = 100;
     const environment: PdfExportEnvironment = {
       decode: () =>
         Promise.resolve({
@@ -135,6 +158,14 @@ describe("PdfExporter", () => {
         };
       },
       createDocument: realPdfDocument,
+      now: () => {
+        clock += 5;
+        return clock;
+      },
+      readHeapSnapshot: () => ({
+        usedBytes: 48 * 1_024 * 1_024 + closeCount * 1_024,
+        limitBytes: 512 * 1_024 * 1_024,
+      }),
     };
     const progress: number[] = [];
     const exporter = new PdfExporter({
@@ -179,7 +210,13 @@ describe("PdfExporter", () => {
       decodedTileCount: 3,
       maxDecodedTiles: 1,
       releasedCanvasCount: 3,
+      integrity: { valid: true, pageCount: 3 },
+      heapLimitBytes: 512 * 1_024 * 1_024,
     });
+    expect(result.diagnostics.durationMs).toBeGreaterThanOrEqual(0);
+    expect(result.diagnostics.artifactBytes).toBe(stored?.blob.size);
+    expect(result.diagnostics.memoryEstimate.shouldBlock).toBe(false);
+    expect(result.diagnostics.peakHeapBytes).toBeGreaterThanOrEqual(48 * 1_024 * 1_024);
     expect(result.diagnostics.maxCanvasPixelArea).toBeLessThan(100 * 300);
     expect(canvasSizes).toHaveLength(3);
     expect(canvasSizes.every((canvas) => canvas.width === 100)).toBe(true);
@@ -220,5 +257,88 @@ describe("PdfExporter", () => {
     ).rejects.toMatchObject({ name: "E_STORAGE_READ" });
     expect(canvasCreated).toBe(false);
     expect(repository.stored()).toBeUndefined();
+  });
+
+  it("blocks an unsafe estimate before creating a PDF document or canvas", async () => {
+    const source = storedTile();
+    const repository = repositories([source.record]);
+    let documentCreated = false;
+    let canvasCreated = false;
+    const exporter = new PdfExporter({
+      tiles: repository.tiles,
+      artifacts: repository.artifacts,
+      environment: {
+        ...pageEnvironment(),
+        createDocument: () => {
+          documentCreated = true;
+          return realPdfDocument();
+        },
+        createCanvas: () => {
+          canvasCreated = true;
+          throw new Error("must not create canvas");
+        },
+        readHeapSnapshot: () => ({ limitBytes: 40 * 1_024 * 1_024 }),
+      },
+    });
+
+    await expect(
+      exporter.export({
+        jobId: "job-1",
+        outputArtifactId: "pdf-memory-blocked",
+        targetRect: { x: 0, y: 0, width: 100, height: 300 },
+        tiles: [source.tile],
+        settings: DEFAULT_CAPTURE_SETTINGS.pdf,
+        filename: "blocked.pdf",
+        createdAt: "2026-08-03T11:01:00.000Z",
+        expiresAt: "2026-08-03T11:31:00.000Z",
+      }),
+    ).rejects.toMatchObject({
+      name: "E_MEMORY_GUARD",
+      retryable: true,
+      fallbackAllowed: true,
+    });
+    expect(documentCreated).toBe(false);
+    expect(canvasCreated).toBe(false);
+    expect(repository.stored()).toBeUndefined();
+    expect(await repository.tiles.get("job-1", 0)).toBeDefined();
+  });
+
+  it("rejects a corrupt integrity report before artifact persistence and retains source tiles", async () => {
+    const source = storedTile();
+    const repository = repositories([source.record]);
+    const exporter = new PdfExporter({
+      tiles: repository.tiles,
+      artifacts: repository.artifacts,
+      environment: pageEnvironment(),
+      inspectIntegrity: () =>
+        Promise.resolve({
+          valid: false,
+          byteLength: 5,
+          signatureValid: true,
+          pageCount: 0,
+          pages: [],
+          imageObjectCount: 0,
+          nonEmptyStreamCount: 0,
+          errors: ["page-count-mismatch"],
+        }),
+    });
+
+    await expect(
+      exporter.export({
+        jobId: "job-1",
+        outputArtifactId: "pdf-invalid",
+        targetRect: { x: 0, y: 0, width: 100, height: 300 },
+        tiles: [source.tile],
+        settings: DEFAULT_CAPTURE_SETTINGS.pdf,
+        filename: "invalid.pdf",
+        createdAt: "2026-08-03T11:01:00.000Z",
+        expiresAt: "2026-08-03T11:31:00.000Z",
+      }),
+    ).rejects.toMatchObject({
+      name: "E_EXPORT_FAILED",
+      data: { causeCode: "PdfIntegrityCheckFailed" },
+    });
+    expect(repository.stored()).toBeUndefined();
+    expect(await repository.tiles.get("job-1", 0)).toBeDefined();
   });
 });
