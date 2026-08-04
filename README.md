@@ -76,6 +76,7 @@ scripts/                Build verification and repository automation.
 - Add or update tests in the same change as behavior.
 - Do not add Chrome permissions, remote scripts, analytics, or backend calls outside the approved PRD/SPEC scope.
 - Complete only the active session in `PLAN.md`; defer unrelated work instead of expanding the current change.
+- Run the final merge gate through the repository's read-only CI workflow after every temporary write-enabled workflow and staging file has been removed.
 
 ## Documentation
 
