@@ -12,127 +12,193 @@ release_target: 0.2.0
 
 # WebCap — Product Requirements v1.1
 
-Tài liệu này mở rộng PRD v1.0 cho WebCap 0.2.0. Mọi yêu cầu, giới hạn riêng tư và acceptance criteria của 0.1.0 vẫn có hiệu lực trừ khi tài liệu này thay thế rõ ràng.
+Tài liệu này mở rộng PRD v1.0 cho WebCap 0.2.0. Mọi yêu cầu, giới hạn riêng tư và acceptance criteria của 0.1.0 vẫn có hiệu lực trừ khi tài liệu này thay thế rõ ràng. Danh sách khoảng trống đã audit nằm tại `docs/audits/0.1.0-gap-audit.md`.
 
 # 1. Vấn đề cần giải quyết
 
-Bản 0.1.0 đã có nền tảng chụp tile, scroll fallback và PDF exporter, nhưng trải nghiệm người dùng còn ba khoảng trống:
+Bản 0.1.0 có nền tảng capture tile, selector, scroll fallback và PDF exporter, nhưng trải nghiệm thực tế còn các khoảng trống:
 
-1. Luồng chụp cuộn chưa thể hiện đúng kỳ vọng “bắt đầu một lần, tự đi đến cuối trang, tự tạo PDF”. Engine hiện lập kế hoạch theo chiều cao đã đo và coi thay đổi chiều cao trong lúc capture là lỗi, nên chưa phù hợp với trang tiếp tục tải nội dung khi cuộn.
-2. Sau khi một job tiled ở trạng thái `ready` hoặc `completed`, popup không có hành động rõ ràng để bỏ kết quả cũ và bắt đầu lượt chụp mới.
-3. Popup hiển thị nhiều thông tin kỹ thuật như service-worker status, version, milestone badge, tile count, checksum và permission details ngay trong luồng chính; điều này làm yếu hành động cốt lõi.
+1. Full-page scroll lập kế hoạch theo chiều cao đã đo và coi tăng chiều cao trong lúc capture là lỗi, nên chưa phù hợp với trang lazy-load tiếp tục dài ra.
+2. Sau job `ready/completed`, người dùng không có hành động rõ ràng để bỏ kết quả và chụp mới.
+3. Popup hiển thị nhiều thông tin kỹ thuật hơn thông tin phục vụ tác vụ.
+4. Code region selector đã có thao tác kéo-vẽ, di chuyển, resize và auto-scroll, nhưng luồng khởi chạy chưa đảm bảo người dùng nhìn thấy overlay ngay: popup không chủ động đóng sau khi selector sẵn sàng, hướng dẫn chưa đủ rõ và chưa có acceptance test cho hành trình thực tế từ nút popup đến khung chọn.
+5. Settings người dùng chưa là nguồn sự thật của job: tiled capture hiện tạo job từ `DEFAULT_CAPTURE_SETTINGS`; lựa chọn format/quality/fixed-sticky không được áp dụng và ghi nhớ nhất quán.
+6. Output routing chưa rõ: visible capture có ảnh trực tiếp, còn full-page/region/element/scroll-area chủ yếu dừng ở tile set rồi yêu cầu mở PDF editor.
+7. Popup dùng polling ngắn để đồng bộ trạng thái thay vì ưu tiên progress event, làm code UI phức tạp và tốn tài nguyên.
+8. Active capture bị service-worker restart sẽ chuyển failed; với capture rất dài cần resume an toàn từ frontier hoặc giữ partial rõ ràng.
 
 # 2. Mục tiêu 0.2.0
 
 | Mã | Mục tiêu | Kết quả người dùng |
 | --- | --- | --- |
-| G-06 | Tự động chụp cuộn đến cuối nội dung ổn định | Người dùng không phải cuộn hoặc ghép ảnh thủ công. |
-| G-07 | Tự động tạo PDF sau capture dài | Kết quả mặc định là PDF tải được, không cần mở editor để hoàn tất tác vụ cơ bản. |
-| G-08 | Cho phép bắt đầu lại rõ ràng | Có nút “Chụp mới” hoặc “Bỏ kết quả” ở mọi trạng thái kết thúc. |
-| G-09 | Đơn giản hóa popup | Luồng mặc định chỉ hiển thị lựa chọn và trạng thái cần thiết cho người dùng phổ thông. |
-| G-10 | Giữ nguyên tính local-first và độ an toàn | Không thêm backend, telemetry, remote code hoặc quyền mặc định mới. |
+| G-06 | Tự động chụp cuộn đến cuối nội dung ổn định | Không phải cuộn hoặc ghép ảnh thủ công. |
+| G-07 | Tự động tạo PDF sau capture dài | Full-page hoàn tất mà không bắt buộc mở editor. |
+| G-08 | Cho phép bắt đầu lại rõ ràng | Có “Chụp mới” ở mọi trạng thái. |
+| G-09 | Đơn giản hóa popup | Chỉ giữ lựa chọn, tiến trình và hành động hữu ích. |
+| G-10 | Giữ local-first và quyền tối thiểu | Không thêm backend, telemetry, remote code hay quyền mặc định mới. |
+| G-11 | Khôi phục trải nghiệm vẽ vùng chọn | Bấm chọn vùng là thấy overlay ngay, kéo-vẽ được và chụp đúng vùng. |
+| G-12 | Làm rõ output và settings | Mỗi mode có output mặc định hợp lý; lựa chọn được ghi nhớ và áp dụng. |
+| G-13 | Tăng độ bền của job dài | Progress theo event và recovery/resume không làm mất tile đã lưu. |
 
 # 3. Phạm vi sản phẩm
 
 ## 3.1 Auto-scroll đến cuối trang
 
-- Chế độ mặc định “Toàn trang → PDF” phải tự bắt đầu từ đầu tài liệu, cuộn tuần tự và chụp một contiguous prefix cho đến khi xác nhận đã đạt cuối nội dung ổn định.
-- Sau mỗi bước cuộn, WebCap phải chờ layout/lazy content ổn định rồi đo lại chiều cao tài liệu.
-- Nếu chiều cao tăng, capture tiếp tục từ frontier đã lưu thay vì hủy job hoặc lập lại toàn bộ từ đầu.
-- Kết thúc tự động chỉ được xác nhận khi đồng thời đạt đáy trang và chiều cao không tăng qua số vòng settle đã khóa trong SPEC.
-- Page scroll, focus, selection và mọi mutation do WebCap sở hữu phải được phục hồi sau success, error, cancel hoặc reset.
-- Không được tạo khoảng trắng ẩn, trùng nội dung hoặc bỏ qua một đoạn giữa hai tile.
+- “Toàn trang → PDF” bắt đầu từ đầu document, cuộn tuần tự và chụp contiguous prefix đến khi xác nhận đã đạt cuối nội dung ổn định.
+- Sau mỗi bước cuộn, WebCap chờ layout/lazy content ổn định rồi đo lại chiều cao.
+- Nếu chiều cao tăng, capture tiếp tục từ frontier đã lưu; không restart hoặc chụp lại prefix.
+- Hoàn tất chỉ khi đã chạm đáy, chiều cao không tăng qua số vòng ổn định đã khóa và final probe không phát hiện nội dung mới.
+- Scroll, focus, selection và WebCap-owned mutations phải được phục hồi sau success, error, cancel, reset hoặc recovery failure.
+- Không có gap, duplicate strip hoặc silent truncation.
 
-“Đến hết dù trang dài” trong yêu cầu sản phẩm nghĩa là **không dừng bởi một ngưỡng chiều cao CSS cố định tùy ý**. Trang vô hạn thật sự hoặc tài nguyên thiết bị hữu hạn vẫn phải có guard theo thời gian, dung lượng, tile và bộ nhớ. Khi guard kích hoạt, UI phải nói rõ đây là partial capture và cho phép giữ phần đã chụp hoặc bỏ toàn bộ.
+“Đến hết dù trang dài” nghĩa là không dừng bởi một ngưỡng CSS height cố định tùy ý. Feed infinite-scroll thực sự vẫn có budget thời gian, tile, storage và memory. Khi guard kích hoạt, UI phải nói rõ partial capture và cho phép giữ hoặc bỏ.
 
-## 3.2 Auto-PDF
+## 3.2 Auto-PDF và output theo mode
 
-- Khi auto-scroll hoàn tất, WebCap tự chuyển sang export PDF với preset mặc định đã lưu.
-- Pipeline phải dùng tile/page streaming hiện có; không ghép toàn bộ trang thành một canvas khổng lồ.
-- Overlap/crop metadata, fixed/sticky policy và contiguous coverage phải được áp dụng trước khi ghi từng trang PDF.
-- Kết quả cơ bản hiển thị nút “Tải PDF”; editor là hành động phụ “Chỉnh sửa trang”.
-- Nếu export PDF lỗi nhưng tile còn nguyên vẹn, người dùng có thể thử lại mà không chụp lại trang.
-- Partial capture chỉ được auto-export khi người dùng đã chọn “Dừng và giữ phần đã chụp” hoặc xác nhận giữ kết quả do guard.
+- Full-page mặc định tự export PDF sau khi tile set hoàn chỉnh.
+- Scroll-area mặc định PDF; có thể xuất ảnh khi kích thước nằm dưới image-memory guard.
+- Region và element mặc định PNG; JPEG/WebP tùy chọn. Nếu kết quả nhiều tile hoặc vượt image guard, UI đề xuất PDF thay vì cố tạo canvas nguy hiểm.
+- Visible giữ PNG/JPEG/WebP hiện tại.
+- PDF dùng tile/page streaming, không tạo full-page canvas.
+- Retry export dùng lại source tiles.
+- Partial chỉ auto-export sau explicit keep.
+- Result card hiển thị đúng output: Tải ảnh/PDF, Chỉnh sửa khi có ý nghĩa, Chụp mới.
 
 ## 3.3 Reset và vòng đời “Chụp mới”
 
-- Mọi trạng thái terminal (`ready`, `completed`, `failed`, `cancelled`) phải có hành động “Chụp mới”.
-- Reset terminal xóa metadata phiên hiện tại, job, tile, thumbnail, edit manifest và artifact tạm thuộc job khỏi bộ nhớ local của extension.
-- File người dùng đã tải xuống không bị xóa.
-- Reset khi job đang chạy phải thực hiện cancel, cleanup trang và xóa dữ liệu tạm; UI phải yêu cầu xác nhận vì hành động không thể hoàn tác.
-- Reset phải idempotent: gửi lặp lại cùng request không gây lỗi và không xóa dữ liệu của job khác.
-- Sau reset, popup quay lại màn hình chọn chế độ và có thể bắt đầu job mới ngay trên cùng tab.
+- Mọi terminal state (`ready`, `completed`, `failed`, `cancelled`) có “Chụp mới”.
+- Reset terminal xóa job, tile, source/output artifact, thumbnail, edit manifest, summary và stale lock thuộc capture đó.
+- File đã tải xuống, locale và settings được giữ.
+- Reset active yêu cầu xác nhận, thực hiện cancel → cleanup → discard local data.
+- Reset idempotent và không ảnh hưởng job khác.
+- Sau reset có thể tạo job mới ngay trên cùng tab.
 
-## 3.4 Tối ưu giao diện
+## 3.4 Vẽ vùng chọn
 
-### Luồng chính
+Luồng bắt buộc:
 
-Popup mặc định chỉ giữ:
+1. Người dùng chọn **Vùng chữ nhật** và bấm **Vẽ vùng chọn**.
+2. Background inject content runtime và chỉ ACK khi selector root đã gắn vào document, stage đã focus và sẵn sàng nhận pointer/keyboard.
+3. Popup tự đóng sau ACK; trang hiển thị ngay dimming mask, crosshair, hướng dẫn ngắn và nút Hủy/Xác nhận.
+4. Người dùng kéo chuột hoặc pointer để tạo rectangle; có thể move, resize bằng tám handle và auto-scroll khi kéo sát mép viewport.
+5. Enter xác nhận, Escape hủy; overlay được xóa trước capture ít nhất hai animation frame.
+6. Capture dùng CSS document coordinates và không chứa border/mask/toolbar của WebCap.
 
-1. Tên sản phẩm và trạng thái hỗ trợ ngắn gọn khi có vấn đề.
-2. Ba mục tiêu người dùng:
-   - **Toàn trang → PDF** — mặc định.
-   - **Vùng cụ thể** — mở lựa chọn vùng chữ nhật, phần tử hoặc vùng cuộn.
-   - **Màn hình hiện tại**.
-3. Một nút hành động chính.
-4. Progress ngôn ngữ tự nhiên.
-5. Result card với **Tải PDF/ảnh**, **Chỉnh sửa** và **Chụp mới**.
+Keyboard-only:
 
-### Thông tin chuyển sang vùng phụ
+- Space khi chưa có rectangle tạo một vùng mặc định ở giữa viewport.
+- Arrow di chuyển; Shift+Arrow di chuyển 10 px.
+- Alt+Arrow resize; Alt+Shift+Arrow resize 10 px.
+- Hit target của handle tối thiểu 24 CSS px dù hình tròn hiển thị có thể nhỏ hơn.
 
-- Worker status, version, tile count, engine, checksum và diagnostics chuyển vào “Trợ giúp & chẩn đoán”.
-- Permission/privacy details chuyển vào settings/help; chỉ hiện inline tại thời điểm cần xin quyền.
-- Không hiển thị milestone/session badge như `M1`, `S14`, `S16`, `S17` cho người dùng cuối.
-- PDF source card chỉ hiện khi tab hiện tại thực sự là PDF hoặc cần hành động của người dùng.
-- Page size, margin, JPEG quality và fixed/sticky policy nằm trong “Tùy chọn nâng cao”, đóng mặc định.
+Nếu selector không mở trong timeout, job bị hủy sạch và popup hiển thị hành động thử lại; không để orphan job.
+
+## 3.5 Settings và tùy chọn nâng cao
+
+- Settings repository là nguồn sự thật khi tạo job; không tạo job từ defaults nếu đã có stored settings hợp lệ.
+- Ghi nhớ output gần nhất theo nhóm mode, image quality, PDF page size/orientation/margin và fixed/sticky policy.
+- Có “Đặt lại tùy chọn mặc định” tách biệt với “Chụp mới”.
+- Resource guard nội bộ không phơi thành input nguy hiểm trong main UI.
+- Advanced options đóng mặc định và chỉ chứa lựa chọn user có thể hiểu.
+
+## 3.6 Progress và recovery
+
+- UI ưu tiên `JOB_PROGRESS/JOB_STATE_CHANGED` event; polling chỉ là reconciliation fallback chậm khi popup mở lại hoặc nghi mất event.
+- Adaptive frontier được persist sau mỗi tile.
+- Nếu service worker restart, WebCap revalidate tab/document identity, viewport/DPR và frontier:
+  - hợp lệ: resume từ frontier chưa chụp;
+  - không hợp lệ: giữ contiguous partial và cho Retry/Keep/Reset, không xóa im lặng.
+- Không chụp trùng tile khi resume.
+
+## 3.7 Tối ưu giao diện
+
+Main popup chỉ giữ:
+
+1. WebCap và notice khi tab không hỗ trợ/cần quyền.
+2. Ba goal: Toàn trang → PDF; Vùng cụ thể; Màn hình hiện tại.
+3. Target picker khi chọn Vùng cụ thể.
+4. Một CTA chính.
+5. Phase progress ngôn ngữ tự nhiên.
+6. Result card.
+7. Advanced options và Help & diagnostics đóng mặc định.
+
+Ẩn khỏi main flow: worker/version, engine, raw tile count, milestone badge, checksum, permission inventory và diagnostics button. PDF detection không được tạo card/flicker trên tab không phải PDF.
 
 # 4. Luồng trải nghiệm đích
 
 ## 4.1 Toàn trang → PDF
 
-1. Người dùng mở popup; “Toàn trang → PDF” được chọn mặc định.
-2. Người dùng bấm “Chụp toàn trang”.
-3. Popup hiển thị các bước: Chuẩn bị trang → Đang cuộn và chụp → Đang tạo PDF.
-4. WebCap tự cuộn đến cuối nội dung ổn định và phục hồi trang.
-5. WebCap tự tạo PDF.
-6. Result card hiển thị “Tải PDF”, “Chỉnh sửa” và “Chụp mới”.
+Mở popup → chọn/bấm Chụp toàn trang → Chuẩn bị → Cuộn và chụp → Tạo PDF → Tải PDF/Chỉnh sửa/Chụp mới.
 
-## 4.2 Bắt đầu lại
+## 4.2 Vẽ vùng chọn → ảnh
 
-1. Người dùng bấm “Chụp mới”.
-2. WebCap dọn dữ liệu tạm của lượt trước.
-3. Popup trở về màn hình chọn chế độ với cùng settings đã lưu.
-4. Người dùng có thể bắt đầu capture mới ngay.
+Chọn Vùng cụ thể → Vùng chữ nhật → Vẽ vùng chọn → popup đóng → kéo rectangle → Xác nhận → preview ảnh → Tải ảnh/Đổi định dạng/Chụp mới.
 
-# 5. Ngoài phạm vi 0.2.0
+## 4.3 Bắt đầu lại
 
-- Không cam kết hoàn tất một feed infinite-scroll không có điểm kết thúc hữu hạn.
-- Không thêm OCR, annotation, cloud sync, tài khoản, batch URL hoặc upload server.
-- Không tự động tải file xuống nếu Chrome/user policy yêu cầu thao tác xác nhận; sản phẩm chỉ đảm bảo PDF được tạo sẵn và có hành động tải rõ ràng.
-- Không bỏ editor PDF hiện tại; chỉ chuyển editor khỏi đường đi bắt buộc.
-- Không thêm required permission hoặc default host permission mới.
+Bấm Chụp mới → cleanup dữ liệu capture cũ → quay về goal selector với settings được giữ.
+
+# 5. Phân loại các vấn đề 0.1.0
+
+## 5.1 Bắt buộc xử lý trong 0.2.0
+
+- Region selector launch/discoverability và keyboard creation.
+- Reset/new capture.
+- Adaptive long-page capture.
+- Auto-PDF và output routing rõ ràng.
+- Stored settings được áp dụng.
+- Event-driven progress và durable long-job recovery.
+- Popup progressive disclosure.
+
+## 5.2 Giới hạn nền tảng — giữ và giải thích tốt hơn
+
+- Chrome internal/Store/extension surfaces.
+- DRM, protected video/canvas/hardware overlay.
+- Cross-origin iframe DOM selection và closed shadow root.
+- Optional permission/file URL policy cho original PDF.
+- Scroll-visible engines cần source tab active.
+- Pixel output phụ thuộc font/GPU/zoom/device.
+- Desktop Chrome là compatibility target chính.
+
+## 5.3 Defer sau 0.2.0
+
+- Annotation, blur, text note, OCR/search text.
+- Batch URL, cloud sync, Drive/Notion integrations.
+- Full capture history/library.
+- Advanced crop editor, original-PDF page range và one-long-page PDF nếu chưa thể thêm mà không làm trễ core release.
 
 # 6. Acceptance criteria mới
 
 | Mã | Acceptance criterion |
 | --- | --- |
-| AC-19 | Một trang lazy-load có chiều cao tăng trong lúc cuộn được chụp đến chiều cao ổn định cuối cùng mà không restart job. |
-| AC-20 | Một trang hữu hạn dài hơn 100.000 CSS px không bị dừng chỉ vì ngưỡng chiều cao 100.000 px. |
-| AC-21 | Auto-scroll tạo contiguous logical coverage; test phát hiện gap hoặc duplicate strip phải fail. |
-| AC-22 | Sau capture thành công, PDF export tự bắt đầu và hoàn tất mà không cần mở editor. |
-| AC-23 | Auto-PDF không tạo logical full-page canvas và decoded-tile concurrency vẫn bị giới hạn. |
-| AC-24 | Export lỗi giữ nguyên source tile và retry không recapture. |
-| AC-25 | “Chụp mới” trên job terminal xóa toàn bộ dữ liệu tạm của job và cho phép tạo job mới trên cùng tab. |
-| AC-26 | Reset đang chạy cancel, cleanup và xóa partial data sau xác nhận; page state được phục hồi. |
-| AC-27 | Reset lặp lại an toàn và không ảnh hưởng job/artifact khác. |
-| AC-28 | Popup mặc định không hiển thị worker version, milestone badge, raw tile count hoặc checksum. |
-| AC-29 | Diagnostics, privacy và advanced settings vẫn truy cập được bằng keyboard trong vùng phụ. |
-| AC-30 | Toàn bộ regression 0.1.0, privacy audit, permission audit và packaged lifecycle vẫn pass. |
+| AC-19 | Lazy-growth hữu hạn được chụp đến stable end mà không restart job. |
+| AC-20 | Trang hữu hạn >100.000 CSS px không dừng chỉ vì ngưỡng 100.000 px. |
+| AC-21 | Logical coverage không gap/duplicate; integrity fixture phải phát hiện sai lệch. |
+| AC-22 | Full-page thành công tự bắt đầu PDF export không cần mở editor. |
+| AC-23 | Auto-PDF không tạo full-page canvas; decoded-tile concurrency bị giới hạn. |
+| AC-24 | Export lỗi giữ source tiles và retry không recapture. |
+| AC-25 | Chụp mới trên terminal job xóa local capture data và cho phép job mới cùng tab. |
+| AC-26 | Reset active cancel/cleanup/discard sau xác nhận và phục hồi page state. |
+| AC-27 | Reset idempotent, isolated và giữ settings/downloaded files. |
+| AC-28 | Popup mặc định không hiển thị version, milestone, raw tile count, engine hay checksum. |
+| AC-29 | Help, diagnostics và advanced settings dùng được bằng keyboard. |
+| AC-30 | Toàn bộ regression 0.1.0, privacy, permission và packaged lifecycle vẫn pass. |
+| AC-31 | Bấm Vẽ vùng chọn đóng popup sau ready ACK và overlay xuất hiện trên active tab trong 500 ms trên fixture. |
+| AC-32 | Pointer có thể create/move/resize/auto-scroll; kết quả khớp rectangle và không chứa selector pixels. |
+| AC-33 | Keyboard-only có thể tạo, move, resize, confirm và cancel vùng chọn. |
+| AC-34 | Selector launch failure không để orphan job, root, tab lock, tile hoặc artifact. |
+| AC-35 | Stored format/quality/PDF/fixed-sticky settings được dùng khi tạo job và tồn tại qua popup reopen. |
+| AC-36 | Output mặc định theo mode đúng; region/element có ảnh trực tiếp khi dưới guard và fallback PDF rõ ràng khi quá lớn. |
+| AC-37 | Progress event cập nhật UI; reconciliation polling không chạy với chu kỳ 350 ms liên tục. |
+| AC-38 | Restart giữa adaptive capture resume an toàn hoặc giữ partial minh bạch, không duplicate prefix. |
+| AC-39 | Actual-browser matrix có static 30k, 100k, >100k, lazy-growth, region launch và critical DPR/zoom flows. |
+| AC-40 | Release compatibility chạy minimum Chrome, current stable và previous stable trên các OS đã hỗ trợ. |
 
 # 7. Chỉ số nghiệm thu nội bộ
 
-- Auto-scroll success: 100% trên fixture static, lazy-growth hữu hạn, 30k, 100k và >100k được định nghĩa trong SPEC 0.2.0.
-- Reset success: 100% unit/E2E trên terminal, active, interrupted và duplicate-request cases.
-- Auto-PDF: PDF mở được, đúng page count, không gap/duplicate theo integrity fixtures.
-- Popup core flow: tác vụ toàn trang hoàn tất với tối đa một lựa chọn mode và một nút start trước progress.
-- Không có P0/P1 về mất nội dung, lặp nội dung, cleanup, privacy hoặc permission lifecycle.
+- Region start-to-overlay success: 100% trên headed/package E2E fixture.
+- Auto-scroll success: 100% trên static/lazy finite fixtures.
+- Reset success: 100% terminal/active/interrupted/duplicate cases.
+- Auto-PDF và bounded image export tạo file loadable, đúng coverage.
+- Popup core flow: tối đa một goal selection và một start click trước progress.
+- Không có P0/P1 về mất/lặp nội dung, cleanup, privacy, permission lifecycle hoặc orphan selector/job.
