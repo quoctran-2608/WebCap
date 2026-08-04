@@ -94,6 +94,7 @@ scripts/                Build, audit, packaging, browser-install and repository 
 
 - Keep TypeScript strict; do not introduce `any` without an adapter-boundary justification.
 - Add or update tests in the same change as behavior.
+- Planning and documentation changes must pass `pnpm format:check` before merge.
 - Do not add Chrome permissions, remote scripts, analytics or backend calls outside the approved PRD/SPEC scope.
 - Complete only the active session in `PLAN.md`; defer unrelated work instead of expanding the current change.
 - Preserve the 0.1.0 release artifact boundary until S26 deliberately creates a 0.2.0 package.
