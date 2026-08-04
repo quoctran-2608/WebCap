@@ -171,7 +171,10 @@ class MemoryTiles implements TileRepositoryPort {
   }
 
   deleteByJob(jobId: string): Promise<number> {
-    return Promise.resolve(this.records.filter((record) => record.jobId === jobId).length);
+    const before = this.records.length;
+    const remaining = this.records.filter((record) => record.jobId !== jobId);
+    this.records.splice(0, this.records.length, ...remaining);
+    return Promise.resolve(before - remaining.length);
   }
 }
 
@@ -297,6 +300,46 @@ describe("FullPageCaptureCoordinator", () => {
     expect(jobs.job.cleanup).toEqual({ attempted: true, completed: true });
     expect(tiles.records).toHaveLength(1);
     expect(page.restore).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops after a stored tile and keeps an exportable partial capture", async () => {
+    let releaseCapture!: () => void;
+    let signalStored!: () => void;
+    const storedSignal = new Promise<void>((resolve) => {
+      signalStored = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      releaseCapture = resolve;
+    });
+    const engine: CaptureEngine = {
+      kind: "cdp",
+      async capture(context) {
+        const tiles = [plannedTile(0), plannedTile(1), plannedTile(2)];
+        await context.onPlan(metrics, { ...metrics.document, height: 1_800 }, tiles);
+        await context.storeTile(stored(tiles[0] as CaptureTile), new Blob(["one"]));
+        signalStored();
+        await gate;
+        context.cancellation.throwIfCancelled("capture");
+        return { metrics, targetRect: metrics.document, tiles: [stored(tiles[0] as CaptureTile)] };
+      },
+    };
+    const { coordinator, jobs, tiles } = setup(engine);
+
+    const running = coordinator.start("job-full");
+    await storedSignal;
+    await coordinator.cancel("job-full", "keep captured prefix", "keep-partial");
+    releaseCapture();
+    await running;
+
+    expect(jobs.job.state).toBe("ready");
+    expect(jobs.job.partialCapture).toMatchObject({
+      reason: "user-stop",
+      limitValue: 1,
+      capturedRect: { x: 0, y: 0, width: 900, height: 600 },
+    });
+    expect(jobs.job.completedTiles).toBe(1);
+    expect(jobs.job.totalTiles).toBe(1);
+    expect(tiles.records).toHaveLength(1);
   });
 
   it("lets cancellation win while page restoration is finishing", async () => {

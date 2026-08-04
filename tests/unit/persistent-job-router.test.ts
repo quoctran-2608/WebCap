@@ -187,7 +187,7 @@ describe("persistent job router", () => {
       dependencies(jobs, dedupe, { start, cancel }),
     );
 
-    expect(cancel).toHaveBeenCalledWith(cancelled.id, "test");
+    expect(cancel).toHaveBeenCalledWith(cancelled.id, "test", "discard");
     expect(response).toMatchObject({
       type: "JOB_RESPONSE",
       payload: { job: { state: "capturing" } },

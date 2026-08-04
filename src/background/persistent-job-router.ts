@@ -79,7 +79,11 @@ export type PdfProgressRouterResponse = OffscreenPdfExportProgressAckMessage;
 
 export interface FullPageCapturePort {
   start(jobId: string): Promise<void>;
-  cancel(jobId: string, reason?: string): Promise<CaptureJob>;
+  cancel(
+    jobId: string,
+    reason?: string,
+    disposition?: "discard" | "keep-partial",
+  ): Promise<CaptureJob>;
 }
 
 export interface PdfExportPort {
@@ -382,7 +386,11 @@ async function executeJobRequest(
       if (job.mode === "scroll-area" && dependencies.scrollAreaCaptures !== undefined) {
         return {
           kind: "job",
-          job: await dependencies.scrollAreaCaptures.cancel(job.id, request.payload.reason),
+          job: await dependencies.scrollAreaCaptures.cancel(
+            job.id,
+            request.payload.reason,
+            request.payload.disposition,
+          ),
         };
       }
       if (
@@ -391,7 +399,11 @@ async function executeJobRequest(
       ) {
         return {
           kind: "job",
-          job: await dependencies.captures.cancel(job.id, request.payload.reason),
+          job: await dependencies.captures.cancel(
+            job.id,
+            request.payload.reason,
+            request.payload.disposition,
+          ),
         };
       }
       return {

@@ -6,7 +6,14 @@ import type {
   CaptureProgress,
 } from "@capture/capture-engine";
 import { JOB_PROGRESS_THROTTLE_MS, TILE_RECORD_SCHEMA_VERSION } from "@shared/constants";
-import type { CaptureJob, CaptureTile, PageMetrics, Rect } from "@shared/contracts/domain";
+import type {
+  CaptureJob,
+  CaptureTile,
+  PageMetrics,
+  PartialCapture,
+  Rect,
+} from "@shared/contracts/domain";
+import { contiguousStoredPrefix, rectCoveringTiles } from "@capture/partial-capture";
 import type { ElementTargetValidationPort } from "@background/element-selection-service";
 import type { StoredTileRecord } from "@shared/contracts/job";
 import { createJobProgressMessage } from "@shared/contracts/job-progress";
@@ -47,10 +54,12 @@ interface ActiveCaptureRun {
 
 class MutableCaptureCancellation implements CaptureCancellation {
   cancelled = false;
+  keepPartial = false;
   private reason: string | undefined;
 
-  cancel(reason?: string): void {
+  cancel(reason?: string, disposition: "discard" | "keep-partial" = "discard"): void {
     this.cancelled = true;
+    this.keepPartial = disposition === "keep-partial";
     this.reason = reason;
   }
 
@@ -209,12 +218,16 @@ export class FullPageCaptureCoordinator {
     return promise;
   }
 
-  async cancel(jobId: string, reason?: string): Promise<CaptureJob> {
+  async cancel(
+    jobId: string,
+    reason?: string,
+    disposition: "discard" | "keep-partial" = "discard",
+  ): Promise<CaptureJob> {
     const run = this.active.get(jobId);
     if (run === undefined) {
       return this.jobs.cancel(jobId, reason);
     }
-    run.cancellation.cancel(reason);
+    run.cancellation.cancel(reason, disposition);
     const job = await this.requireJob(jobId);
     if (job.state === "ready" || job.state === "failed") {
       return this.jobs.cancel(jobId, reason);
@@ -351,8 +364,30 @@ export class FullPageCaptureCoordinator {
           ...(job.targetDescriptor === undefined ? {} : { targetDescriptor: job.targetDescriptor }),
           ...(preparation === undefined ? {} : { preparation }),
           cancellation,
-          onPlan: (metrics, targetRect, tiles) =>
-            this.recordPlan(job.id, selected, metrics, targetRect, tiles),
+          onPlan: (metrics, targetRect, tiles, enginePartialCapture) => {
+            const preparationPartialCapture: PartialCapture | undefined =
+              preparation?.completionReason === "max-css-height"
+                ? {
+                    reason: "max-css-height",
+                    capturedRect: targetRect,
+                    limitValue: job.settings.limits.maxCssHeight,
+                  }
+                : preparation?.completionReason === "max-duration"
+                  ? {
+                      reason: "max-duration",
+                      capturedRect: targetRect,
+                      limitValue: job.settings.lazyLoad.maxDurationMs,
+                    }
+                  : undefined;
+            return this.recordPlan(
+              job.id,
+              selected,
+              metrics,
+              targetRect,
+              tiles,
+              enginePartialCapture ?? preparationPartialCapture,
+            );
+          },
           storeTile: (tile, blob) => this.storeTile(job.id, tile, blob),
           reportProgress: (progress) => this.publish(progress),
         };
@@ -413,6 +448,14 @@ export class FullPageCaptureCoordinator {
     }
 
     if (operationError !== undefined || restoreError !== undefined) {
+      if (
+        restoreError === undefined &&
+        cancellation.keepPartial &&
+        normalizedOperationError(operationError).code === "E_CANCELLED" &&
+        (await this.settlePartialStop(job.id))
+      ) {
+        return;
+      }
       await this.settleFailure(job.id, cancellation, operationError, restoreError);
       return;
     }
@@ -457,6 +500,7 @@ export class FullPageCaptureCoordinator {
     metrics: PageMetrics,
     targetRect: Rect,
     tiles: CaptureTile[],
+    partialCapture?: PartialCapture,
   ): Promise<void> {
     const job = await this.requireJob(jobId);
     const patch = {
@@ -466,6 +510,7 @@ export class FullPageCaptureCoordinator {
       tilePlan: tiles,
       completedTiles: 0,
       totalTiles: tiles.length,
+      ...(partialCapture === undefined ? {} : { partialCapture }),
     };
     if (job.state === "preparing") {
       await this.jobs.transition(job.id, "capturing", patch);
@@ -518,6 +563,59 @@ export class FullPageCaptureCoordinator {
       total: updated.totalTiles,
       tileIndex: tile.index,
     });
+  }
+
+  private async settlePartialStop(jobId: string): Promise<boolean> {
+    let job = await this.requireJob(jobId);
+    if (job.state !== "capturing" || job.completedTiles === 0) {
+      return false;
+    }
+
+    const selectedTiles = contiguousStoredPrefix(job.tilePlan);
+    const capturedRect = rectCoveringTiles(selectedTiles);
+    if (selectedTiles.length === 0 || capturedRect === undefined) {
+      return false;
+    }
+
+    const selectedIndexes = new Set(selectedTiles.map((tile) => tile.index));
+    const records = (await this.tiles.listByJob(jobId)).filter((record) =>
+      selectedIndexes.has(record.index),
+    );
+    await this.tiles.deleteByJob(jobId);
+    for (const record of records) {
+      await this.tiles.put(record);
+    }
+
+    const wasComplete =
+      selectedTiles.length === job.totalTiles &&
+      selectedTiles.every((tile) => tile.status === "stored");
+    const cleanup = cleanupState(undefined);
+    job = await this.jobs.update(jobId, {
+      targetRect: capturedRect,
+      tilePlan: selectedTiles,
+      completedTiles: selectedTiles.length,
+      totalTiles: selectedTiles.length,
+      cleanup,
+      ...(wasComplete
+        ? {}
+        : {
+            partialCapture: {
+              reason: "user-stop",
+              capturedRect,
+              limitValue: selectedTiles.length,
+            },
+          }),
+    });
+    job = await this.jobs.transition(job.id, "processing", { cleanup });
+    job = await this.jobs.transition(job.id, "ready", { cleanup });
+    await this.publish({
+      jobId: job.id,
+      state: job.state,
+      stage: "ready",
+      completed: job.completedTiles,
+      total: job.totalTiles,
+    });
+    return true;
   }
 
   private async settleFailure(

@@ -39,6 +39,13 @@ export const ExportProgressSchema = z
   })
   .strict();
 
+export const PartialCaptureReasonSchema = z.enum([
+  "max-css-height",
+  "max-duration",
+  "max-tiles",
+  "user-stop",
+]);
+
 export const RectSchema = z
   .object({
     x: FiniteNumberSchema,
@@ -140,6 +147,14 @@ export const CleanupStateSchema = z
   })
   .strict();
 
+export const PartialCaptureSchema = z
+  .object({
+    reason: PartialCaptureReasonSchema,
+    capturedRect: RectSchema,
+    limitValue: PositiveFiniteNumberSchema.optional(),
+  })
+  .strict();
+
 export const CaptureJobSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -166,6 +181,7 @@ export const CaptureJobSchema = z
     totalTiles: NonNegativeIntegerSchema,
     settings: CaptureSettingsSchema,
     cleanup: CleanupStateSchema,
+    partialCapture: PartialCaptureSchema.optional(),
     exportProgress: ExportProgressSchema.optional(),
     outputArtifactId: z.string().min(1).max(160).optional(),
     error: WebCapErrorDataSchema.optional(),
@@ -188,4 +204,6 @@ export type PageMetrics = z.infer<typeof PageMetricsSchema>;
 export type CaptureTile = z.infer<typeof CaptureTileSchema>;
 export type CaptureSettings = z.infer<typeof CaptureSettingsSchema>;
 export type CleanupState = z.infer<typeof CleanupStateSchema>;
+export type PartialCaptureReason = z.infer<typeof PartialCaptureReasonSchema>;
+export type PartialCapture = z.infer<typeof PartialCaptureSchema>;
 export type CaptureJob = z.infer<typeof CaptureJobSchema>;

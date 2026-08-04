@@ -129,13 +129,25 @@ export async function getActiveCaptureJob(tabId: number): Promise<CaptureJob | u
   return response.payload.job ?? undefined;
 }
 
-export function cancelFullPageCapture(jobId: string): Promise<CaptureJob> {
+function requestFullPageCancellation(
+  jobId: string,
+  disposition: "discard" | "keep-partial",
+): Promise<CaptureJob> {
   return sendJobRequest(
     createJobCancelMessage({
       requestId: crypto.randomUUID(),
       jobId,
-      reason: "popup cancellation",
+      reason: disposition === "keep-partial" ? "popup partial stop" : "popup cancellation",
+      disposition,
       sentAt: new Date().toISOString(),
     }),
   );
+}
+
+export function cancelFullPageCapture(jobId: string): Promise<CaptureJob> {
+  return requestFullPageCancellation(jobId, "discard");
+}
+
+export function stopFullPageCapture(jobId: string): Promise<CaptureJob> {
+  return requestFullPageCancellation(jobId, "keep-partial");
 }

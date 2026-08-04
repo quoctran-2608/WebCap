@@ -84,7 +84,7 @@ function setup() {
     },
     targetRect: { x: 0, y: 0, width: 100, height: 220 },
     targetDescriptor: descriptor,
-    cancellation: { cancelled: false, throwIfCancelled: () => undefined },
+    cancellation: { cancelled: false, keepPartial: false, throwIfCancelled: () => undefined },
     onPlan,
     storeTile(tile) {
       stored.push(tile);

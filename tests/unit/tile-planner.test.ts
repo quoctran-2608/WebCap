@@ -137,13 +137,17 @@ describe("tile planner", () => {
     }
   });
 
-  it("rejects a plan beyond maxTiles", () => {
-    expect(() =>
-      plan(
-        { x: 0, y: 0, width: 10_000, height: 10_000 },
-        { maxTileWidthCss: 100, maxTileHeightCss: 100, maxTiles: 10 },
-      ),
-    ).toThrowError(WebCapRuntimeError);
+  it("returns an explicit contiguous partial plan beyond maxTiles", () => {
+    const result = plan(
+      { x: 0, y: 0, width: 10_000, height: 10_000 },
+      { maxTileWidthCss: 100, maxTileHeightCss: 100, maxTiles: 10 },
+    );
+
+    expect(result.limitedByMaxTiles).toBe(true);
+    expect(result.tiles).toHaveLength(10);
+    expect(result.targetRect.width).toBe(1_000);
+    expect(result.targetRect.height).toBe(100);
+    validateTileCoverage(result.targetRect, result.rowCount, result.columnCount, result.tiles);
   });
 
   it("dynamically bisects an oversized rectangle until every piece is safe", () => {

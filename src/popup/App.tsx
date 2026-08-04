@@ -23,6 +23,7 @@ import {
   startFullPageCapture,
   startRegionCapture,
   startScrollAreaCapture,
+  stopFullPageCapture,
 } from "./full-page-client";
 import {
   cancelVisibleCapture,
@@ -162,6 +163,21 @@ function tiledStatusCopy(job: CaptureJob): string {
     if (job.state === "cancelled") return "Đã hủy chọn vùng cuộn.";
   }
   return TILED_STATUS_COPY[job.state];
+}
+
+function partialCaptureCopy(job: CaptureJob): string | undefined {
+  const partial = job.partialCapture;
+  if (partial === undefined) return undefined;
+  if (partial.reason === "max-css-height") {
+    return "WebCap đã chụp đến giới hạn chiều cao cấu hình. Phần tile hiện có vẫn có thể xuất PDF.";
+  }
+  if (partial.reason === "max-duration") {
+    return "Trang tiếp tục tăng sau thời gian chuẩn bị tối đa. WebCap đã giữ phần nội dung ổn định đã chụp được.";
+  }
+  if (partial.reason === "max-tiles") {
+    return "Trang vượt giới hạn số tile an toàn. WebCap đã giữ phần liên tục từ đầu trang thay vì cắt im lặng.";
+  }
+  return "Bạn đã dừng sớm và giữ phần tile liên tục đã chụp được.";
 }
 
 function isFullPageBusy(job: CaptureJob | undefined): boolean {
@@ -607,6 +623,17 @@ export function App(): React.JSX.Element {
     syncSession,
   ]);
 
+  const handleStopPartial = useCallback(async (): Promise<void> => {
+    if (fullPageJob === undefined || fullPageJob.completedTiles === 0) return;
+    try {
+      const job = await stopFullPageCapture(fullPageJob.id);
+      setFullPageJob(job);
+      await syncFullPageJob(job.id);
+    } catch (error) {
+      setUiError(errorMessage(error));
+    }
+  }, [fullPageJob, syncFullPageJob]);
+
   const handleRetry = useCallback(async (): Promise<void> => {
     if (
       selectedMode === "full-page" ||
@@ -929,13 +956,24 @@ export function App(): React.JSX.Element {
         )}
 
         {busy ? (
-          <button
-            className="primary-action primary-action--danger"
-            type="button"
-            onClick={() => void handleCancel()}
-          >
-            Hủy chụp
-          </button>
+          <div className="capture-actions">
+            {tiledMode && (fullPageJob?.completedTiles ?? 0) > 0 && (
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={() => void handleStopPartial()}
+              >
+                Dừng và giữ {fullPageJob?.completedTiles} tile
+              </button>
+            )}
+            <button
+              className="primary-action primary-action--danger"
+              type="button"
+              onClick={() => void handleCancel()}
+            >
+              {(fullPageJob?.completedTiles ?? 0) > 0 ? "Hủy và xóa phần tạm" : "Hủy chụp"}
+            </button>
+          </div>
         ) : selectedMode === "visible" && session?.artifact !== undefined ? null : (
           <button
             className="primary-action"
@@ -1089,6 +1127,11 @@ export function App(): React.JSX.Element {
                 {fullPageJob.completedTiles} source tile đang được giữ cục bộ. Mở editor để xem
                 thumbnail, đổi khổ giấy, sắp xếp hoặc bỏ trang và tạo PDF mà không chụp lại.
               </p>
+              {partialCaptureCopy(fullPageJob) !== undefined && (
+                <p className="partial-capture-warning" data-testid="partial-capture-warning">
+                  {partialCaptureCopy(fullPageJob)}
+                </p>
+              )}
               <button
                 className="primary-action"
                 type="button"

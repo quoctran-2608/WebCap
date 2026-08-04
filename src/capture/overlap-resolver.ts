@@ -14,9 +14,11 @@ export interface ScrollCapturePlanRequest {
 
 export interface ScrollCapturePlan {
   targetRect: Rect;
+  requestedTargetRect: Rect;
   rows: number;
   columns: number;
   tiles: CaptureTile[];
+  limitedByMaxTiles: boolean;
 }
 
 function planError(
@@ -152,29 +154,36 @@ export function planScrollCaptureTiles(request: ScrollCapturePlanRequest): Scrol
   const maxTiles = Math.floor(requirePositive(request.maxTiles, "maximum tile count"));
   const overlap = Number.isFinite(request.overlapCss) ? Math.max(0, request.overlapCss) : 0;
 
-  const xStops = createStops(target.x, target.width, viewportWidth, overlap);
-  const yStops = createStops(target.y, target.height, viewportHeight, overlap);
-  const tileCount = xStops.length * yStops.length;
-  if (tileCount > maxTiles) {
-    throw planError("Scroll capture would exceed the configured tile limit.", "MaxTilesExceeded", {
-      tileCount,
-      maxTiles,
-    });
-  }
+  const allXStops = createStops(target.x, target.width, viewportWidth, overlap);
+  const allYStops = createStops(target.y, target.height, viewportHeight, overlap);
+  const tileCount = allXStops.length * allYStops.length;
+  const limitedByMaxTiles = tileCount > maxTiles;
+  const columnCount = allXStops.length <= maxTiles ? allXStops.length : maxTiles;
+  const rowCount = limitedByMaxTiles
+    ? Math.max(1, Math.floor(maxTiles / columnCount))
+    : allYStops.length;
+  const xStops = allXStops.slice(0, columnCount);
+  const yStops = allYStops.slice(0, rowCount);
+  const limitedTarget: Rect = {
+    x: target.x,
+    y: target.y,
+    width: Math.min(target.width, (xStops.at(-1) ?? target.x) + viewportWidth - target.x),
+    height: Math.min(target.height, (yStops.at(-1) ?? target.y) + viewportHeight - target.y),
+  };
 
   const tiles: CaptureTile[] = [];
   for (let row = 0; row < yStops.length; row += 1) {
     const scrollY = yStops[row] as number;
     const previousBottom = row === 0 ? target.y : (yStops[row - 1] as number) + viewportHeight;
     const outputY = Math.max(target.y, previousBottom, scrollY);
-    const outputBottom = Math.min(target.y + target.height, scrollY + viewportHeight);
+    const outputBottom = Math.min(limitedTarget.y + limitedTarget.height, scrollY + viewportHeight);
 
     for (let column = 0; column < xStops.length; column += 1) {
       const scrollX = xStops[column] as number;
       const previousRight =
         column === 0 ? target.x : (xStops[column - 1] as number) + viewportWidth;
       const outputX = Math.max(target.x, previousRight, scrollX);
-      const outputRight = Math.min(target.x + target.width, scrollX + viewportWidth);
+      const outputRight = Math.min(limitedTarget.x + limitedTarget.width, scrollX + viewportWidth);
       const index = row * xStops.length + column;
       const sourceRectCss: Rect = {
         x: scrollX,
@@ -211,11 +220,13 @@ export function planScrollCaptureTiles(request: ScrollCapturePlanRequest): Scrol
     }
   }
 
-  assertCoverage(target, tiles, yStops.length, xStops.length);
+  assertCoverage(limitedTarget, tiles, yStops.length, xStops.length);
   return {
-    targetRect: target,
+    targetRect: limitedTarget,
+    requestedTargetRect: target,
     rows: yStops.length,
     columns: xStops.length,
     tiles,
+    limitedByMaxTiles,
   };
 }

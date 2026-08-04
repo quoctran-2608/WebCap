@@ -4,6 +4,7 @@ import type {
   ElementTargetDescriptor,
   CaptureSettings,
   CaptureTile,
+  PartialCapture,
   PageMetrics,
   Rect,
 } from "@shared/contracts/domain";
@@ -21,6 +22,7 @@ export interface CaptureProgress {
 
 export interface CaptureCancellation {
   readonly cancelled: boolean;
+  readonly keepPartial: boolean;
   throwIfCancelled(stage?: "prepare" | "measure" | "plan" | "capture" | "cleanup"): void;
 }
 
@@ -33,7 +35,12 @@ export interface CaptureEngineContext {
   targetDescriptor?: ElementTargetDescriptor;
   preparation?: PagePreparationReadyPayload;
   cancellation: CaptureCancellation;
-  onPlan(metrics: PageMetrics, targetRect: Rect, tiles: CaptureTile[]): Promise<void>;
+  onPlan(
+    metrics: PageMetrics,
+    targetRect: Rect,
+    tiles: CaptureTile[],
+    partialCapture?: PartialCapture,
+  ): Promise<void>;
   storeTile(tile: CaptureTile, blob: Blob): Promise<void>;
   reportProgress(progress: CaptureProgress): Promise<void> | void;
 }
@@ -42,6 +49,7 @@ export interface CaptureEngineResult {
   metrics: PageMetrics;
   targetRect: Rect;
   tiles: CaptureTile[];
+  partialCapture?: PartialCapture;
 }
 
 export interface CaptureEngine {
