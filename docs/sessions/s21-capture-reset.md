@@ -1,7 +1,8 @@
 # S21 — Capture reset and new-capture lifecycle
 
 Status: DONE pending merge of PR #26  
-Target release: WebCap 0.2.0
+Target release: WebCap 0.2.0  
+Implementation branch: `agent/s21-capture-reset`
 
 ## Delivered
 
