@@ -1,0 +1,58 @@
+name: S18 Workspace Snapshot
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: s18-workspace-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  workspace:
+    if: github.head_ref == 'agent/s18-capture-hardening'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out S18 branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Package materialized workspace
+        run: |
+          tar \
+            --dereference \
+            --hard-dereference \
+            --exclude=.git \
+            --exclude=dist \
+            --exclude=playwright-report \
+            --exclude=test-results \
+            -czf /tmp/webcap-s18-workspace.tgz .
+
+      - name: Upload workspace
+        uses: actions/upload-artifact@v4
+        with:
+          name: webcap-s18-workspace
+          path: /tmp/webcap-s18-workspace.tgz
+          retention-days: 1
