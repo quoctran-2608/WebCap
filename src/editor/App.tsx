@@ -104,6 +104,7 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("Đang tải dữ liệu biên tập…");
   const [error, setError] = useState<string>();
+  const [downloadId, setDownloadId] = useState<number>();
 
   const refresh = useCallback(async () => {
     const next = await getPdfEditorSnapshot(jobId);
@@ -171,6 +172,23 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
     },
     [],
   );
+
+  const downloadPdf = useCallback(async () => {
+    const artifactId = snapshot?.job.outputArtifactId;
+    if (artifactId === undefined) return;
+    setBusy(true);
+    setError(undefined);
+    setDownloadId(undefined);
+    try {
+      const nextDownloadId = await downloadArtifact(artifactId);
+      setDownloadId(nextDownloadId);
+      setNotice("Đã bắt đầu tải PDF.");
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      setBusy(false);
+    }
+  }, [snapshot?.job.outputArtifactId]);
 
   const updatePageIds = useCallback(
     (pageIds: string[], success: string) => {
@@ -434,12 +452,7 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
             <button
               type="button"
               className="primary-action"
-              onClick={() =>
-                void mutate(async () => {
-                  await downloadArtifact(snapshot.job.outputArtifactId ?? "");
-                  return refresh();
-                }, "Đã bắt đầu tải PDF.")
-              }
+              onClick={() => void downloadPdf()}
               disabled={busy}
             >
               Tải PDF xuống
@@ -462,7 +475,12 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
             </button>
           )}
 
-          <p className="status-message" role={error === undefined ? "status" : "alert"}>
+          <p
+            className="status-message"
+            data-testid="download-status"
+            data-download-id={downloadId}
+            role={error === undefined ? "status" : "alert"}
+          >
             {error ?? notice}
           </p>
         </aside>
