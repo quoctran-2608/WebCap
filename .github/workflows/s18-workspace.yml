@@ -52,6 +52,7 @@ jobs:
             'e5fb9ac21f7cc2f256e037f37389e842a2229844dc1d358225cc86d571a8af78  .s18-core.patch.part03'
             '7238d103b15e696a8c803702c6d7351df30b2b09b1017946595e9a3709126287  .s18-core.patch.part04'
             'f2da7e532bdeb203bcf091d8afef5a7463f69606c3c3524bbce2ee3665469f21  .s18-core.patch.part05'
+            'b2f1379be536267d757636a5ea4cfa23aa4b242262a606a18ffa618ee971bccf  .s18-e2e-fix.patch.b64'
           )
           printf '%s\n' "${expected[@]}" | sha256sum -c -
 
@@ -65,7 +66,13 @@ jobs:
           git apply --check /tmp/s18-core.patch
           git apply /tmp/s18-core.patch
 
-          git rm -f .s18-core.patch.part{00..05}
+          base64 --decode .s18-e2e-fix.patch.b64 > /tmp/s18-e2e-fix.patch
+          test "$(wc -c < /tmp/s18-e2e-fix.patch)" -eq 2086
+          echo '545931e2f50903f9bea3452e87940fc291b7d112b2e7de99f4ff662196fe7051  /tmp/s18-e2e-fix.patch' | sha256sum -c -
+          git apply --check /tmp/s18-e2e-fix.patch
+          git apply /tmp/s18-e2e-fix.patch
+
+          git rm -f .s18-core.patch.part{00..05} .s18-e2e-fix.patch.b64
           git rm -f .github/workflows/s18-workspace.yml
 
       - name: Check formatting
