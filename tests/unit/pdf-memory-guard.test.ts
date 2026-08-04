@@ -57,13 +57,15 @@ describe("PDF memory guard", () => {
         fallbackAllowed: true,
       });
       if (error instanceof WebCapRuntimeError) {
-        expect(error.data).toMatchObject({
-          causeCode: "PdfWorkingSetEstimateExceeded",
-          safeContext: {
-            reasons: expect.stringContaining("working-set"),
-            alternatives: "lower-quality,split-output,multi-page-pdf",
-          },
-        });
+        expect(error.data.causeCode).toBe("PdfWorkingSetEstimateExceeded");
+        const reasons = error.data.safeContext?.reasons;
+        const alternatives = error.data.safeContext?.alternatives;
+        expect(typeof reasons).toBe("string");
+        expect(typeof alternatives).toBe("string");
+        if (typeof reasons === "string") expect(reasons).toContain("working-set");
+        if (typeof alternatives === "string") {
+          expect(alternatives).toBe("lower-quality,split-output,multi-page-pdf");
+        }
       }
     }
   });
