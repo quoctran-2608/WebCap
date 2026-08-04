@@ -54,6 +54,7 @@ jobs:
             'e7e93d011e8914a08f8f9c6fb6c46565a9b886fdbe4772505ef9e5f650521661  .s17-core-v3.patch.part05'
             'c2260b5bf82a931a7ff066a4097408e1c9f4b0159188f87f88bed662b8c92295  .s17-core-v3.patch.part06'
             '2604745dadcd2700b0b6441e08475694c7b2e89400165bc7bd7335c7db7163d2  .s17-type-fix.patch.b64'
+            'ebeb89db800f4e60f14e1515da134032a1d65f56f4fb475e66da1800f1d88450  .s17-e2e-fix.patch.b64'
           )
           printf '%s\n' "${expected[@]}" | sha256sum -c -
 
@@ -71,12 +72,18 @@ jobs:
           git apply --check /tmp/s17-type-fix.patch
           git apply /tmp/s17-type-fix.patch
 
+          base64 --decode .s17-e2e-fix.patch.b64 > /tmp/s17-e2e-fix.patch
+          echo 'ff5463354f1690b48440af6b51bb88cf1de421fbc1b9cd3859ccda9b745f76a9  /tmp/s17-e2e-fix.patch' | sha256sum -c -
+          git apply --check /tmp/s17-e2e-fix.patch
+          git apply /tmp/s17-e2e-fix.patch
+
           git rm -f \
             .s17-core.patch.gz.b64 \
             .s17-core.patch.part{00..06} \
             .s17-core-v2.patch.part{00..03} \
             .s17-core-v3.patch.part{00..06} \
-            .s17-type-fix.patch.b64
+            .s17-type-fix.patch.b64 \
+            .s17-e2e-fix.patch.b64
           git rm -f .github/workflows/s17-workspace.yml
 
       - name: Check formatting
