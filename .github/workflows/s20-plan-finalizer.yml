@@ -1,5 +1,6 @@
 name: S20 Plan Finalizer
 
+# Temporary asserted migration; remove after PLAN.md is committed.
 on:
   push:
     branches:
