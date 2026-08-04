@@ -11,7 +11,13 @@ import {
 import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
 import type { TileRepositoryPort } from "@storage/tile-repository";
 
+import {
+  assertPdfIntegrity,
+  type PdfIntegrityExpectations,
+  type PdfIntegrityReport,
+} from "./pdf-integrity";
 import { planPdfDocument } from "./pdf-layout";
+import { assertPdfExportMemorySafe, type PdfMemoryEstimate } from "./pdf-memory-guard";
 import { planPdfTileIntersections } from "./pdf-tile-intersections";
 
 export interface PdfExportPayload {
@@ -74,16 +80,29 @@ export interface PdfDocumentPort {
   save(): Promise<Uint8Array>;
 }
 
+export interface PdfHeapSnapshot {
+  usedBytes?: number | undefined;
+  limitBytes?: number | undefined;
+}
+
 export interface PdfExportEnvironment {
   decode(blob: Blob): Promise<DecodedPdfTile>;
   createCanvas(width: number, height: number): PdfPageCanvasPort;
   createDocument(): Promise<PdfDocumentPort>;
+  now?: (() => number) | undefined;
+  readHeapSnapshot?: (() => PdfHeapSnapshot) | undefined;
 }
+
+export type PdfIntegrityInspector = (
+  input: Uint8Array | ArrayBuffer,
+  expectations?: PdfIntegrityExpectations,
+) => Promise<PdfIntegrityReport>;
 
 export interface PdfExporterOptions {
   tiles: TileRepositoryPort;
   artifacts: ArtifactRepositoryPort;
   environment?: PdfExportEnvironment;
+  inspectIntegrity?: PdfIntegrityInspector;
 }
 
 export interface PdfExportDiagnostics {
@@ -92,11 +111,29 @@ export interface PdfExportDiagnostics {
   maxDecodedTiles: number;
   maxCanvasPixelArea: number;
   releasedCanvasCount: number;
+  durationMs: number;
+  artifactBytes: number;
+  memoryEstimate: PdfMemoryEstimate;
+  integrity: {
+    valid: boolean;
+    pageCount: number;
+    imageObjectCount: number;
+    nonEmptyStreamCount: number;
+  };
+  peakHeapBytes?: number | undefined;
+  heapLimitBytes?: number | undefined;
 }
 
 export interface PdfExportResult {
   artifact: ArtifactMetadata;
   diagnostics: PdfExportDiagnostics;
+}
+
+interface PerformanceWithMemory extends Performance {
+  memory?: {
+    usedJSHeapSize: number;
+    jsHeapSizeLimit: number;
+  };
 }
 
 const defaultEnvironment: PdfExportEnvironment = {
@@ -172,6 +209,16 @@ const defaultEnvironment: PdfExportEnvironment = {
       save: () => document.save(),
     };
   },
+  now: () => performance.now(),
+  readHeapSnapshot() {
+    const memory = (performance as PerformanceWithMemory).memory;
+    return memory === undefined
+      ? {}
+      : {
+          usedBytes: memory.usedJSHeapSize,
+          limitBytes: memory.jsHeapSizeLimit,
+        };
+  },
 };
 
 function exportError(message: string, causeCode?: string): Error {
@@ -245,23 +292,50 @@ function defaultEditorPages(payload: PdfExportPayload): PdfEditorPage[] {
   }));
 }
 
+function validHeapValue(value: number | undefined): number | undefined {
+  return value !== undefined && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+function nowMilliseconds(environment: PdfExportEnvironment): number {
+  const value = environment.now?.() ?? Date.now();
+  return Number.isFinite(value) ? value : Date.now();
+}
+
+function readHeapSnapshot(environment: PdfExportEnvironment): PdfHeapSnapshot {
+  try {
+    const snapshot = environment.readHeapSnapshot?.() ?? {};
+    const usedBytes = validHeapValue(snapshot.usedBytes);
+    const limitBytes = validHeapValue(snapshot.limitBytes);
+    return {
+      ...(usedBytes === undefined ? {} : { usedBytes }),
+      ...(limitBytes === undefined ? {} : { limitBytes }),
+    };
+  } catch {
+    return {};
+  }
+}
+
 export class PdfExporter {
   private readonly tiles: TileRepositoryPort;
   private readonly artifacts: ArtifactRepositoryPort;
   private readonly environment: PdfExportEnvironment;
+  private readonly inspectIntegrity: PdfIntegrityInspector;
 
   constructor(options: PdfExporterOptions) {
     this.tiles = options.tiles;
     this.artifacts = options.artifacts;
     this.environment = options.environment ?? defaultEnvironment;
+    this.inspectIntegrity = options.inspectIntegrity ?? assertPdfIntegrity;
   }
 
   async export(
     payload: PdfExportPayload,
     reportProgress: (progress: PdfExportProgress) => Promise<boolean> = () => Promise.resolve(true),
   ): Promise<PdfExportResult> {
+    const startedAt = nowMilliseconds(this.environment);
     const records = await this.tiles.listByJob(payload.jobId);
     const recordByIndex = new Map(records.map((record) => [record.index, record]));
+    let tileBytes = 0;
     for (const tile of payload.tiles) {
       const record = recordByIndex.get(tile.index);
       if (record?.blob === undefined || record.tile.status !== "stored") {
@@ -270,6 +344,7 @@ export class PdfExporter {
           tileIndex: tile.index,
         });
       }
+      tileBytes += record.blob.size;
     }
 
     const firstTile = payload.tiles[0];
@@ -290,6 +365,37 @@ export class PdfExporter {
     );
     const totalPixelHeight = Math.max(1, Math.round(payload.targetRect.height * renderScaleY));
     const canvasWidth = Math.max(1, Math.round(payload.targetRect.width * renderScaleX));
+    const pagePixelRanges = pages.map((page) => {
+      const pixelRange = roundRange(
+        (page.sourceRectCss.y - payload.targetRect.y) * renderScaleY,
+        (page.sourceRectCss.y + page.sourceRectCss.height - payload.targetRect.y) * renderScaleY,
+        totalPixelHeight,
+      );
+      if (pixelRange.length <= 0) {
+        throw exportError("PDF page pixel range is empty.", "PdfPagePixelRangeMissing");
+      }
+      return { page, pixelRange };
+    });
+    const maxPagePixelArea = Math.max(
+      ...pagePixelRanges.map(({ pixelRange }) => canvasWidth * pixelRange.length),
+    );
+    const largestTilePixelArea = Math.max(
+      ...payload.tiles.map((tile) => tile.expectedPixelWidth * tile.expectedPixelHeight),
+    );
+    const initialHeap = readHeapSnapshot(this.environment);
+    const memoryEstimate = assertPdfExportMemorySafe({
+      widthCss: payload.targetRect.width,
+      heightCss: payload.targetRect.height,
+      renderScaleX,
+      renderScaleY,
+      tileCount: payload.tiles.length,
+      tileBytes,
+      pageCount: pages.length,
+      maxPagePixelArea,
+      largestTilePixelArea,
+      jpegQuality: payload.settings.jpegQuality,
+      ...(initialHeap.limitBytes === undefined ? {} : { heapLimitBytes: initialHeap.limitBytes }),
+    });
     const pdf = await this.environment.createDocument();
 
     let activeDecodedTiles = 0;
@@ -297,19 +403,22 @@ export class PdfExporter {
     let maxDecodedTiles = 0;
     let maxCanvasPixelArea = 0;
     let releasedCanvasCount = 0;
+    let peakHeapBytes = initialHeap.usedBytes;
+    let heapLimitBytes = initialHeap.limitBytes;
+    const sampleHeap = () => {
+      const snapshot = readHeapSnapshot(this.environment);
+      if (snapshot.usedBytes !== undefined) {
+        peakHeapBytes = Math.max(peakHeapBytes ?? 0, snapshot.usedBytes);
+      }
+      if (snapshot.limitBytes !== undefined) heapLimitBytes = snapshot.limitBytes;
+    };
 
     try {
-      for (const [outputIndex, page] of pages.entries()) {
-        const pixelRange = roundRange(
-          (page.sourceRectCss.y - payload.targetRect.y) * renderScaleY,
-          (page.sourceRectCss.y + page.sourceRectCss.height - payload.targetRect.y) * renderScaleY,
-          totalPixelHeight,
-        );
-        if (pixelRange.length <= 0) {
-          throw exportError("PDF page pixel range is empty.", "PdfPagePixelRangeMissing");
-        }
+      for (const [outputIndex, entry] of pagePixelRanges.entries()) {
+        const { page, pixelRange } = entry;
         const canvas = this.environment.createCanvas(canvasWidth, pixelRange.length);
         maxCanvasPixelArea = Math.max(maxCanvasPixelArea, canvas.width * canvas.height);
+        sampleHeap();
         try {
           const context = canvas.getContext();
           if (context === null) {
@@ -336,6 +445,7 @@ export class PdfExporter {
             activeDecodedTiles += 1;
             decodedTileCount += 1;
             maxDecodedTiles = Math.max(maxDecodedTiles, activeDecodedTiles);
+            sampleHeap();
             try {
               const tileScaleX = positiveScale(decoded.width / tile.sourceRectCss.width, "x");
               const tileScaleY = positiveScale(decoded.height / tile.sourceRectCss.height, "y");
@@ -393,6 +503,7 @@ export class PdfExporter {
             } finally {
               activeDecodedTiles -= 1;
               decoded.close();
+              sampleHeap();
             }
           }
 
@@ -406,9 +517,11 @@ export class PdfExporter {
             pageHeightPt: page.pageHeightPt,
             imageRectPt: page.imageRectPt,
           });
+          sampleHeap();
         } finally {
           canvas.release();
           releasedCanvasCount += 1;
+          sampleHeap();
         }
 
         const accepted = await reportProgress({
@@ -425,7 +538,23 @@ export class PdfExporter {
       if (bytes.byteLength <= 0) {
         throw exportError("The generated PDF artifact is empty.", "EmptyPdfArtifact");
       }
+      sampleHeap();
       const ownedBytes = Uint8Array.from(bytes);
+      const integrity = await this.inspectIntegrity(ownedBytes, {
+        pageCount: pages.length,
+        pageSizes: pages.map((page) => ({
+          widthPt: page.pageWidthPt,
+          heightPt: page.pageHeightPt,
+        })),
+        dimensionTolerancePt: 0.5,
+        requireImagePerPage: true,
+      });
+      if (!integrity.valid) {
+        throw exportError(
+          `The generated PDF failed integrity validation: ${integrity.errors.join(",")}.`,
+          "PdfIntegrityCheckFailed",
+        );
+      }
       const blob = new Blob([ownedBytes.buffer], { type: "application/pdf" });
       const firstPage = pages[0];
       if (firstPage === undefined) {
@@ -463,6 +592,7 @@ export class PdfExporter {
         createdAt: record.createdAt,
         expiresAt: record.expiresAt,
       };
+      const durationMs = Math.max(0, nowMilliseconds(this.environment) - startedAt);
       return {
         artifact,
         diagnostics: {
@@ -471,6 +601,17 @@ export class PdfExporter {
           maxDecodedTiles,
           maxCanvasPixelArea,
           releasedCanvasCount,
+          durationMs,
+          artifactBytes: blob.size,
+          memoryEstimate,
+          integrity: {
+            valid: integrity.valid,
+            pageCount: integrity.pageCount,
+            imageObjectCount: integrity.imageObjectCount,
+            nonEmptyStreamCount: integrity.nonEmptyStreamCount,
+          },
+          ...(peakHeapBytes === undefined ? {} : { peakHeapBytes }),
+          ...(heapLimitBytes === undefined ? {} : { heapLimitBytes }),
         },
       };
     } catch (error) {

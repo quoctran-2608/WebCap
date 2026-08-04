@@ -29,7 +29,7 @@ export type OffscreenRouterResponse = OffscreenResponse | OffscreenPdfThumbnailC
 
 export interface OffscreenRouterDependencies {
   processor: ImageProcessor;
-  pdfExporter: PdfExporter;
+  pdfExporter: Pick<PdfExporter, "export">;
   reportPdfProgress: (progress: PdfExportProgress) => Promise<boolean>;
   objectUrls: ObjectUrlRegistry;
   now: () => Date;

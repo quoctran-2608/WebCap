@@ -28,6 +28,17 @@ function errorMessage(error: unknown): string {
   return "Không thể hoàn thành thao tác PDF.";
 }
 
+function exportStateNotice(snapshot: PdfEditorSnapshot): string {
+  if (snapshot.job.state === "completed") return "PDF đã sẵn sàng để tải xuống.";
+  if (snapshot.job.state === "failed") {
+    if (snapshot.job.error?.code === "E_MEMORY_GUARD") {
+      return "Tài liệu vượt ngưỡng bộ nhớ an toàn. Hãy giảm chất lượng JPEG, đổi Vừa chiều rộng sang A4/Letter hoặc xuất ít trang hơn. Source tiles vẫn được giữ để thử lại mà không cần chụp lại.";
+    }
+    return "Xuất PDF thất bại. Source tiles vẫn được giữ để thử lại.";
+  }
+  return "Đã dừng xuất PDF; bạn có thể chỉnh sửa hoặc xuất lại.";
+}
+
 interface PageThumbnailProps {
   snapshot: PdfEditorSnapshot;
   page: PdfEditorPage;
@@ -135,13 +146,7 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
           setSnapshot(next);
           if (next.job.state !== "exporting") {
             setDraftSettings(next.manifest.settings);
-            setNotice(
-              next.job.state === "completed"
-                ? "PDF đã sẵn sàng để tải xuống."
-                : next.job.state === "failed"
-                  ? "Xuất PDF thất bại. Source tiles vẫn được giữ để thử lại."
-                  : "Đã dừng xuất PDF; bạn có thể chỉnh sửa hoặc xuất lại.",
-            );
+            setNotice(exportStateNotice(next));
           }
         })
         .catch((cause) => setError(errorMessage(cause)));

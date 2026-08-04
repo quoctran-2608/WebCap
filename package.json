@@ -18,6 +18,7 @@
     "format:check": "prettier --check .",
     "test": "vitest",
     "test:unit": "vitest run",
+    "benchmark:pdf": "vitest run --config vitest.benchmark.config.ts --reporter=verbose",
     "test:smoke": "node tests/smoke/extension-smoke.mjs",
     "package": "pnpm build && node scripts/package-extension.mjs",
     "test:e2e": "playwright test",
