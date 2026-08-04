@@ -6,7 +6,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 ## Current status
 
-**S14 — PDF editor, options, and non-destructive retry are implemented.** A ready tiled capture can now open a dedicated React editor routed by job ID. The editor restores a persistent edit manifest after reload, lazy-loads page thumbnails from local source tiles, supports logical page removal and keyboard-accessible reordering, and exposes A4, Letter, fit-width, portrait/landscape, margin, and JPEG-quality settings with an explicitly approximate size estimate. Export uses the S13 page-at-a-time pipeline, reports per-page progress, supports cooperative cancellation and retry without recapturing, and downloads the completed local PDF artifact. Source tiles remain immutable and reusable; thumbnails and PDF bytes stay as IndexedDB Blob values rather than crossing runtime messages. S15 remains responsible for 10k/30k/100k PDF benchmarks, integrity checks, and memory guardrails.
+**S15 — PDF benchmarks, integrity validation, and memory guards are implemented.** The page-at-a-time exporter now estimates the live working set before allocating a PDF document or page canvas, blocks unsafe jobs with retryable `E_MEMORY_GUARD`, and offers lower-quality, A4/Letter multi-page, or smaller-batch alternatives without deleting source tiles. Every completed PDF is checked before persistence for signature, loadability, page count, page dimensions, image backing, and non-empty streams. A dedicated repeatable benchmark command covers 1,440 × 10k, 30k, and 100k CSS-pixel pages plus a 4,096 × 30k wide scenario; the clean reference run kept decoded-tile concurrency at one and all estimates below the active heap threshold. S16 is next: full capture of scrollable containers.
 
 ## Requirements
 
@@ -33,6 +33,7 @@ pnpm lint          # Run ESLint with zero warnings allowed.
 pnpm format:check  # Verify formatting without modifying files.
 pnpm format        # Format tracked source/configuration files.
 pnpm test:unit     # Run the unit-test suite once.
+pnpm benchmark:pdf    # Run repeatable long-page PDF reference benchmarks.
 pnpm test:smoke    # Smoke-test the built popup ↔ service-worker handshake in Chrome.
 pnpm test          # Run Vitest in watch mode.
 pnpm package       # Build and verify the unpacked extension; ZIP packaging comes later.
@@ -62,6 +63,7 @@ src/popup/              React popup entry, capture controls, progress UI, and ru
 src/shared/contracts/   Typed cross-context message envelopes.
 src/storage/            IndexedDB and chrome.storage repositories.
 tests/unit/             Fast deterministic contract, engine, coordinator, and router tests.
+tests/performance/        Repeatable PDF benchmark scenarios and metric output.
 tests/e2e/              Playwright unpacked-extension integration tests.
 tests/smoke/            Real-Chrome unpacked-extension smoke tests.
 scripts/                Build verification and repository automation.
@@ -80,4 +82,5 @@ scripts/                Build verification and repository automation.
 - [Engineering specification](./SPEC.md)
 - [Implementation plan](./PLAN.md)
 - [Changelog](./CHANGELOG.md)
+- [PDF benchmark and integrity reference](./docs/benchmarks.md)
 - [Privacy baseline](./docs/privacy.md)

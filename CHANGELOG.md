@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Pre-allocation PDF memory guard using total pixels, tile count, stored tile bytes, one-page RGBA, one decoded tile, encoded-page estimate, fixed overhead, and best-effort runtime heap limits.
+- Retryable `E_MEMORY_GUARD` guidance for lower JPEG quality, A4/Letter multi-page output, or smaller page batches while preserving every source tile.
+- PDF integrity validation before artifact persistence for signature, non-empty bytes, pdf-lib loadability, exact page count, page dimensions within 0.5 points, image backing, and non-empty streams.
+- Export diagnostics for duration, artifact bytes, maximum decoded concurrency, maximum canvas area, working-set estimate, guard threshold, integrity counts, and best-effort heap peak.
+- Dedicated `pnpm benchmark:pdf` reference suite covering 1,440 × 10k/30k/100k and 4,096 × 30k wide scenarios with machine-readable JSON metrics.
+- The S15 clean reference gate passes 239 unit tests across 66 files, four PDF benchmark scenarios, the Manifest V3 build, and 20 Playwright E2E cases.
 - Dedicated React PDF editor routed by persistent job ID, with reload-safe non-destructive edit manifests that never reorder or delete source tiles.
 - Bounded lazy page thumbnails rendered from local tile Blobs, keyboard-accessible logical page reordering/removal, and cache identities tied to manifest revision.
 - A4, Letter, fit-width, portrait/landscape, margin, and JPEG-quality controls with explicitly approximate size estimates.

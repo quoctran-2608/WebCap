@@ -104,4 +104,13 @@ S15 retains pinned local `pdf-lib` 1.17.1. The page-at-a-time design keeps the l
 
 ## Latest validated run
 
-The final S15 completion update must add the clean GitHub Actions run ID, environment, test counts, and measured JSON output here. Measurements must never be copied from a failed or partially skipped run.
+Clean GitHub Actions run `30871783639` completed on 2026-08-04 using Ubuntu 24.04, Node.js 22.22.0, pnpm 11.15.1, and the pinned local `pdf-lib` 1.17.1. The run passed format, lint, strict typecheck, 239 unit tests across 66 files, four dedicated PDF benchmark cases, the Manifest V3 build, and 20 Playwright E2E cases.
+
+| Scenario         | Tiles | Pages | Duration | PDF bytes | Max decoded | Max canvas pixels |   Working set |     Threshold |    Peak heap |
+| ---------------- | ----: | ----: | -------: | --------: | ----------: | ----------------: | ------------: | ------------: | -----------: |
+| 1,440 × 10k      |     2 |     5 | 26.04 ms |     5,070 |           1 |         3,003,840 |  95,884,512 B | 483,183,820 B | 18,958,192 B |
+| 1,440 × 30k      |     4 |    15 | 29.11 ms |    13,888 |           1 |         3,003,840 |  95,884,512 B | 483,183,820 B | 21,339,352 B |
+| 1,440 × 100k     |    13 |    48 | 50.23 ms |    43,332 |           1 |         3,003,840 |  95,884,512 B | 483,183,820 B | 23,770,784 B |
+| 4,096 × 30k wide |     4 |     6 |  7.03 ms |     5,949 |           1 |        24,301,568 | 288,793,969 B | 483,183,820 B | 22,393,096 B |
+
+These durations measure the deterministic CI reference adapter and production planning/PDF/integrity code. They do not measure real browser screenshot capture, raster drawing, or JPEG encoding latency. The load-bearing results are the bounded page canvas, decoded concurrency of one, valid persisted PDFs, and working-set estimates below the active threshold.

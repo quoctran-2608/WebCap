@@ -155,3 +155,16 @@ Run `pnpm test:unit` for the coordinate matrix, protocol, selector service, rout
 8. Download the completed artifact. Confirm the file begins with `%PDF-`, page count matches the edited manifest, page dimensions match the selected settings, and every page has a non-empty image stream.
 9. Inspect IndexedDB and session/local storage: binary source tiles, thumbnails, and PDF artifacts are local Blobs; persistent messages and edit manifests contain metadata only.
 10. Run `pnpm test:unit` and `pnpm test:e2e`. The S14 reference gate contains 230 unit tests and 20 Playwright cases, including the full reload–edit–export–download path plus all prior capture regressions.
+
+## S15 PDF benchmark, integrity, and memory-guard validation
+
+1. Run `pnpm install --frozen-lockfile`, then `pnpm benchmark:pdf`. Confirm four machine-readable `webcap-pdf-benchmark` JSON lines are printed for 1,440 × 10k, 30k, 100k and 4,096 × 30k wide scenarios.
+2. Confirm every scenario creates a non-empty PDF, planned page count matches the persisted artifact, `maxDecodedTiles` is one, and the largest page canvas remains smaller than the logical full-page pixel area.
+3. Inspect the 100k reference: it should plan 13 stored tiles and 48 PDF pages while keeping the deterministic working-set estimate below the active guard threshold. Treat elapsed times as CI reference measurements, not real browser raster/JPEG latency.
+4. Export a normal ready job through the extension. Before the first canvas allocation, verify the guard accounts for total pixels, tile count, stored source bytes, page RGBA, largest decoded tile, estimated JPEG bytes, fixed overhead, and best-effort heap limit.
+5. Force an unsafe fit-width/wide-page estimate. Confirm export stops before creating a PDF document or canvas with retryable `E_MEMORY_GUARD` and offers lower quality, A4/Letter multi-page output, or removing/exporting smaller page batches.
+6. Confirm the guard failure stores no output artifact and leaves the source tile count and Blob bytes unchanged so retry does not recapture.
+7. Corrupt the generated PDF signature or produce a blank/image-less document in a test adapter. Confirm the integrity check returns retryable `E_EXPORT_FAILED` with cause `PdfIntegrityCheckFailed`, persists no corrupt artifact, and preserves source tiles.
+8. For a valid PDF, verify `%PDF-`, non-zero bytes, pdf-lib loadability, exact page count, dimensions within 0.5 PDF points, at least one image object, and non-empty streams before artifact persistence.
+9. Inspect diagnostics: duration, artifact bytes, decoded count/concurrency, maximum page-canvas area, released canvas count, working-set estimate, threshold, integrity counts, and heap peak when the runtime exposes it. No diagnostic may contain page content or image bytes.
+10. Run `pnpm test:unit`, `pnpm benchmark:pdf`, and `pnpm test:e2e`. The S15 clean reference gate contains 239 unit tests across 66 files, four benchmark cases, and 20 Playwright cases.
