@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  assertPdfExportMemorySafe,
-  estimatePdfExportMemory,
-} from "@offscreen/pdf-memory-guard";
+import { assertPdfExportMemorySafe, estimatePdfExportMemory } from "@offscreen/pdf-memory-guard";
 import { WebCapRuntimeError } from "@shared/errors/error";
 
 describe("PDF memory guard", () => {
@@ -25,11 +22,7 @@ describe("PDF memory guard", () => {
     expect(estimate.shouldBlock).toBe(false);
     expect(estimate.totalPixels).toBe(144_000_000);
     expect(estimate.estimatedWorkingSetBytes).toBeLessThan(estimate.thresholdBytes);
-    expect(estimate.alternatives).toEqual([
-      "lower-quality",
-      "split-output",
-      "multi-page-pdf",
-    ]);
+    expect(estimate.alternatives).toEqual(["lower-quality", "split-output", "multi-page-pdf"]);
   });
 
   it("blocks a single-page working set that exceeds the safe heap budget", () => {
