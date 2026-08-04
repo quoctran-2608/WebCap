@@ -94,6 +94,8 @@ After `pdf-lib` saves the document and before the artifact is persisted, WebCap 
 - page dimensions within 0.5 PDF points;
 - at least one image object and non-empty streams.
 
+A corrupt signature may prevent `pdf-lib` from loading the file; that case is classified as both `signature` and `load-failed`. Expectation mismatches are evaluated only after the PDF loads successfully.
+
 A single image object may be reused by multiple PDF pages, so image-object count is not incorrectly required to equal page count. A failed check returns retryable `E_EXPORT_FAILED` with cause `PdfIntegrityCheckFailed` and no output artifact is stored.
 
 ## Reference decision
