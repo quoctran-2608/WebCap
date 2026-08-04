@@ -16,7 +16,7 @@ concurrency:
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -46,8 +46,11 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Privacy and dependency audit
+      - name: Privacy, dependency, and release audit
         run: pnpm run audit
+
+      - name: Critical dependency audit
+        run: pnpm audit:security
 
       - name: Unit tests
         run: pnpm test:unit
@@ -58,11 +61,26 @@ jobs:
       - name: Build extension
         run: pnpm build
 
+      - name: Reproduce and verify release ZIP
+        run: node scripts/verify-reproducible-package.mjs
+
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: Visible capture E2E
+      - name: Full extension E2E
         run: pnpm test:e2e
+
+      - name: Packaged lifecycle smoke
+        run: pnpm test:release
+
+      - name: Upload release candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webcap-release-candidate-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Upload Playwright report
         if: always()
