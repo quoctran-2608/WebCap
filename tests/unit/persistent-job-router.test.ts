@@ -12,6 +12,7 @@ import type { StoredDedupeRecord } from "@shared/contracts/job";
 import {
   createJobCancelMessage,
   createJobCreateMessage,
+  createJobGetActiveMessage,
   createJobGetMessage,
 } from "@shared/contracts/job-messages";
 import { createOffscreenPdfExportProgressMessage } from "@shared/contracts/offscreen";
@@ -62,6 +63,7 @@ class MemoryDedupe implements DedupeRepositoryPort {
 class FakeCoordinator implements PersistentJobCoordinatorPort {
   createCalls = 0;
   getCalls = 0;
+  getActiveCalls = 0;
   cancelCalls = 0;
   createdMode: CaptureJob["mode"] = "full-page";
   current: CaptureJob | undefined = job();
@@ -77,6 +79,11 @@ class FakeCoordinator implements PersistentJobCoordinatorPort {
 
   get(): Promise<CaptureJob | undefined> {
     this.getCalls += 1;
+    return Promise.resolve(this.current);
+  }
+
+  getActiveForTab(): Promise<CaptureJob | undefined> {
+    this.getActiveCalls += 1;
     return Promise.resolve(this.current);
   }
 
@@ -154,6 +161,52 @@ describe("persistent job router", () => {
     expect(first).toEqual(second);
     expect(jobs.createCalls).toBe(1);
     expect(dedupe.records.get("request-1")).toMatchObject({ requestType: "JOB_CREATE" });
+  });
+
+  it("returns a durable completed output from JOB_GET_ACTIVE", async () => {
+    const jobs = new FakeCoordinator();
+    const dedupe = new MemoryDedupe();
+    jobs.current = {
+      ...job("job-completed"),
+      state: "completed",
+      stateRevision: 6,
+      activeOutputFormat: "png",
+      outputArtifactId: "artifact-output",
+      output: {
+        artifactId: "artifact-output",
+        sourceArtifactId: "artifact-source",
+        format: "png",
+        mimeType: "image/png",
+        filename: "capture.png",
+        byteLength: 128,
+        width: 640,
+        height: 480,
+        createdAt: now.toISOString(),
+        expiresAt: "2026-08-02T16:30:00.000Z",
+      },
+      cleanup: { attempted: true, completed: true },
+    };
+    const message = createJobGetActiveMessage({
+      requestId: "request-active-output",
+      sentAt: now.toISOString(),
+      tabId: 7,
+    });
+
+    const response = await routePersistentJobMessage(message, dependencies(jobs, dedupe));
+
+    expect(response).toMatchObject({
+      type: "JOB_ACTIVE_RESPONSE",
+      payload: {
+        job: {
+          id: "job-completed",
+          state: "completed",
+          activeOutputFormat: "png",
+          outputArtifactId: "artifact-output",
+          output: { artifactId: "artifact-output", format: "png" },
+        },
+      },
+    });
+    expect(jobs.getActiveCalls).toBe(1);
   });
 
   it("starts a full-page execution once after creating its persistent job", async () => {
