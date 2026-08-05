@@ -58,9 +58,7 @@ function requestResult(request: IDBRequest): Promise<unknown> {
   });
 }
 
-export class IndexedDbArtifactRepository
-  implements ArtifactRepositoryPort, JobArtifactLookupPort
-{
+export class IndexedDbArtifactRepository implements ArtifactRepositoryPort, JobArtifactLookupPort {
   private readonly openDatabase: () => Promise<IDBDatabase>;
 
   constructor(options: IndexedDbArtifactRepositoryOptions = {}) {
