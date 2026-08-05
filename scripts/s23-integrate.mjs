@@ -14,7 +14,7 @@ async function patchJobCoordinator() {
   source = replaceUnique(
     source,
     "  get(jobId: string): Promise<CaptureJob | undefined>;\n  getActiveForTab?(tabId: number): Promise<CaptureJob | undefined>;",
-    "  get(jobId: string): Promise<CaptureJob | undefined>;\n  listActive(): Promise<CaptureJob[]>;\n  getActiveForTab?(tabId: number): Promise<CaptureJob | undefined>;",
+    "  get(jobId: string): Promise<CaptureJob | undefined>;\n  listActive?(): Promise<CaptureJob[]>;\n  getActiveForTab?(tabId: number): Promise<CaptureJob | undefined>;",
     "job coordinator port",
   );
   source = replaceUnique(
@@ -95,7 +95,7 @@ async function patchRouter() {
   void jobs
     .initialize()
     .then(async () => {
-      const activeJobs = await jobs.listActive();
+      const activeJobs = (await jobs.listActive?.()) ?? [];
       const resumable = activeJobs.filter(
         (job) =>
           job.mode === "full-page" &&
@@ -119,38 +119,86 @@ async function patchI18n() {
   source = replaceUnique(
     source,
     `  "popup.partial.max-tiles":
-    "Trang vượt giới hạn số tile an toàn. WebCap đã giữ phần liên tục từ đầu trang thay vì cắt im lặng.\",
-  "popup.partial.user-stop": "Bạn đã dừng sớm và giữ phần tile liên tục đã chụp được.\",`,
+    "Trang vượt giới hạn số tile an toàn. WebCap đã giữ phần liên tục từ đầu trang thay vì cắt im lặng.",
+  "popup.partial.user-stop": "Bạn đã dừng sớm và giữ phần tile liên tục đã chụp được.",`,
     `  "popup.partial.max-tiles":
-    "Trang vượt giới hạn số tile an toàn. WebCap đã giữ phần liên tục từ đầu trang thay vì cắt im lặng.\",
+    "Trang vượt giới hạn số tile an toàn. WebCap đã giữ phần liên tục từ đầu trang thay vì cắt im lặng.",
   "popup.partial.max-estimated-bytes":
-    "Dữ liệu tile đã chạm ngân sách dung lượng an toàn. WebCap giữ phần liên tục đã hoàn tất.\",
+    "Dữ liệu tile đã chạm ngân sách dung lượng an toàn. WebCap giữ phần liên tục đã hoàn tất.",
   "popup.partial.storage-quota":
-    "Bộ nhớ cục bộ của Chrome đã đầy. WebCap đã bỏ hàng chưa hoàn tất và giữ phần liên tục an toàn.\",
+    "Bộ nhớ cục bộ của Chrome đã đầy. WebCap đã bỏ hàng chưa hoàn tất và giữ phần liên tục an toàn.",
   "popup.partial.memory-budget":
-    "Lượt chụp đã chạm ngân sách bộ nhớ. Phần tile liên tục đã hoàn tất vẫn được giữ.\",
+    "Lượt chụp đã chạm ngân sách bộ nhớ. Phần tile liên tục đã hoàn tất vẫn được giữ.",
   "popup.partial.unstable-growth":
-    "Trang tiếp tục tăng không ổn định. WebCap đã giữ phần liên tục đã xác nhận.\",
-  "popup.partial.user-stop": "Bạn đã dừng sớm và giữ phần tile liên tục đã chụp được.\",`,
+    "Trang tiếp tục tăng không ổn định. WebCap đã giữ phần liên tục đã xác nhận.",
+  "popup.partial.user-stop": "Bạn đã dừng sớm và giữ phần tile liên tục đã chụp được.",`,
     "Vietnamese adaptive partial copy",
   );
   source = replaceUnique(
     source,
     `  "popup.partial.max-tiles":
-    "The page exceeded the safe tile limit. WebCap kept a continuous prefix instead of truncating silently.\",
-  "popup.partial.user-stop": "You stopped early and kept the continuous tiles captured so far.\",`,
+    "The page exceeded the safe tile limit. WebCap kept a continuous prefix instead of truncating silently.",
+  "popup.partial.user-stop": "You stopped early and kept the continuous tiles captured so far.",`,
     `  "popup.partial.max-tiles":
-    "The page exceeded the safe tile limit. WebCap kept a continuous prefix instead of truncating silently.\",
+    "The page exceeded the safe tile limit. WebCap kept a continuous prefix instead of truncating silently.",
   "popup.partial.max-estimated-bytes":
-    "Stored tiles reached the safe byte budget. WebCap kept the completed continuous prefix.\",
+    "Stored tiles reached the safe byte budget. WebCap kept the completed continuous prefix.",
   "popup.partial.storage-quota":
-    "Chrome local storage became full. WebCap discarded the incomplete row and kept a safe continuous prefix.\",
+    "Chrome local storage became full. WebCap discarded the incomplete row and kept a safe continuous prefix.",
   "popup.partial.memory-budget":
-    "Capture reached its memory budget. The completed continuous tile prefix was retained.\",
+    "Capture reached its memory budget. The completed continuous tile prefix was retained.",
   "popup.partial.unstable-growth":
-    "The page continued growing without settling. WebCap kept the verified continuous prefix.\",
-  "popup.partial.user-stop": "You stopped early and kept the continuous tiles captured so far.\",`,
+    "The page continued growing without settling. WebCap kept the verified continuous prefix.",
+  "popup.partial.user-stop": "You stopped early and kept the continuous tiles captured so far.",`,
     "English adaptive partial copy",
+  );
+  await writeFile(path, source, "utf8");
+}
+
+async function patchAdaptiveEngine() {
+  const path = "src/capture/adaptive-scroll-capture-engine.ts";
+  let source = await readFile(path, "utf8");
+  source = replaceUnique(
+    source,
+    "    let frontier = context.resume?.frontier;\n    let metrics = context.resume?.metrics;",
+    "    const resumeFrontier = context.resume?.frontier;\n    let frontier: AdaptiveCaptureFrontier;\n    let metrics = context.resume?.metrics;",
+    "adaptive frontier declaration",
+  );
+  source = replaceUnique(
+    source,
+    "      frontier === undefined\n        ? 0",
+    "      resumeFrontier === undefined\n        ? 0",
+    "adaptive initial probe condition",
+  );
+  source = replaceUnique(
+    source,
+    "              frontier.nextYCss - this.overlapCss,\n              frontier.observedDocumentHeightCss - frontier.viewportHeightCss,",
+    "              resumeFrontier.nextYCss - this.overlapCss,\n              resumeFrontier.observedDocumentHeightCss - resumeFrontier.viewportHeightCss,",
+    "adaptive initial probe coordinates",
+  );
+  source = replaceUnique(
+    source,
+    "      frontier,\n      tiles,\n    );\n    if (frontier === undefined) {",
+    "      resumeFrontier,\n      tiles,\n    );\n    if (resumeFrontier === undefined) {",
+    "adaptive initial probe frontier",
+  );
+  source = replaceUnique(
+    source,
+    "    } else {\n      validateIdentity(frontier, initial, tiles.length);\n      frontier = withObservedGrowth(frontier, initial, this.now().toISOString()).frontier;\n    }",
+    "    } else {\n      validateIdentity(resumeFrontier, initial, tiles.length);\n      frontier = withObservedGrowth(\n        resumeFrontier,\n        initial,\n        this.now().toISOString(),\n      ).frontier;\n    }",
+    "adaptive resume initialization",
+  );
+  await writeFile(path, source, "utf8");
+}
+
+async function patchScrollTest() {
+  const path = "tests/unit/scroll-capture-engine.test.ts";
+  let source = await readFile(path, "utf8");
+  source = replaceUnique(
+    source,
+    "    devicePixelRatio: 1,\n    fixedCandidates: 2,",
+    '    devicePixelRatio: 1,\n    documentToken: "document-1",\n    fixedCandidates: 2,',
+    "scroll test document token",
   );
   await writeFile(path, source, "utf8");
 }
@@ -169,4 +217,6 @@ async function patchCoordinatorCleanup() {
 await patchJobCoordinator();
 await patchRouter();
 await patchI18n();
+await patchAdaptiveEngine();
+await patchScrollTest();
 await patchCoordinatorCleanup();
