@@ -11,6 +11,9 @@ concurrency:
   group: s24-phase2a-syntaxfix
   cancel-in-progress: true
 
+env:
+  S24_VALIDATION_REVISION: "2"
+
 jobs:
   apply:
     runs-on: ubuntu-24.04
