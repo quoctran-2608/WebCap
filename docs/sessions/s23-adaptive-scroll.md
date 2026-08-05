@@ -1,6 +1,6 @@
 # S23 — Adaptive auto-scroll and resumable frontier
 
-Status: IMPLEMENTED, final browser and release gates pending
+Status: IMPLEMENTED, final clean repository gate running
 Target release: WebCap 0.2.0
 
 ## Delivered
@@ -31,8 +31,9 @@ Target release: WebCap 0.2.0
 - Formatting, ESLint, strict TypeScript, privacy/dependency/release/critical-security audits: PASS.
 - Unit suite: 305 tests, including adaptive planner, stable-end, finite growth, partial-row resume, navigation guard and persisted recovery.
 - PDF benchmarks: 4/4; production build and reproducible ZIP: PASS.
-- Actual-browser cases added for a page beyond 100k CSS pixels, finite lazy growth, infinite max-tile partial and service-worker restart recovery.
-- Full 48-case Playwright regression and packaged lifecycle remain the final core gate.
+- Actual-browser cases cover a page beyond 100k CSS pixels, finite lazy growth, infinite max-tile partial and service-worker restart recovery.
+- The first clean browser run passed 46/48 cases; both remaining failures were test-harness assumptions after successful runtime behavior. The PDF assertion and CDP worker-restart observation have been corrected without changing product code.
+- Full 48-case Playwright regression and packaged lifecycle are running as the final core gate.
 
 ## Deferred by scope
 
