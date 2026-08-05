@@ -3,6 +3,7 @@
 Status: DONE
 Target release: WebCap 0.2.0
 Completed: 2026-08-05
+Reference gate: GitHub Actions CI #740 (`30983504904`)
 
 ## Delivered
 
