@@ -52,6 +52,7 @@ export interface CaptureEngineContext {
     partialCapture?: PartialCapture,
   ): Promise<void>;
   checkpointFrontier?(frontier: AdaptiveCaptureFrontier): Promise<void>;
+  discardTilesFromIndex?(firstIndex: number): Promise<void>;
   storeTile(tile: CaptureTile, blob: Blob): Promise<void>;
   reportProgress(progress: CaptureProgress): Promise<void> | void;
 }
