@@ -222,8 +222,10 @@ test("@smoke auto-scrolls horizontally and restores the page after cancellation"
 
 test("@smoke removes the job and tab lease when selector injection fails", async ({
   serviceWorker,
+  openPopup,
 }) => {
-  const response: unknown = await serviceWorker.evaluate(async () => {
+  const popup = await openPopup();
+  const response: unknown = await popup.evaluate(async () => {
     const stored = await chrome.storage.local.get("webcap.settings");
     const record = stored["webcap.settings"] as { settings?: unknown } | undefined;
     const settings =
@@ -269,6 +271,7 @@ test("@smoke removes the job and tab lease when selector injection fails", async
   });
 
   expect(response).toMatchObject({ type: "ERROR_RESPONSE" });
+  expect(popup.isClosed()).toBe(false);
   await expect
     .poll(() =>
       serviceWorker.evaluate(async () => {
