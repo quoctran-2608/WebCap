@@ -46,11 +46,13 @@ async function updatePlan() {
 async function updateChangelog() {
   const path = "CHANGELOG.md";
   let source = await readFile(path, "utf8");
+  const s21LastBullet =
+    "- S21 unit and browser coverage for terminal reset, active reset, partial cleanup, replay safety, late image output, page restoration and immediate second capture on the same tab.";
   source = replaceUnique(
     source,
-    "## [Unreleased]\n\nNo unreleased changes.",
-    `## [Unreleased]\n\n### Added\n\n- Versioned capture-reset lifecycle with ownership-safe cleanup, active cancellation ordering, idempotent replay, late-output race protection, and terminal/active “Chụp mới” actions.\n- Region-selector ready handshake that closes the popup only after root attachment, listeners, focus, and first render; launch timeout and injection failure reuse the reset primitive and leave no orphan job, root, summary, or tab lease.\n- Accessible region creation and editing with pointer create/move/eight-handle resize, vertical and horizontal edge auto-scroll, 24 CSS-pixel handle targets, keyboard creation/movement/resizing/commit/cancel, and a toolbar kept above the selected rectangle.\n- Selector removal plus two animation frames before capture, duplicate-open instance reuse, DPR/zoom coordinate coverage, and browser validation for overlay exclusion and exact page restoration.`,
-    "CHANGELOG Unreleased",
+    s21LastBullet,
+    `${s21LastBullet}\n- Region-selector ready handshake that closes the popup only after root attachment, listeners, focus, and first render; launch timeout and injection failure reuse the reset primitive and leave no orphan job, root, summary, or tab lease.\n- Accessible region creation and editing with pointer create/move/eight-handle resize, vertical and horizontal edge auto-scroll, 24 CSS-pixel handle targets, keyboard creation/movement/resizing/commit/cancel, and a toolbar kept above the selected rectangle.\n- Selector removal plus two animation frames before capture, duplicate-open instance reuse, DPR/zoom coordinate coverage, and browser validation for overlay exclusion and exact page restoration.`,
+    "CHANGELOG S22 insertion",
   );
   await writeFile(path, source, "utf8");
 }
@@ -60,9 +62,9 @@ async function updateReadme() {
   let source = await readFile(path, "utf8");
   source = replaceUnique(
     source,
-    "WebCap is a local-first Chrome extension for visible viewport capture, CDP-first or scroll-fallback full-page capture, rectangular region capture, DOM element capture, full scrollable-area capture, local image export, page-at-a-time PDF creation, non-destructive PDF editing, and original-PDF passthrough when Chrome can safely expose the source bytes.",
-    "WebCap is a local-first Chrome extension for visible viewport capture, CDP-first or scroll-fallback full-page capture, reliable rectangular region capture with pointer/keyboard editing and two-axis auto-scroll, DOM element capture, full scrollable-area capture, local image export, page-at-a-time PDF creation, non-destructive PDF editing, and original-PDF passthrough when Chrome can safely expose the source bytes.",
-    "README overview",
+    "**0.2.0 implementation is active. S21 capture reset is complete; S22 region-selector launch/reliability is next.** S21 adds a versioned reset domain command, owned-data cleanup, active-task quiescence, late-output protection and a visible “New capture” action without changing the 0.1.0 package boundary. S23–S26 remain planned for adaptive auto-scroll, mode-aware output, settings/events/UI and release hardening. “Capture to the end” removes the arbitrary 100,000 CSS-pixel stopping behavior for adaptive mode while retaining explicit time, storage, tile and memory safeguards for truly infinite or device-exhausting pages.",
+    "**0.2.0 implementation is active. S21 capture reset and S22 region-selector reliability are complete; S23 adaptive auto-scroll is next.** S21 adds a versioned reset domain command, owned-data cleanup, active-task quiescence, late-output protection and a visible “New capture” action. S22 adds a focused ready handshake, pointer/keyboard region editing, two-axis auto-scroll, 24 CSS-pixel handles, duplicate-open safety and zero-orphan launch cleanup. S23–S26 remain planned for resumable adaptive capture, mode-aware output, settings/events/UI and release hardening. “Capture to the end” removes the arbitrary 100,000 CSS-pixel stopping behavior for adaptive mode while retaining explicit time, storage, tile and memory safeguards for truly infinite or device-exhausting pages.",
+    "README current status",
   );
   await writeFile(path, source, "utf8");
 }
@@ -70,10 +72,12 @@ async function updateReadme() {
 async function updateSpec() {
   const path = "docs/spec-0.2.0.md";
   let source = await readFile(path, "utf8");
+  const invariants =
+    "## 3.4 Commit/cancel invariants\n\n- Region lưu bằng CSS document coordinates.\n- Root bị remove trước capture; chờ ít nhất hai RAF.\n- Overlay pixels không được xuất hiện trong tile.\n- Cancel/launch failure phục hồi original scroll/focus và xóa job khi chưa có tile.\n- Duplicate open cho cùng job trả cùng selector instance hoặc thay thế atomically; không có hai roots.";
   source = replaceUnique(
     source,
-    "### 3.4 Restore and capture\n\nBefore capture:\n\n1. Remove selector root.\n2. Wait two animation frames.\n3. Revalidate document rectangle.\n4. Start capture.\n\n# 4. Adaptive auto-scroll",
-    `### 3.4 Restore and capture\n\nBefore capture:\n\n1. Remove selector root.\n2. Wait two animation frames.\n3. Revalidate document rectangle.\n4. Start capture.\n\n### 3.5 Locked S22 launch and interaction semantics\n\n- \`REGION_SELECTION_OPENED\` is a ready acknowledgement, not a message-received acknowledgement. It is emitted only after the root is attached, listeners are installed, the dialog owns focus, and the first animation frame has rendered.\n- Background launch uses a two-second bound. Timeout, injection failure, malformed ACK, or job mismatch calls the S21 capture-reset primitive and deletes capture-owned data and the exact tab lease.\n- Concurrent opens for the same job share one opening promise and one \`selectorInstanceId\`; an already-open different job is rejected.\n- The selector supports pointer creation, frame movement, eight-direction resize, and edge auto-scroll on both axes. The floating toolbar has a higher stacking layer than the selection so controls remain operable.\n- Keyboard support is deterministic: Space or toolbar creates a centered rectangle, arrows move, Alt+arrows resize, Shift accelerates by 10 CSS px, Enter commits, and Escape cancels. Resize-handle hit targets are at least 24 CSS px.\n- Commit and cancel remove the root and listeners and restore selector-owned state. Commit waits two animation frames before capture so selector pixels cannot enter the result.\n\n# 4. Adaptive auto-scroll`,
+    `${invariants}\n\n# 4. Adaptive auto-scroll engine`,
+    `${invariants}\n\n## 3.5 Locked S22 launch and interaction semantics\n\n- \`REGION_SELECTION_OPENED\` là ready acknowledgement, không phải message-received acknowledgement. Response chỉ được trả sau root attach, listener setup, dialog focus và first animation frame.\n- Background launch có timeout hai giây. Timeout, injection failure, malformed ACK hoặc job mismatch gọi S21 capture-reset primitive và xóa capture-owned data cùng exact tab lease.\n- Concurrent opens cho cùng job dùng chung một opening promise và một \`selectorInstanceId\`; job khác không được thay thế selector đang mở.\n- Selector hỗ trợ pointer create, frame move, eight-direction resize và edge auto-scroll theo cả hai trục. Toolbar có stacking layer cao hơn selection để control luôn thao tác được.\n- Keyboard deterministic: Space hoặc toolbar tạo centered rectangle; arrows move; Alt+arrows resize; Shift tăng bước lên 10 CSS px; Enter commit; Escape cancel. Handle hit target tối thiểu 24 CSS px.\n- Commit/cancel remove root và listener, phục hồi selector-owned state; commit chờ hai animation frame trước capture để UI selector không lọt vào output.\n\n# 4. Adaptive auto-scroll engine`,
     "SPEC S22 semantics",
   );
   await writeFile(path, source, "utf8");
