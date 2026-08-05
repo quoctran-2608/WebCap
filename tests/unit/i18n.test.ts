@@ -19,6 +19,8 @@ describe("UI localization", () => {
   it("describes mode-aware tiled outputs in both locales", () => {
     expect(t("vi", "popup.output.pdfReady")).toBe("PDF đã sẵn sàng");
     expect(t("en", "popup.output.pdfReady")).toBe("PDF is ready");
+    expect(t("vi", "popup.output.imageReady")).toBe("Ảnh đã sẵn sàng");
+    expect(t("en", "popup.output.imageReady")).toBe("Image is ready");
     expect(t("vi", "popup.output.detail", { format: "PNG", bytes: "1,2 MB" })).toBe("PNG · 1,2 MB");
     expect(t("en", "popup.output.detail", { format: "PDF", bytes: "2 MB" })).toBe("PDF · 2 MB");
     expect(t("vi", "popup.output.pages", { count: 4 })).toBe("4 trang PDF");
