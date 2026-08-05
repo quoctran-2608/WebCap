@@ -38,7 +38,7 @@ export interface CaptureEngineContext {
   jobId: string;
   tabId: number;
   windowId?: number;
-  mode: CaptureMode;
+  mode?: CaptureMode;
   settings: CaptureSettings;
   targetRect?: Rect;
   targetDescriptor?: ElementTargetDescriptor;
@@ -51,7 +51,7 @@ export interface CaptureEngineContext {
     tiles: CaptureTile[],
     partialCapture?: PartialCapture,
   ): Promise<void>;
-  checkpointFrontier(frontier: AdaptiveCaptureFrontier): Promise<void>;
+  checkpointFrontier?(frontier: AdaptiveCaptureFrontier): Promise<void>;
   storeTile(tile: CaptureTile, blob: Blob): Promise<void>;
   reportProgress(progress: CaptureProgress): Promise<void> | void;
 }
