@@ -185,13 +185,14 @@ describe("persistent job router", () => {
     const jobs = new FakeCoordinator();
     const dedupe = new MemoryDedupe();
     const order: string[] = [];
-    const start = vi.fn(async () => {
+    const start = vi.fn(() => {
       order.push("capture");
+      return Promise.resolve();
     });
     const cancel = vi.fn(() => Promise.resolve(job()));
-    const startAuto = vi.fn(async () => {
+    const startAuto = vi.fn(() => {
       order.push("output");
-      return { ...job(), state: "exporting" as const, stateRevision: 5 };
+      return Promise.resolve({ ...job(), state: "exporting" as const, stateRevision: 5 });
     });
     const completion = {
       startAuto,
