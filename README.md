@@ -16,9 +16,9 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 - Delivered in S22–S24: **Draw region** closes the popup only after selector readiness, supports pointer and keyboard editing, excludes selector UI and returns a guarded image result.
 - Delivered in S21: **New capture** safely cancels or discards the current local job and allows another capture on the same tab.
 - Delivered in S24: region/element default to guarded image output, full-page/scroll-area default to PDF, and oversized images receive an explicit no-recapture PDF fallback.
-- Stored format, quality, PDF and fixed/sticky preferences are actually applied to new jobs.
-- Event-driven progress with slow reconciliation instead of continuous 350 ms polling.
-- A simpler popup focused on capture goals, progress, download, edit and new capture; technical details move to help and diagnostics.
+- Remaining in S25: apply stored format, quality, PDF and fixed/sticky preferences to every new job.
+- Remaining in S25: replace continuous 350 ms polling with event-driven progress and slow reconciliation.
+- Remaining in S25: simplify the popup around capture goals, progress, download, edit and new capture; move technical details to help and diagnostics.
 - No backend, telemetry, remote executable code, new required permission or default host permission.
 
 ## Requirements
