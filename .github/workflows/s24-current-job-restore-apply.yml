@@ -1,0 +1,65 @@
+name: S24 Current Job Restore Apply
+
+on:
+  push:
+    branches:
+      - agent/s24-auto-output
+
+permissions:
+  contents: write
+
+concurrency:
+  group: s24-current-job-restore-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out S24 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/s24-auto-output
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply current-job restore policy
+        run: |
+          node scripts/apply-s24-current-job-restore.mjs
+          pnpm exec prettier --write src/background/job-coordinator.ts tests/unit/job-coordinator.test.ts
+
+      - name: Remove one-shot files
+        run: |
+          rm scripts/apply-s24-current-job-restore.mjs
+          rm .github/workflows/s24-current-job-restore-apply.yml
+
+      - name: Validate clean patch
+        run: |
+          pnpm format:check
+          pnpm lint
+          pnpm typecheck
+          pnpm exec vitest run tests/unit/job-coordinator.test.ts
+          git diff --check
+
+      - name: Commit clean restore policy
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Restore completed output across popup lifecycle"
+          git push origin HEAD:agent/s24-auto-output
