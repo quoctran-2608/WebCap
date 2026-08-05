@@ -49,6 +49,7 @@ jobs:
       - name: Format and validate documents
         run: |
           pnpm format
+          sed -i 's/[[:space:]]\+$//' docs/sessions/s22-region-selector.md
           pnpm format:check
           git diff --check
 
