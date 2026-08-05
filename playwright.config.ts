@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
   workers: 1,
-  // Temporary S24 migration gate: surface the next stale E2E contract quickly.
+  // Temporary S24 migration gate: stop at the first stale contract while preserving the full matrix.
   maxFailures: 1,
   timeout: 60_000,
   expect: {
