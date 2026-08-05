@@ -113,9 +113,13 @@ export function validateJobInvariants(
     const frontier = job.adaptiveFrontier;
     if (job.mode !== "full-page") {
       return err(
-        stateError("Only full-page jobs may persist an adaptive frontier.", "AdaptiveModeMismatch", {
-          mode: job.mode,
-        }),
+        stateError(
+          "Only full-page jobs may persist an adaptive frontier.",
+          "AdaptiveModeMismatch",
+          {
+            mode: job.mode,
+          },
+        ),
       );
     }
     if (Math.abs(frontier.nextYCss - frontier.capturedBottomCss) > 0.01) {

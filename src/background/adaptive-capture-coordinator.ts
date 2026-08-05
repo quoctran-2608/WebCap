@@ -5,7 +5,7 @@ import type {
   CaptureEngineContext,
   CaptureProgress,
 } from "@capture/capture-engine";
-import { contiguousStoredPrefix, rectCoveringTiles } from "@capture/partial-capture";
+import { rectCoveringTiles } from "@capture/partial-capture";
 import { JOB_PROGRESS_THROTTLE_MS, TILE_RECORD_SCHEMA_VERSION } from "@shared/constants";
 import type {
   AdaptiveCaptureFrontier,
@@ -449,7 +449,9 @@ export class AdaptiveCaptureCoordinator {
   }
 
   private async discardTilesFromIndex(jobId: string, firstIndex: number): Promise<void> {
-    const records = (await this.tiles.listByJob(jobId)).filter((record) => record.index < firstIndex);
+    const records = (await this.tiles.listByJob(jobId)).filter(
+      (record) => record.index < firstIndex,
+    );
     await this.tiles.deleteByJob(jobId);
     for (const record of records) {
       await this.tiles.put(record);
@@ -569,5 +571,3 @@ export class AdaptiveCaptureCoordinator {
     }
   }
 }
-
-export { contiguousStoredPrefix };

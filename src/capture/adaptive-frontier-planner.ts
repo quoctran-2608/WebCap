@@ -46,7 +46,12 @@ function requirePositive(value: number, name: string): number {
   return value;
 }
 
-function createStops(start: number, extent: number, viewportExtent: number, overlap: number): number[] {
+function createStops(
+  start: number,
+  extent: number,
+  viewportExtent: number,
+  overlap: number,
+): number[] {
   const maximumStart = Math.max(start, start + extent - viewportExtent);
   if (maximumStart - start <= TILE_COVERAGE_EPSILON_CSS) {
     return [start];

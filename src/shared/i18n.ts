@@ -103,6 +103,14 @@ const VI = {
     "Trang tiếp tục tăng sau thời gian chuẩn bị tối đa. WebCap đã giữ phần nội dung ổn định đã chụp được.",
   "popup.partial.max-tiles":
     "Trang vượt giới hạn số tile an toàn. WebCap đã giữ phần liên tục từ đầu trang thay vì cắt im lặng.",
+  "popup.partial.max-estimated-bytes":
+    "Dữ liệu tile đã chạm ngân sách dung lượng an toàn. WebCap giữ phần liên tục đã hoàn tất.",
+  "popup.partial.storage-quota":
+    "Bộ nhớ cục bộ của Chrome đã đầy. WebCap đã bỏ hàng chưa hoàn tất và giữ phần liên tục an toàn.",
+  "popup.partial.memory-budget":
+    "Lượt chụp đã chạm ngân sách bộ nhớ. Phần tile liên tục đã hoàn tất vẫn được giữ.",
+  "popup.partial.unstable-growth":
+    "Trang tiếp tục tăng không ổn định. WebCap đã giữ phần liên tục đã xác nhận.",
   "popup.partial.user-stop": "Bạn đã dừng sớm và giữ phần tile liên tục đã chụp được.",
   "popup.progress.region": "Tiến độ chụp vùng chọn",
   "popup.progress.element": "Tiến độ chụp phần tử",
@@ -360,6 +368,14 @@ const EN: Record<MessageKey, string> = {
     "The page kept growing after the preparation time limit. WebCap kept the stable content captured so far.",
   "popup.partial.max-tiles":
     "The page exceeded the safe tile limit. WebCap kept a continuous prefix instead of truncating silently.",
+  "popup.partial.max-estimated-bytes":
+    "Stored tiles reached the safe byte budget. WebCap kept the completed continuous prefix.",
+  "popup.partial.storage-quota":
+    "Chrome local storage became full. WebCap discarded the incomplete row and kept a safe continuous prefix.",
+  "popup.partial.memory-budget":
+    "Capture reached its memory budget. The completed continuous tile prefix was retained.",
+  "popup.partial.unstable-growth":
+    "The page continued growing without settling. WebCap kept the verified continuous prefix.",
   "popup.partial.user-stop": "You stopped early and kept the continuous tiles captured so far.",
   "popup.progress.region": "Region capture progress",
   "popup.progress.element": "Element capture progress",

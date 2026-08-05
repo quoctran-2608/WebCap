@@ -1,3 +1,4 @@
+import { AdaptiveCaptureCoordinator } from "@background/adaptive-capture-coordinator";
 import { createChromeDebuggerAdapter } from "@background/chrome-debugger-adapter";
 import {
   ElementSelectionService,
@@ -8,6 +9,7 @@ import {
 import { createChromeTabsAdapter } from "@background/chrome-tabs-adapter";
 import { DebuggerClient } from "@background/debugger-client";
 import { FullPageCaptureCoordinator } from "@background/full-page-capture-coordinator";
+import { ModeAwareCaptureCoordinator } from "@background/mode-aware-capture-coordinator";
 import { createChromePagePreparationAdapter } from "@background/page-preparation-adapter";
 import { PagePreparationService } from "@background/page-preparation-service";
 import { OffscreenService } from "@background/offscreen-service";
@@ -22,6 +24,7 @@ import {
   createChromeRegionSelectionBrowserAdapter,
   type RegionSelectionPort,
 } from "@background/region-selection-service";
+import { AdaptiveScrollCaptureEngine } from "@capture/adaptive-scroll-capture-engine";
 import { CdpCaptureEngine } from "@capture/cdp-capture-engine";
 import { ScrollAreaCaptureEngine } from "@capture/scroll-area-capture-engine";
 import { ScrollCaptureEngine } from "@capture/scroll-capture-engine";
@@ -188,13 +191,24 @@ export function getPersistentJobRouterDependencies(): PersistentJobRouterDepende
     },
   });
   const elements = new ElementSelectionService(createChromeElementSelectionBrowserAdapter());
-  const captures = new FullPageCaptureCoordinator({
+  const adaptiveCaptures = new AdaptiveCaptureCoordinator({
+    jobs,
+    pages,
+    tiles,
+    engine: new AdaptiveScrollCaptureEngine({ pages: scrollPages, tabs }),
+  });
+  const targetedCaptures = new FullPageCaptureCoordinator({
     jobs,
     pages,
     tiles,
     engine: new CdpCaptureEngine(new DebuggerClient(createChromeDebuggerAdapter())),
     fallbackEngine: new ScrollCaptureEngine({ pages: scrollPages, tabs }),
     targetValidator: elements,
+  });
+  const captures = new ModeAwareCaptureCoordinator({
+    jobs,
+    fullPage: adaptiveCaptures,
+    targeted: targetedCaptures,
   });
   const scrollAreaCaptures = new FullPageCaptureCoordinator({
     jobs,
@@ -247,7 +261,21 @@ export function getPersistentJobRouterDependencies(): PersistentJobRouterDepende
     now: () => new Date(),
   };
   const nowIso = new Date().toISOString();
-  void Promise.allSettled([jobs.initialize(), dedupe.deleteExpired(nowIso)]);
+  void jobs
+    .initialize()
+    .then(async () => {
+      const activeJobs = (await jobs.listActive?.()) ?? [];
+      const resumable = activeJobs.filter(
+        (job) =>
+          job.mode === "full-page" &&
+          job.preferredEngine === "scroll" &&
+          (job.state === "preparing" ||
+            (job.state === "capturing" && job.adaptiveFrontier !== undefined)),
+      );
+      await Promise.allSettled(resumable.map((job) => captures.start(job.id)));
+    })
+    .catch(() => undefined);
+  void dedupe.deleteExpired(nowIso).catch(() => undefined);
   return sharedDependencies;
 }
 

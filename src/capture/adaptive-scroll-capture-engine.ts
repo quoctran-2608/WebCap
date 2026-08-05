@@ -323,7 +323,8 @@ function withObservedGrowth(
   page: ScrollCapturePageResult,
   observedAt: string,
 ): { frontier: AdaptiveCaptureFrontier; grew: boolean } {
-  const grew = page.documentHeight > frontier.observedDocumentHeightCss + ADAPTIVE_BOTTOM_EPSILON_CSS;
+  const grew =
+    page.documentHeight > frontier.observedDocumentHeightCss + ADAPTIVE_BOTTOM_EPSILON_CSS;
   return {
     frontier: grew
       ? {
@@ -392,26 +393,27 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
     }
 
     let tiles = context.resume?.tilePlan.map((tile) => ({ ...tile })) ?? [];
-    let frontier = context.resume?.frontier;
+    const resumeFrontier = context.resume?.frontier;
+    let frontier: AdaptiveCaptureFrontier;
     let metrics = context.resume?.metrics;
     const initialProbeY =
-      frontier === undefined
+      resumeFrontier === undefined
         ? 0
         : Math.max(
             0,
             Math.min(
-              frontier.nextYCss - this.overlapCss,
-              frontier.observedDocumentHeightCss - frontier.viewportHeightCss,
+              resumeFrontier.nextYCss - this.overlapCss,
+              resumeFrontier.observedDocumentHeightCss - resumeFrontier.viewportHeightCss,
             ),
           );
     const initial = await this.probe(
       context,
       preparation.preparationId,
       initialProbeY,
-      frontier,
+      resumeFrontier,
       tiles,
     );
-    if (frontier === undefined) {
+    if (resumeFrontier === undefined) {
       const nowIso = this.now().toISOString();
       frontier = {
         schemaVersion: 1,
@@ -430,8 +432,8 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
         devicePixelRatio: initial.devicePixelRatio,
       };
     } else {
-      validateIdentity(frontier, initial, tiles.length);
-      frontier = withObservedGrowth(frontier, initial, this.now().toISOString()).frontier;
+      validateIdentity(resumeFrontier, initial, tiles.length);
+      frontier = withObservedGrowth(resumeFrontier, initial, this.now().toISOString()).frontier;
     }
     metrics = metricsFromPage(initial);
     frontier = reconcileCommittedRows(frontier, tiles);
@@ -510,13 +512,7 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
           frontier.observedDocumentHeightCss - frontier.viewportHeightCss,
         ),
       );
-      const page = await this.probe(
-        context,
-        preparation.preparationId,
-        probeY,
-        frontier,
-        tiles,
-      );
+      const page = await this.probe(context, preparation.preparationId, probeY, frontier, tiles);
       validateIdentity(frontier, page, tiles.length);
       metrics = metricsFromPage(page);
       const observed = observeStableEnd(frontier, {
@@ -735,8 +731,7 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
       totalTiles: Math.max(1, context.settings.limits.maxTiles),
       fixedElementMode: "preserve",
       settleMs: context.settings.lazyLoad.settleMs,
-      expectedDocumentWidth:
-        frontier?.documentWidthCss ?? context.preparation?.documentWidth ?? 1,
+      expectedDocumentWidth: frontier?.documentWidthCss ?? context.preparation?.documentWidth ?? 1,
       expectedDocumentHeight:
         frontier?.observedDocumentHeightCss ?? context.preparation?.documentHeight ?? 1,
     });
