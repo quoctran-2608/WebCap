@@ -65,12 +65,7 @@ function artifact(format: "png" | "jpeg" | "webp" = "png"): ArtifactMetadata {
     artifactId: "image-1",
     sourceArtifactId: "job-1",
     format,
-    mimeType:
-      format === "png"
-        ? "image/png"
-        : format === "jpeg"
-          ? "image/jpeg"
-          : "image/webp",
+    mimeType: format === "png" ? "image/png" : format === "jpeg" ? "image/jpeg" : "image/webp",
     filename: `selected-card.${format === "jpeg" ? "jpg" : format}`,
     byteLength: 500,
     width: 120,
