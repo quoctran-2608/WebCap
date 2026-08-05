@@ -305,23 +305,34 @@ test("@smoke keeps adaptive full-page capture independent of debugger occupancy"
         },
         { timeout: 45_000 },
       )
-      .toBe("ready");
+      .toBe("completed");
 
     const state = await readFullPageState(serviceWorker);
     expect(state.job).toMatchObject({
-      state: "ready",
+      state: "completed",
       activeEngine: "scroll",
+      activeOutputFormat: "pdf",
       cleanupCompleted: true,
+      outputArtifactId: expect.any(String),
+      output: {
+        artifactId: expect.any(String),
+        format: "pdf",
+        mimeType: "application/pdf",
+        byteLength: expect.any(Number),
+        pageCount: expect.any(Number),
+      },
     });
+    expect(state.job?.outputArtifactId).toBe(state.job?.output?.artifactId);
+    expect(state.job?.output?.byteLength).toBeGreaterThan(0);
     expect(state.job?.completedTiles).toBe(state.job?.totalTiles);
     expect(state.tiles.length).toBeGreaterThan(0);
     expect(state.tiles.every((tile) => tile.outputRect !== null && tile.blobSize > 0)).toBe(true);
     expect(await snapshotPage(targetPage)).toEqual(before);
 
     await popup.bringToFront();
-    await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({
-      timeout: 5_000,
-    });
+    const result = popup.getByTestId("tiled-output-result");
+    await expect(result).toBeVisible({ timeout: 5_000 });
+    await expect(result).toHaveAttribute("data-format", "pdf");
   } finally {
     await serviceWorker
       .evaluate(async (id) => chrome.debugger.detach({ tabId: id }), tabId)
