@@ -176,6 +176,7 @@ interface PagePreparationRuntimeState {
   ) => boolean | void;
   pageHideListener: () => void;
   region?: RegionSelectorController;
+  regionOpening?: { jobId: string; promise: Promise<RegionSelectorController> };
   regionListener?: (
     message: unknown,
     sender: chrome.runtime.MessageSender,
@@ -1012,36 +1013,61 @@ function ensureRegionSelectionRuntime(state: PagePreparationRuntimeState): void 
     return;
   }
 
+  const openedPayload = async (controller: RegionSelectorController, reused: boolean) => {
+    const ready = await controller.ready;
+    return {
+      jobId: controller.jobId,
+      selectorInstanceId: ready.selectorInstanceId,
+      readyAt: ready.readyAt,
+      reused,
+      capabilities: ready.capabilities,
+    };
+  };
+
   state.regionListener = (message, sender, sendResponse) => {
     if (!isRegionSelectionRequest(message) || sender.id !== chrome.runtime.id) {
       return false;
     }
 
-    const current = state.region;
     if (message.type === "REGION_SELECTION_CLOSE") {
-      const closed = current?.jobId === message.payload.jobId;
-      if (current?.jobId === message.payload.jobId) {
-        current.dispose();
-        delete state.region;
-      }
-      sendResponse(
-        regionSelectionResponse(message, "REGION_SELECTION_CLOSED", {
-          jobId: message.payload.jobId,
-          closed,
-        }),
-      );
-      return false;
+      void (async () => {
+        let controller = state.region?.jobId === message.payload.jobId ? state.region : undefined;
+        const opening = state.regionOpening;
+        if (controller === undefined && opening?.jobId === message.payload.jobId) {
+          controller = await opening.promise.catch(() => undefined);
+        }
+        const closed = controller?.jobId === message.payload.jobId;
+        if (closed && controller !== undefined) {
+          controller.dispose();
+          if (state.region === controller) delete state.region;
+        }
+        if (state.regionOpening === opening && opening?.jobId === message.payload.jobId) {
+          delete state.regionOpening;
+        }
+        sendResponse(
+          regionSelectionResponse(message, "REGION_SELECTION_CLOSED", {
+            jobId: message.payload.jobId,
+            closed,
+          }),
+        );
+      })().catch((error: unknown) => {
+        sendResponse(
+          regionSelectionError(
+            message,
+            error instanceof Error ? error.message : "Region selector could not be closed.",
+            error instanceof Error ? error.name : "RegionSelectionCloseFailure",
+          ),
+        );
+      });
+      return true;
     }
-    if (current?.jobId === message.payload.jobId) {
-      sendResponse(
-        regionSelectionResponse(message, "REGION_SELECTION_OPENED", {
-          jobId: message.payload.jobId,
-          reused: true,
-        }),
-      );
-      return false;
-    }
-    if (current !== undefined) {
+
+    const current = state.region;
+    const opening = state.regionOpening;
+    if (
+      (current !== undefined && current.jobId !== message.payload.jobId) ||
+      (opening !== undefined && opening.jobId !== message.payload.jobId)
+    ) {
       sendResponse(
         regionSelectionError(
           message,
@@ -1052,32 +1078,76 @@ function ensureRegionSelectionRuntime(state: PagePreparationRuntimeState): void 
       return false;
     }
 
-    void loadUiLocale()
-      .then((locale) => {
-        state.region = openRegionSelector({
-          jobId: message.payload.jobId,
-          locale,
-          onCommit: async (rect) => {
-            delete state.region;
-            await sendRegionSelectionEvent("REGION_SELECTION_COMMIT", message.payload.jobId, {
-              rect,
-            });
-          },
-          onCancel: async (reason) => {
-            delete state.region;
-            await sendRegionSelectionEvent("REGION_SELECTION_CANCEL", message.payload.jobId, {
-              reason,
-            });
-          },
-        });
-        sendResponse(
-          regionSelectionResponse(message, "REGION_SELECTION_OPENED", {
-            jobId: message.payload.jobId,
-            reused: false,
-          }),
+    if (current?.jobId === message.payload.jobId) {
+      void openedPayload(current, true)
+        .then((payload) =>
+          sendResponse(regionSelectionResponse(message, "REGION_SELECTION_OPENED", payload)),
+        )
+        .catch((error: unknown) =>
+          sendResponse(
+            regionSelectionError(
+              message,
+              error instanceof Error ? error.message : "Region selector did not become ready.",
+              error instanceof Error ? error.name : "RegionSelectionReadyFailure",
+            ),
+          ),
         );
-      })
+      return true;
+    }
+
+    if (opening?.jobId === message.payload.jobId) {
+      void opening.promise
+        .then((controller) => openedPayload(controller, true))
+        .then((payload) =>
+          sendResponse(regionSelectionResponse(message, "REGION_SELECTION_OPENED", payload)),
+        )
+        .catch((error: unknown) =>
+          sendResponse(
+            regionSelectionError(
+              message,
+              error instanceof Error ? error.message : "Region selector did not become ready.",
+              error instanceof Error ? error.name : "RegionSelectionReadyFailure",
+            ),
+          ),
+        );
+      return true;
+    }
+
+    const selectorInstanceId = crypto.randomUUID();
+    let controller: RegionSelectorController | undefined;
+    const promise = loadUiLocale().then(async (locale) => {
+      controller = openRegionSelector({
+        jobId: message.payload.jobId,
+        selectorInstanceId,
+        locale,
+        onCommit: async (rect) => {
+          if (state.region === controller) delete state.region;
+          await sendRegionSelectionEvent("REGION_SELECTION_COMMIT", message.payload.jobId, {
+            rect,
+          });
+        },
+        onCancel: async (reason) => {
+          if (state.region === controller) delete state.region;
+          await sendRegionSelectionEvent("REGION_SELECTION_CANCEL", message.payload.jobId, {
+            reason,
+          });
+        },
+      });
+      state.region = controller;
+      await controller.ready;
+      return controller;
+    });
+    const openingRecord = { jobId: message.payload.jobId, promise };
+    state.regionOpening = openingRecord;
+
+    void promise
+      .then((readyController) => openedPayload(readyController, false))
+      .then((payload) =>
+        sendResponse(regionSelectionResponse(message, "REGION_SELECTION_OPENED", payload)),
+      )
       .catch((error: unknown) => {
+        controller?.dispose();
+        if (state.region === controller) delete state.region;
         sendResponse(
           regionSelectionError(
             message,
@@ -1085,6 +1155,9 @@ function ensureRegionSelectionRuntime(state: PagePreparationRuntimeState): void 
             error instanceof Error ? error.name : "RegionSelectionOpenFailure",
           ),
         );
+      })
+      .finally(() => {
+        if (state.regionOpening === openingRecord) delete state.regionOpening;
       });
     return true;
   };
@@ -1092,6 +1165,11 @@ function ensureRegionSelectionRuntime(state: PagePreparationRuntimeState): void 
   state.regionPageHideListener = () => {
     state.region?.dispose();
     delete state.region;
+    const opening = state.regionOpening;
+    delete state.regionOpening;
+    if (opening !== undefined) {
+      void opening.promise.then((controller) => controller.dispose()).catch(() => undefined);
+    }
   };
   chrome.runtime.onMessage.addListener(state.regionListener);
   window.addEventListener("pagehide", state.regionPageHideListener, { once: true });

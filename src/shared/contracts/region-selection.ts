@@ -32,6 +32,25 @@ const ContentToBackgroundSchema = z
   })
   .strict();
 
+export const RegionSelectionCapabilitiesSchema = z
+  .object({
+    pointerCreate: z.literal(true),
+    keyboardCreate: z.literal(true),
+    autoScroll: z.literal(true),
+    resizeHandles: z.literal(8),
+  })
+  .strict();
+
+export const RegionSelectionReadyPayloadSchema = z
+  .object({
+    jobId: IdentifierSchema,
+    selectorInstanceId: IdentifierSchema,
+    readyAt: IsoDateTimeSchema,
+    reused: z.boolean(),
+    capabilities: RegionSelectionCapabilitiesSchema,
+  })
+  .strict();
+
 export const RegionSelectionOpenMessageSchema = BackgroundToContentSchema.extend({
   type: z.literal("REGION_SELECTION_OPEN"),
   payload: z.object({ jobId: IdentifierSchema }).strict(),
@@ -61,12 +80,7 @@ export const RegionSelectionOpenedMessageSchema = z
     source: z.literal("content"),
     target: z.literal("background"),
     type: z.literal("REGION_SELECTION_OPENED"),
-    payload: z
-      .object({
-        jobId: IdentifierSchema,
-        reused: z.boolean(),
-      })
-      .strict(),
+    payload: RegionSelectionReadyPayloadSchema,
     sentAt: IsoDateTimeSchema,
   })
   .strict();
@@ -127,6 +141,8 @@ export const RegionSelectionEventAckMessageSchema = z
   })
   .strict();
 
+export type RegionSelectionCapabilities = z.infer<typeof RegionSelectionCapabilitiesSchema>;
+export type RegionSelectionReadyPayload = z.infer<typeof RegionSelectionReadyPayloadSchema>;
 export type RegionSelectionOpenMessage = z.infer<typeof RegionSelectionOpenMessageSchema>;
 export type RegionSelectionCloseMessage = z.infer<typeof RegionSelectionCloseMessageSchema>;
 export type RegionSelectionClosedMessage = z.infer<typeof RegionSelectionClosedMessageSchema>;

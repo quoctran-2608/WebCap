@@ -152,10 +152,17 @@ async function readRegionState(serviceWorker: Worker): Promise<RegionState> {
   });
 }
 
-async function startRegionSelection(popup: Page): Promise<void> {
+async function startRegionSelection(popup: Page, targetPage: Page): Promise<void> {
   await popup.getByRole("button", { name: /^Vùng tự chọn/ }).click();
   await expect(popup.getByRole("heading", { name: "Chụp vùng tự chọn" })).toBeVisible();
-  await popup.getByRole("button", { name: "Bắt đầu chọn vùng" }).click();
+  await Promise.all([
+    popup.waitForEvent("close"),
+    popup.getByRole("button", { name: "Bắt đầu chọn vùng" }).click(),
+  ]);
+  await targetPage.bringToFront();
+  await expect(targetPage.locator("[data-webcap-region-selector]")).toHaveCount(1, {
+    timeout: 500,
+  });
 }
 
 async function waitForRegionReady(serviceWorker: Worker): Promise<RegionState> {
@@ -185,7 +192,7 @@ test("@smoke selects a region longer than the viewport and captures it without t
   const before = await snapshotPage(targetPage);
   const popup = await openPopup();
 
-  await startRegionSelection(popup);
+  await startRegionSelection(popup, targetPage);
   await targetPage.bringToFront();
   const root = targetPage.locator("[data-webcap-region-selector]");
   await expect(root).toHaveCount(1);
@@ -219,8 +226,8 @@ test("@smoke selects a region longer than the viewport and captures it without t
 
   await targetPage.bringToFront();
   await serviceWorker.evaluate(async (id) => chrome.tabs.update(id, { active: true }), tabId);
-  await popup.reload();
-  await expect(popup.getByText("Tile set vùng chọn đã sẵn sàng.")).toBeVisible();
+  const restoredPopup = await openPopup();
+  await expect(restoredPopup.getByText("Tile set vùng chọn đã sẵn sàng.")).toBeVisible();
 });
 
 test("@smoke cancels region selection with Escape and restores the page", async ({
@@ -235,7 +242,7 @@ test("@smoke cancels region selection with Escape and restores the page", async 
   const before = await snapshotPage(targetPage);
   const popup = await openPopup();
 
-  await startRegionSelection(popup);
+  await startRegionSelection(popup, targetPage);
   await targetPage.bringToFront();
   const root = targetPage.locator("[data-webcap-region-selector]");
   await expect(root).toHaveCount(1);
@@ -266,7 +273,7 @@ test("@dpr keeps the confirmed document rectangle stable at DPR 2 and 125% zoom"
 
   try {
     const popup = await openPopup();
-    await startRegionSelection(popup);
+    await startRegionSelection(popup, targetPage);
     await targetPage.bringToFront();
     const root = targetPage.locator("[data-webcap-region-selector]");
     await expect(root).toHaveCount(1);

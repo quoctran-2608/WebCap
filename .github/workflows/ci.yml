@@ -1,29 +1,26 @@
-name: S22 Bootstrap
+name: CI
 
 on:
-  push:
-    branches: [agent/s22-region-selector]
   pull_request:
+    branches: [main]
+  push:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: s22-bootstrap-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  apply-and-validate:
+  quality:
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
-      - name: Check out S22 branch
+      - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          ref: agent/s22-region-selector
-          fetch-depth: 0
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -40,33 +37,56 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify and apply S22 source patch
-        run: node scripts/s22-apply.mjs
+      - name: Check formatting
+        run: pnpm format:check
 
-      - name: Remove staging and restore read-only CI
-        run: |
-          rm -f \
-            scripts/s22-apply.mjs \
-            scripts/s22-apply.mjs.gz.b64 \
-            scripts/s22-payload-part-*.txt \
-            .github/s22-trigger.txt
-          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
+      - name: Lint
+        run: pnpm lint
 
-      - name: Format implementation
-        run: pnpm format
+      - name: Typecheck
+        run: pnpm typecheck
 
-      - name: Validate S22 implementation
-        run: |
-          pnpm lint
-          pnpm typecheck
-          pnpm test:unit
-          pnpm build
+      - name: Privacy, dependency, and release audit
+        run: pnpm run audit
 
-      - name: Commit clean S22 implementation
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --check
-          git commit -m "Implement S22 region selector readiness and accessibility"
-          git push origin HEAD:agent/s22-region-selector
+      - name: Critical dependency audit
+        run: pnpm audit:security
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: PDF performance benchmark
+        run: pnpm benchmark:pdf
+
+      - name: Build extension
+        run: pnpm build
+
+      - name: Reproduce and verify release ZIP
+        run: node scripts/verify-reproducible-package.mjs
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Full extension E2E
+        run: pnpm test:e2e
+
+      - name: Packaged lifecycle smoke
+        run: pnpm test:release
+
+      - name: Upload release candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webcap-release-candidate-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7

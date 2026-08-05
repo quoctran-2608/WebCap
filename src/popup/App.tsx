@@ -473,6 +473,7 @@ export function App(): React.JSX.Element {
         outputFormat: selectedFormat,
       });
       setFullPageJob(job);
+      window.close();
     } catch (error) {
       setUiError(genericErrorCopy(locale, error));
     }

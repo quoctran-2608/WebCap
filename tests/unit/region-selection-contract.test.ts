@@ -10,7 +10,13 @@ import {
   parseRegionSelectionOpenResponse,
 } from "@shared/contracts/region-selection";
 
-const sentAt = "2026-08-03T08:00:00.000Z";
+const sentAt = "2026-08-05T00:30:00.000Z";
+const capabilities = {
+  pointerCreate: true as const,
+  keyboardCreate: true as const,
+  autoScroll: true as const,
+  resizeHandles: 8 as const,
+};
 
 describe("region selection protocol", () => {
   it("creates typed open, commit, and cancel envelopes", () => {
@@ -56,14 +62,20 @@ describe("region selection protocol", () => {
     ).toThrow();
   });
 
-  it("parses matching open responses and returns normalized content errors", () => {
+  it("accepts only a fully ready selector response", () => {
     const opened = RegionSelectionOpenedMessageSchema.parse({
       protocolVersion: PROTOCOL_VERSION,
       requestId: "open-1",
       source: "content",
       target: "background",
       type: "REGION_SELECTION_OPENED",
-      payload: { jobId: "job-1", reused: false },
+      payload: {
+        jobId: "job-1",
+        selectorInstanceId: "selector-1",
+        readyAt: sentAt,
+        reused: false,
+        capabilities,
+      },
       sentAt,
     });
     expect(parseRegionSelectionOpenResponse(opened, "open-1")).toEqual({
@@ -71,8 +83,14 @@ describe("region selection protocol", () => {
       value: opened,
     });
 
-    const invalid = parseRegionSelectionOpenResponse({ type: "unexpected" }, "open-1");
-    expect(invalid).toMatchObject({
+    const incomplete = parseRegionSelectionOpenResponse(
+      {
+        ...opened,
+        payload: { jobId: "job-1", reused: false },
+      },
+      "open-1",
+    );
+    expect(incomplete).toMatchObject({
       ok: false,
       error: { code: "E_PROTOCOL_MESSAGE", causeCode: "InvalidRegionSelectionResponse" },
     });
