@@ -10,6 +10,7 @@ import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
 import type { PdfEditManifestRepositoryPort } from "@storage/pdf-edit-manifest-repository";
 import type { TileRepositoryPort } from "@storage/tile-repository";
 
+import { captureOutputFromArtifact } from "./capture-output";
 import type { PersistentJobCoordinatorPort } from "./job-coordinator";
 
 export interface PdfOffscreenPort {
@@ -93,15 +94,9 @@ export class PdfExportService {
 
   async start(jobId: string, settings?: CaptureSettings["pdf"]): Promise<CaptureJob> {
     const current = await this.jobs.get(jobId);
-    if (current === undefined) {
-      throw exportSourceError(jobId, "PdfExportJobMissing");
-    }
-    if (current.state === "completed" && current.outputArtifactId !== undefined) {
-      return current;
-    }
-    if (current.state === "exporting") {
-      return current;
-    }
+    if (current === undefined) throw exportSourceError(jobId, "PdfExportJobMissing");
+    if (current.state === "completed" && current.outputArtifactId !== undefined) return current;
+    if (current.state === "exporting") return current;
     if (!["ready", "failed"].includes(current.state) || current.targetRect === undefined) {
       throw jobNotReadyError(current);
     }
@@ -122,19 +117,17 @@ export class PdfExportService {
     const manifest = settings === undefined ? await this.manifests?.load(jobId) : undefined;
     const pdfSettings = settings ?? manifest?.settings ?? current.settings.pdf;
     const pages = manifest?.pages;
-    const totalPages =
-      pages?.length ?? planPdfDocument(current.targetRect, pdfSettings).pages.length;
+    const totalPages = pages?.length ?? planPdfDocument(current.targetRect, pdfSettings).pages.length;
     this.cancelledJobs.delete(jobId);
     const exporting = await this.jobs.transition(
       jobId,
       "exporting",
       {
+        activeOutputFormat: "pdf",
         error: undefined,
+        output: undefined,
         outputArtifactId: undefined,
-        exportProgress: {
-          completedPages: 0,
-          totalPages,
-        },
+        exportProgress: { completedPages: 0, totalPages },
       },
       { sourceArtifactExists: true },
     );
@@ -152,12 +145,8 @@ export class PdfExportService {
 
   async cancel(jobId: string): Promise<CaptureJob> {
     const job = await this.jobs.get(jobId);
-    if (job === undefined) {
-      throw exportSourceError(jobId, "PdfExportJobMissing");
-    }
-    if (job.state !== "exporting") {
-      return job;
-    }
+    if (job === undefined) throw exportSourceError(jobId, "PdfExportJobMissing");
+    if (job.state !== "exporting") return job;
     this.cancelledJobs.add(jobId);
     return this.jobs.transition(jobId, "ready", {
       exportProgress: job.exportProgress ?? { completedPages: 0, totalPages: 1 },
@@ -169,13 +158,9 @@ export class PdfExportService {
   }
 
   async handleProgress(progress: PdfExportProgress): Promise<CaptureJob | undefined> {
-    if (this.cancelledJobs.has(progress.jobId)) {
-      return undefined;
-    }
+    if (this.cancelledJobs.has(progress.jobId)) return undefined;
     const job = await this.jobs.get(progress.jobId);
-    if (job === undefined || job.state !== "exporting") {
-      return undefined;
-    }
+    if (job === undefined || job.state !== "exporting") return undefined;
     const current = job.exportProgress;
     if (
       current !== undefined &&
@@ -202,9 +187,7 @@ export class PdfExportService {
     pages?: PdfEditorPage[],
   ): Promise<void> {
     const targetRect = job.targetRect;
-    if (targetRect === undefined) {
-      throw exportSourceError(job.id, "PdfExportTargetMissing");
-    }
+    if (targetRect === undefined) throw exportSourceError(job.id, "PdfExportTargetMissing");
     const createdAt = this.now();
     const sourceDomain = domainFromOrigin(job.source.origin);
     const outputArtifactId = this.createId();
@@ -233,7 +216,9 @@ export class PdfExportService {
         return;
       }
       await this.jobs.transition(job.id, "completed", {
+        activeOutputFormat: "pdf",
         outputArtifactId: artifact.artifactId,
+        output: captureOutputFromArtifact(artifact),
         exportProgress: {
           completedPages: artifact.pageCount ?? latest.exportProgress?.totalPages ?? 1,
           totalPages: artifact.pageCount ?? latest.exportProgress?.totalPages ?? 1,
@@ -241,10 +226,9 @@ export class PdfExportService {
       });
     } catch (error) {
       const latest = await this.jobs.get(job.id);
-      if (latest?.state !== "exporting" || this.cancelledJobs.has(job.id)) {
-        return;
-      }
+      if (latest?.state !== "exporting" || this.cancelledJobs.has(job.id)) return;
       await this.jobs.transition(job.id, "failed", {
+        activeOutputFormat: "pdf",
         error: normalizeError(error, {
           code: "E_EXPORT_FAILED",
           stage: "export",
