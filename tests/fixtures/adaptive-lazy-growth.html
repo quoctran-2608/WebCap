@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Finite adaptive lazy growth</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+      }
+
+      body {
+        font-family: system-ui, sans-serif;
+        background: #f7f3e8;
+      }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        padding: 16px;
+        background: #153f35;
+        color: white;
+      }
+
+      .block {
+        height: 1800px;
+        padding: 80px 24px;
+        border-bottom: 4px solid #153f35;
+        background: linear-gradient(180deg, #f7f3e8, #dce9d5);
+      }
+    </style>
+  </head>
+  <body>
+    <header>Finite lazy growth fixture</header>
+    <main id="content">
+      <section class="block" data-block="1">Initial block</section>
+      <section class="block" data-block="2">Initial bottom</section>
+    </main>
+    <script>
+      const content = document.querySelector("#content");
+      let appended = 0;
+      let scheduled = false;
+
+      function appendNextBlock() {
+        scheduled = false;
+        if (appended >= 3) return;
+        appended += 1;
+        const section = document.createElement("section");
+        section.className = "block";
+        section.dataset.block = String(appended + 2);
+        section.textContent = `Lazy block ${appended}`;
+        content?.append(section);
+        document.body.dataset.appended = String(appended);
+      }
+
+      addEventListener(
+        "scroll",
+        () => {
+          const nearBottom = scrollY + innerHeight >= document.documentElement.scrollHeight - 240;
+          if (nearBottom && appended < 3 && !scheduled) {
+            scheduled = true;
+            setTimeout(appendNextBlock, 80);
+          }
+        },
+        { passive: true },
+      );
+    </script>
+  </body>
+</html>
