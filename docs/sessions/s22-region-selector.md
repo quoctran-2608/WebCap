@@ -1,6 +1,6 @@
 # S22 — Reliable and accessible region selector
 
-Status: DONE pending merge of PR #27
+Status: DONE; PR #27 pending merge
 Target release: WebCap 0.2.0
 
 ## Delivered
@@ -30,6 +30,7 @@ Target release: WebCap 0.2.0
 - PDF benchmark: 4/4 scenarios; reproducible release ZIP: PASS.
 - Browser: 44/44 Playwright E2E, including popup-close ordering, focused readiness, duplicate opens, pointer and keyboard flows, 24-pixel handles, two-axis auto-scroll, DPR/zoom stability, overlay exclusion, page restoration, and zero-orphan launch failure.
 - Packaged install/update/storage-retention/uninstall lifecycle smoke: PASS.
+- The final merge gate runs from the clean 19-file diff with read-only GitHub Actions permissions.
 
 ## Deferred by scope
 
