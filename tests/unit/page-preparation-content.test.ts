@@ -4,6 +4,7 @@ import {
   isPagePreparationRequest,
   layoutSamplesMatch,
   nextLazyScrollPosition,
+  rebindPagePreparationResponse,
   shouldRestoreCssProperty,
   updateStableSampleCount,
   type LayoutSample,
@@ -35,6 +36,27 @@ describe("page preparation content helpers", () => {
     expect(nextLazyScrollPosition(0, 1000, 0.8, 5000)).toBe(800);
     expect(nextLazyScrollPosition(4700, 1000, 0.8, 5000)).toBe(5000);
     expect(nextLazyScrollPosition(Number.NaN, 0, 5, -20)).toBe(0);
+  });
+
+  it("re-envelopes an idempotent cached response for the current request", () => {
+    const cached = {
+      protocolVersion: 1,
+      requestId: "request-old",
+      source: "content",
+      target: "background",
+      type: "PAGE_PREPARATION_READY",
+      payload: { preparationId: "job-1" },
+      sentAt: "2026-08-05T00:00:00.000Z",
+    };
+
+    expect(
+      rebindPagePreparationResponse(cached, "request-new", "2026-08-05T00:00:01.000Z"),
+    ).toEqual({
+      ...cached,
+      requestId: "request-new",
+      sentAt: "2026-08-05T00:00:01.000Z",
+    });
+    expect(cached.requestId).toBe("request-old");
   });
 
   it("accepts only the versioned background-to-content request shape", () => {
