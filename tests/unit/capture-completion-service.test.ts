@@ -227,7 +227,7 @@ describe("CaptureCompletionService", () => {
     expect(result.state).toBe("ready");
     expect(ports.pdfStart).not.toHaveBeenCalled();
     await expect(service.start("job-1")).rejects.toMatchObject({
-      causeCode: "PartialOutputConfirmationRequired",
+      data: { causeCode: "PartialOutputConfirmationRequired" },
     });
   });
 });
