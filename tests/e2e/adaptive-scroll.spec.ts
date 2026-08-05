@@ -70,10 +70,10 @@ async function createAdaptiveJob(
       },
     },
   });
-  const response: unknown = await popup.evaluate(
-    async (message) => chrome.runtime.sendMessage(message),
-    request,
-  );
+  const response: unknown = await popup.evaluate(async (message) => {
+    const result: unknown = await chrome.runtime.sendMessage(message);
+    return result;
+  }, request);
   if (
     typeof response !== "object" ||
     response === null ||
