@@ -31,6 +31,7 @@ export type JobTransitionPatch = Partial<
     | "tilePlan"
     | "completedTiles"
     | "totalTiles"
+    | "adaptiveFrontier"
     | "cleanup"
     | "partialCapture"
     | "exportProgress"
@@ -106,6 +107,37 @@ export function validateJobInvariants(
     }
     tileIds.add(tile.id);
     tileIndexes.add(tile.index);
+  }
+
+  if (job.adaptiveFrontier !== undefined) {
+    const frontier = job.adaptiveFrontier;
+    if (job.mode !== "full-page") {
+      return err(
+        stateError("Only full-page jobs may persist an adaptive frontier.", "AdaptiveModeMismatch", {
+          mode: job.mode,
+        }),
+      );
+    }
+    if (Math.abs(frontier.nextYCss - frontier.capturedBottomCss) > 0.01) {
+      return err(
+        stateError("Adaptive nextY must match the committed bottom.", "AdaptiveFrontierGap", {
+          nextYCss: frontier.nextYCss,
+          capturedBottomCss: frontier.capturedBottomCss,
+        }),
+      );
+    }
+    if (frontier.capturedBottomCss > frontier.observedDocumentHeightCss + 0.01) {
+      return err(
+        stateError(
+          "Adaptive committed coverage cannot exceed the observed document.",
+          "AdaptiveCoverageOverflow",
+          {
+            capturedBottomCss: frontier.capturedBottomCss,
+            observedDocumentHeightCss: frontier.observedDocumentHeightCss,
+          },
+        ),
+      );
+    }
   }
 
   if (
