@@ -152,10 +152,17 @@ async function readRegionState(serviceWorker: Worker): Promise<RegionState> {
   });
 }
 
-async function startRegionSelection(popup: Page): Promise<void> {
+async function startRegionSelection(popup: Page, targetPage: Page): Promise<void> {
   await popup.getByRole("button", { name: /^Vùng tự chọn/ }).click();
   await expect(popup.getByRole("heading", { name: "Chụp vùng tự chọn" })).toBeVisible();
-  await popup.getByRole("button", { name: "Bắt đầu chọn vùng" }).click();
+  await Promise.all([
+    popup.waitForEvent("close"),
+    popup.getByRole("button", { name: "Bắt đầu chọn vùng" }).click(),
+  ]);
+  await targetPage.bringToFront();
+  await expect(targetPage.locator("[data-webcap-region-selector]")).toHaveCount(1, {
+    timeout: 500,
+  });
 }
 
 async function waitForRegionReady(serviceWorker: Worker): Promise<RegionState> {
@@ -185,7 +192,7 @@ test("@smoke selects a region longer than the viewport and captures it without t
   const before = await snapshotPage(targetPage);
   const popup = await openPopup();
 
-  await startRegionSelection(popup);
+  await startRegionSelection(popup, targetPage);
   await targetPage.bringToFront();
   const root = targetPage.locator("[data-webcap-region-selector]");
   await expect(root).toHaveCount(1);
@@ -219,8 +226,8 @@ test("@smoke selects a region longer than the viewport and captures it without t
 
   await targetPage.bringToFront();
   await serviceWorker.evaluate(async (id) => chrome.tabs.update(id, { active: true }), tabId);
-  await popup.reload();
-  await expect(popup.getByText("Tile set vùng chọn đã sẵn sàng.")).toBeVisible();
+  const restoredPopup = await openPopup();
+  await expect(restoredPopup.getByText("Tile set vùng chọn đã sẵn sàng.")).toBeVisible();
 });
 
 test("@smoke cancels region selection with Escape and restores the page", async ({
@@ -235,7 +242,7 @@ test("@smoke cancels region selection with Escape and restores the page", async 
   const before = await snapshotPage(targetPage);
   const popup = await openPopup();
 
-  await startRegionSelection(popup);
+  await startRegionSelection(popup, targetPage);
   await targetPage.bringToFront();
   const root = targetPage.locator("[data-webcap-region-selector]");
   await expect(root).toHaveCount(1);
@@ -266,26 +273,40 @@ test("@dpr keeps the confirmed document rectangle stable at DPR 2 and 125% zoom"
 
   try {
     const popup = await openPopup();
-    await startRegionSelection(popup);
+    await startRegionSelection(popup, targetPage);
     await targetPage.bringToFront();
     const root = targetPage.locator("[data-webcap-region-selector]");
     await expect(root).toHaveCount(1);
 
-    await targetPage.mouse.move(180, 170);
-    await targetPage.mouse.down();
-    await targetPage.mouse.move(500, 410, { steps: 8 });
-    await targetPage.mouse.up();
-    await root.getByRole("button", { name: "Chụp vùng" }).click();
+    await targetPage.keyboard.press("Space");
+    const selection = root.locator("[data-selection]");
+    await expect(selection).toBeVisible();
+    await targetPage.keyboard.press("Shift+ArrowRight");
+    await targetPage.keyboard.press("Alt+Shift+ArrowDown");
+    const expected = await selection.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        x: rect.left + window.scrollX,
+        y: rect.top + window.scrollY,
+        width: rect.width,
+        height: rect.height,
+      };
+    });
+    const confirm = root.getByRole("button", { name: "Chụp vùng" });
+    await expect(confirm).toBeEnabled();
+    await confirm.click();
 
     const state = await waitForRegionReady(serviceWorker);
-    expect(state.job?.targetRect?.x).toBeCloseTo(180, 0);
-    expect(state.job?.targetRect?.y).toBeCloseTo(170, 0);
-    expect(state.job?.targetRect?.width).toBeCloseTo(320, 0);
-    expect(state.job?.targetRect?.height).toBeCloseTo(240, 0);
+    expect(state.job?.targetRect?.x).toBeCloseTo(expected.x, 0);
+    expect(state.job?.targetRect?.y).toBeCloseTo(expected.y, 0);
+    expect(state.job?.targetRect?.width).toBeCloseTo(expected.width, 0);
+    expect(state.job?.targetRect?.height).toBeCloseTo(expected.height, 0);
     expect(state.tiles).toHaveLength(1);
     expect(state.tiles[0]?.sourceRect).toMatchObject(state.job?.targetRect ?? {});
     await expect(targetPage.locator("[data-webcap-region-selector]")).toHaveCount(0);
   } finally {
-    await serviceWorker.evaluate(async (id) => chrome.tabs.setZoom(id, 1), tabId);
+    await serviceWorker
+      .evaluate(async (id) => chrome.tabs.setZoom(id, 1), tabId)
+      .catch(() => undefined);
   }
 });

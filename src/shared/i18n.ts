@@ -237,7 +237,13 @@ const VI = {
   "editor.exportCancelled": "Đã dừng xuất PDF; bạn có thể chỉnh sửa hoặc xuất lại.",
   "selector.region.dialog": "Chọn vùng cần chụp",
   "selector.region.instructions":
-    "Kéo để chọn · kéo khung để di chuyển · phím mũi tên để tinh chỉnh · Enter xác nhận · Esc hủy",
+    "Kéo để vẽ vùng · Space tạo vùng bằng bàn phím · mũi tên di chuyển · Alt + mũi tên đổi kích thước · Enter xác nhận · Esc hủy",
+  "selector.region.keyboardControls": "Điều khiển vùng chọn bằng bàn phím",
+  "selector.region.keyboardCreate": "Tạo vùng bằng bàn phím",
+  "selector.region.widthDecrease": "Giảm chiều rộng",
+  "selector.region.widthIncrease": "Tăng chiều rộng",
+  "selector.region.heightDecrease": "Giảm chiều cao",
+  "selector.region.heightIncrease": "Tăng chiều cao",
   "selector.region.confirm": "Chụp vùng",
   "selector.element.dialog": "Chọn phần tử cần chụp",
   "selector.element.instructions":
@@ -489,7 +495,13 @@ const EN: Record<MessageKey, string> = {
   "editor.exportCancelled": "PDF export stopped; you can edit or export again.",
   "selector.region.dialog": "Select a region to capture",
   "selector.region.instructions":
-    "Drag to select · drag the box to move · arrow keys to refine · Enter to confirm · Esc to cancel",
+    "Drag to draw · Space creates a keyboard region · arrows move · Alt + arrows resize · Enter confirms · Esc cancels",
+  "selector.region.keyboardControls": "Keyboard region controls",
+  "selector.region.keyboardCreate": "Create region with keyboard",
+  "selector.region.widthDecrease": "Decrease width",
+  "selector.region.widthIncrease": "Increase width",
+  "selector.region.heightDecrease": "Decrease height",
+  "selector.region.heightIncrease": "Increase height",
   "selector.region.confirm": "Capture region",
   "selector.element.dialog": "Select an element to capture",
   "selector.element.instructions":

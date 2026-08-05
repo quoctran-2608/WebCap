@@ -106,6 +106,15 @@ Nếu browser/OS chiếm Alt+Arrow, toolbar có button “Tạo vùng bằng bà
 - Cancel/launch failure phục hồi original scroll/focus và xóa job khi chưa có tile.
 - Duplicate open cho cùng job trả cùng selector instance hoặc thay thế atomically; không có hai roots.
 
+## 3.5 Locked S22 launch and interaction semantics
+
+- `REGION_SELECTION_OPENED` là ready acknowledgement, không phải message-received acknowledgement. Response chỉ được trả sau root attach, listener setup, dialog focus và first animation frame.
+- Background launch có timeout hai giây. Timeout, injection failure, malformed ACK hoặc job mismatch gọi S21 capture-reset primitive và xóa capture-owned data cùng exact tab lease.
+- Concurrent opens cho cùng job dùng chung một opening promise và một `selectorInstanceId`; job khác không được thay thế selector đang mở.
+- Selector hỗ trợ pointer create, frame move, eight-direction resize và edge auto-scroll theo cả hai trục. Toolbar có stacking layer cao hơn selection để control luôn thao tác được.
+- Keyboard deterministic: Space hoặc toolbar tạo centered rectangle; arrows move; Alt+arrows resize; Shift tăng bước lên 10 CSS px; Enter commit; Escape cancel. Handle hit target tối thiểu 24 CSS px.
+- Commit/cancel remove root và listener, phục hồi selector-owned state; commit chờ hai animation frame trước capture để UI selector không lọt vào output.
+
 # 4. Adaptive auto-scroll engine
 
 ## 4.1 Modules

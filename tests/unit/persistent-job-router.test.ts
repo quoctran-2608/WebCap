@@ -6,6 +6,7 @@ import {
   type PersistentJobRouterDependencies,
 } from "@background/persistent-job-router";
 import type { JobCleanupReport, PersistentJobCoordinatorPort } from "@background/job-coordinator";
+import type { CaptureResetReport, CaptureResetRequest } from "@shared/contracts/capture-reset";
 import type { CaptureJob } from "@shared/contracts/domain";
 import type { StoredDedupeRecord } from "@shared/contracts/job";
 import {
@@ -61,6 +62,8 @@ class MemoryDedupe implements DedupeRepositoryPort {
 class FakeCoordinator implements PersistentJobCoordinatorPort {
   createCalls = 0;
   getCalls = 0;
+  cancelCalls = 0;
+  createdMode: CaptureJob["mode"] = "full-page";
   current: CaptureJob | undefined = job();
 
   initialize(): Promise<void> {
@@ -69,7 +72,7 @@ class FakeCoordinator implements PersistentJobCoordinatorPort {
 
   create(): Promise<CaptureJob> {
     this.createCalls += 1;
-    return Promise.resolve(job());
+    return Promise.resolve({ ...job(), mode: this.createdMode });
   }
 
   get(): Promise<CaptureJob | undefined> {
@@ -86,6 +89,7 @@ class FakeCoordinator implements PersistentJobCoordinatorPort {
   }
 
   cancel(): Promise<CaptureJob> {
+    this.cancelCalls += 1;
     return Promise.resolve({
       ...job(),
       state: "cancelled",
@@ -168,6 +172,61 @@ describe("persistent job router", () => {
     expect(response).toMatchObject({ type: "JOB_RESPONSE", payload: { job: { id: "job-1" } } });
     expect(start).toHaveBeenCalledTimes(1);
     expect(start).toHaveBeenCalledWith("job-1");
+  });
+
+  it("uses capture reset when a region selector does not become ready", async () => {
+    const jobs = new FakeCoordinator();
+    jobs.createdMode = "region";
+    const dedupe = new MemoryDedupe();
+    const start = vi.fn(() => Promise.reject(new Error("selector ready timeout")));
+    const cancel = vi.fn(() => Promise.resolve(true));
+    const report: CaptureResetReport = {
+      schemaVersion: 1,
+      scope: "job",
+      jobId: "job-1",
+      tabId: 7,
+      cancellationAttempted: true,
+      cancellationCompleted: true,
+      deletedJobs: 1,
+      deletedTiles: 0,
+      deletedArtifacts: 0,
+      deletedManifests: 0,
+      clearedSessions: 1,
+    };
+    const reset = vi.fn((request: CaptureResetRequest) => {
+      void request;
+      return Promise.resolve(report);
+    });
+    const message = createJobCreateMessage({
+      requestId: "request-region-launch",
+      sentAt: now.toISOString(),
+      tabId: 7,
+      windowId: 2,
+      mode: "region",
+      settings: DEFAULT_CAPTURE_SETTINGS,
+    });
+
+    const response = await routePersistentJobMessage(message, {
+      ...dependencies(jobs, dedupe),
+      regions: { start, cancel },
+      reset: { reset },
+    });
+
+    expect(response).toMatchObject({
+      type: "ERROR_RESPONSE",
+      payload: { message: "selector ready timeout" },
+    });
+    expect(start).toHaveBeenCalledWith(7, "job-1");
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(reset.mock.calls[0]?.[0]).toMatchObject({
+      type: "CAPTURE_RESET",
+      payload: {
+        scope: "job",
+        jobId: "job-1",
+        disposition: "discard-local-data",
+      },
+    });
+    expect(jobs.cancelCalls).toBe(0);
   });
 
   it("routes active full-page cancellation through the execution coordinator", async () => {

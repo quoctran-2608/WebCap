@@ -1,0 +1,301 @@
+import type { Locator, Page, Worker } from "@playwright/test";
+
+import { expect, test } from "./extension.fixture";
+
+interface RegionOpenResponse {
+  type: string;
+  payload: {
+    jobId: string;
+    selectorInstanceId: string;
+    reused: boolean;
+    capabilities: {
+      pointerCreate: boolean;
+      keyboardCreate: boolean;
+      autoScroll: boolean;
+      resizeHandles: number;
+    };
+  };
+}
+
+async function resolveTab(serviceWorker: Worker, page: Page): Promise<number> {
+  return serviceWorker.evaluate(async (url) => {
+    const tabs = await chrome.tabs.query({});
+    const tab = tabs.find((candidate) => candidate.url === url);
+    if (tab?.id === undefined) throw new Error("Region fixture tab was not found.");
+    return tab.id;
+  }, page.url());
+}
+
+async function latestRegionJobId(serviceWorker: Worker): Promise<string> {
+  return serviceWorker.evaluate(async () => {
+    const database = await new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open("webcap-db", 1);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("Unable to open WebCap database."));
+    });
+    const values = await new Promise<unknown[]>((resolve, reject) => {
+      const transaction = database.transaction("jobs", "readonly");
+      const request = transaction.objectStore("jobs").getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error ?? new Error("Unable to read WebCap jobs."));
+    });
+    database.close();
+    const job = (values as Array<{ id: string; mode: string; updatedAt: string }>)
+      .filter((candidate) => candidate.mode === "region")
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+    if (job === undefined) throw new Error("Region job was not created.");
+    return job.id;
+  });
+}
+
+async function waitForRegionState(
+  serviceWorker: Worker,
+  jobId: string,
+  expectedState: "ready" | "cancelled",
+): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        serviceWorker.evaluate(async (id) => {
+          const database = await new Promise<IDBDatabase>((resolve, reject) => {
+            const request = indexedDB.open("webcap-db", 1);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error ?? new Error("Unable to open database."));
+          });
+          const job = await new Promise<{ state?: string } | undefined>((resolve, reject) => {
+            const transaction = database.transaction("jobs", "readonly");
+            const request = transaction.objectStore("jobs").get(id);
+            request.onsuccess = () => resolve(request.result as { state?: string } | undefined);
+            request.onerror = () => reject(request.error ?? new Error("Unable to read job."));
+          });
+          database.close();
+          return job?.state ?? "missing";
+        }, jobId),
+      { timeout: 45_000 },
+    )
+    .toBe(expectedState);
+}
+
+async function launchRegionSelector(popup: Page, targetPage: Page): Promise<Locator> {
+  await popup.getByRole("button", { name: /^Vùng tự chọn/ }).click();
+  await expect(popup.getByRole("heading", { name: "Chụp vùng tự chọn" })).toBeVisible();
+  const root = targetPage.locator("[data-webcap-region-selector]");
+  await Promise.all([
+    popup.waitForEvent("close"),
+    popup.getByRole("button", { name: "Bắt đầu chọn vùng" }).click(),
+  ]);
+  await targetPage.bringToFront();
+  await expect(root).toHaveCount(1, { timeout: 500 });
+  return root;
+}
+
+test("@smoke closes popup only after a focused ready selector and reuses duplicate opens", async ({
+  serviceWorker,
+  targetPage,
+  openPopup,
+}) => {
+  await targetPage.goto("http://127.0.0.1:4174/region-selection.html");
+  const tabId = await resolveTab(serviceWorker, targetPage);
+  const root = await launchRegionSelector(await openPopup(), targetPage);
+  const jobId = await latestRegionJobId(serviceWorker);
+
+  const responses = (await serviceWorker.evaluate(
+    async ({ id, job }) => {
+      const makeMessage = (requestId: string) => ({
+        protocolVersion: 1,
+        requestId,
+        source: "background" as const,
+        target: "content" as const,
+        type: "REGION_SELECTION_OPEN" as const,
+        payload: { jobId: job },
+        sentAt: new Date().toISOString(),
+      });
+      return Promise.all([
+        chrome.tabs.sendMessage(id, makeMessage("duplicate-open-1")),
+        chrome.tabs.sendMessage(id, makeMessage("duplicate-open-2")),
+      ]);
+    },
+    { id: tabId, job: jobId },
+  )) as RegionOpenResponse[];
+
+  expect(responses[0]).toMatchObject({
+    type: "REGION_SELECTION_OPENED",
+    payload: {
+      jobId,
+      reused: true,
+      capabilities: {
+        pointerCreate: true,
+        keyboardCreate: true,
+        autoScroll: true,
+        resizeHandles: 8,
+      },
+    },
+  });
+  expect(responses[1]).toMatchObject({
+    type: "REGION_SELECTION_OPENED",
+    payload: { jobId, reused: true },
+  });
+  const firstResponse = responses[0];
+  const secondResponse = responses[1];
+  expect(firstResponse).toBeDefined();
+  expect(secondResponse).toBeDefined();
+  if (firstResponse === undefined || secondResponse === undefined) {
+    throw new Error("Duplicate region-open responses were missing.");
+  }
+  expect(firstResponse.payload.selectorInstanceId).toBe(secondResponse.payload.selectorInstanceId);
+  await expect(root).toHaveCount(1);
+  expect(
+    await root.evaluate((node) => node.shadowRoot?.activeElement?.getAttribute("role") ?? null),
+  ).toBe("dialog");
+
+  await targetPage.keyboard.press("Escape");
+  await expect(root).toHaveCount(0);
+  await waitForRegionState(serviceWorker, jobId, "cancelled");
+});
+
+test("@smoke creates, moves, resizes, and commits a region using only the keyboard", async ({
+  serviceWorker,
+  targetPage,
+  openPopup,
+}) => {
+  await targetPage.goto("http://127.0.0.1:4174/region-selection.html");
+  const root = await launchRegionSelector(await openPopup(), targetPage);
+  const jobId = await latestRegionJobId(serviceWorker);
+
+  await targetPage.keyboard.press("Space");
+  const selection = root.locator("[data-selection]");
+  await expect(selection).toBeVisible();
+  const initial = await selection.boundingBox();
+  expect(initial).not.toBeNull();
+
+  const handles = root.locator("[data-handle]");
+  await expect(handles).toHaveCount(8);
+  for (let index = 0; index < 8; index += 1) {
+    const box = await handles.nth(index).boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(24);
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(24);
+  }
+
+  await targetPage.keyboard.press("ArrowRight");
+  await targetPage.keyboard.press("Shift+ArrowDown");
+  await targetPage.keyboard.press("Alt+Shift+ArrowRight");
+  const adjusted = await selection.boundingBox();
+  expect(adjusted).not.toBeNull();
+  expect(adjusted?.x).toBeCloseTo((initial?.x ?? 0) + 1, 0);
+  expect(adjusted?.y).toBeCloseTo((initial?.y ?? 0) + 10, 0);
+  expect(adjusted?.width).toBeCloseTo((initial?.width ?? 0) + 10, 0);
+
+  await targetPage.keyboard.press("Enter");
+  await expect(root).toHaveCount(0);
+  await waitForRegionState(serviceWorker, jobId, "ready");
+});
+
+test("@smoke auto-scrolls horizontally and restores the page after cancellation", async ({
+  serviceWorker,
+  targetPage,
+  openPopup,
+}) => {
+  await targetPage.goto("http://127.0.0.1:4174/region-selection.html");
+  await targetPage.evaluate(() => {
+    document.documentElement.style.minWidth = "2400px";
+    document.body.style.minWidth = "2400px";
+  });
+  const before = await targetPage.evaluate(() => ({ x: window.scrollX, y: window.scrollY }));
+  const root = await launchRegionSelector(await openPopup(), targetPage);
+  const jobId = await latestRegionJobId(serviceWorker);
+  const viewport = targetPage.viewportSize();
+  if (viewport === null) throw new Error("Region fixture viewport is unavailable.");
+
+  await targetPage.mouse.move(180, 260);
+  await targetPage.mouse.down();
+  await targetPage.mouse.move(viewport.width - 2, 360, { steps: 16 });
+  await expect.poll(() => targetPage.evaluate(() => window.scrollX)).toBeGreaterThan(100);
+  await targetPage.mouse.up();
+  await targetPage.keyboard.press("Escape");
+
+  await expect(root).toHaveCount(0);
+  await waitForRegionState(serviceWorker, jobId, "cancelled");
+  await expect
+    .poll(() => targetPage.evaluate(() => ({ x: window.scrollX, y: window.scrollY })))
+    .toEqual(before);
+});
+
+test("@smoke removes the job and tab lease when selector injection fails", async ({
+  serviceWorker,
+  openPopup,
+}) => {
+  const popup = await openPopup();
+  const response: unknown = await popup.evaluate(async () => {
+    const stored = await chrome.storage.local.get("webcap.settings");
+    const record = stored["webcap.settings"] as { settings?: unknown } | undefined;
+    const settings =
+      record?.settings ??
+      ({
+        outputFormat: "png",
+        imageQuality: 0.9,
+        fixedElementMode: "smart",
+        lazyLoad: {
+          enabled: true,
+          stepRatio: 0.8,
+          settleMs: 250,
+          maxDurationMs: 15_000,
+        },
+        limits: {
+          maxCssHeight: 100_000,
+          maxCssWidth: 32_768,
+          maxTiles: 256,
+          maxEstimatedBytes: 512 * 1024 * 1024,
+        },
+        pdf: {
+          pageSize: "a4",
+          orientation: "portrait",
+          marginMm: 8,
+          jpegQuality: 0.9,
+        },
+      } as const);
+
+    return (await chrome.runtime.sendMessage({
+      protocolVersion: 1,
+      requestId: crypto.randomUUID(),
+      source: "popup",
+      target: "background",
+      type: "JOB_CREATE",
+      payload: {
+        tabId: 2_147_483_000,
+        windowId: 2_147_483_000,
+        mode: "region",
+        settings,
+      },
+      sentAt: new Date().toISOString(),
+    })) as unknown;
+  });
+
+  expect(response).toMatchObject({ type: "ERROR_RESPONSE" });
+  expect(popup.isClosed()).toBe(false);
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(async () => {
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open("webcap-db", 1);
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error ?? new Error("Unable to open database."));
+        });
+        const jobs = await new Promise<Array<{ mode?: string }>>((resolve, reject) => {
+          const transaction = database.transaction("jobs", "readonly");
+          const request = transaction.objectStore("jobs").getAll();
+          request.onsuccess = () => resolve(request.result as Array<{ mode?: string }>);
+          request.onerror = () => reject(request.error ?? new Error("Unable to read jobs."));
+        });
+        database.close();
+        const stored = await chrome.storage.session.get("webcap.jobs.session");
+        const state = stored["webcap.jobs.session"] as
+          { summaries?: unknown[]; locks?: unknown[] } | undefined;
+        return {
+          regionJobs: jobs.filter((job) => job.mode === "region").length,
+          summaries: state?.summaries?.length ?? 0,
+          locks: state?.locks?.length ?? 0,
+        };
+      }),
+    )
+    .toEqual({ regionJobs: 0, summaries: 0, locks: 0 });
+});

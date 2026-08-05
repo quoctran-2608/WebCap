@@ -28,6 +28,7 @@ import { ScrollCaptureEngine } from "@capture/scroll-capture-engine";
 import { DEDUPE_RECORD_SCHEMA_VERSION, DEDUPE_TTL_MS } from "@shared/constants";
 import {
   CaptureResetResponseSchema,
+  createCaptureResetRequest,
   createCaptureResetResponse,
   type CaptureResetReport,
   type CaptureResetResponse,
@@ -384,7 +385,24 @@ async function executeJobRequest(
         try {
           await dependencies.regions.start(job.tabId, job.id);
         } catch (error) {
-          await dependencies.jobs.cancel(job.id, "region selector failed to open");
+          if (dependencies.reset !== undefined) {
+            try {
+              await dependencies.reset.reset(
+                createCaptureResetRequest({
+                  requestId: crypto.randomUUID(),
+                  sentAt: dependencies.now().toISOString(),
+                  scope: "job",
+                  jobId: job.id,
+                }),
+              );
+            } catch {
+              await dependencies.jobs
+                .cancel(job.id, "region selector failed to open")
+                .catch(() => undefined);
+            }
+          } else {
+            await dependencies.jobs.cancel(job.id, "region selector failed to open");
+          }
           throw error;
         }
       } else if (job.mode === "element" && dependencies.elements !== undefined) {

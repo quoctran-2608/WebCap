@@ -10,14 +10,14 @@ prd: ./PRD_WebCap_v1.1.md
 spec: ./docs/spec-0.2.0.md
 audit: ./docs/audits/0.1.0-gap-audit.md
 release_target: 0.2.0
-current_session: S22
+current_session: S23
 ---
 
 # WebCap — Implementation plan 0.2.0
 
 Roadmap `S00–S20` đã tạo release candidate 0.1.0. Roadmap mới `S21–S26` xử lý các khoảng trống thực tế: reset/chụp mới, region drawing có thể nhìn thấy và sử dụng được, adaptive auto-scroll, auto-PDF/output routing, settings/UI/progress và hardening release.
 
-S21 triển khai reset/chụp mới mà không thay manifest, package version hoặc artifact 0.1.0. S22 là session active tiếp theo.
+S21–S22 đã hoàn tất reset lifecycle và region selector đáng tin cậy mà không thay manifest, package version hoặc artifact 0.1.0. S23 là session active tiếp theo.
 
 # 1. Nguồn sự thật
 
@@ -55,8 +55,8 @@ S21 triển khai reset/chụp mới mà không thay manifest, package version ho
 | Session | Capability | Status | Depends on |
 | --- | --- | --- | --- |
 | S21 | Reset lifecycle và “Chụp mới” | DONE | S20 |
-| S22 | Region drawing launch, interaction và accessibility | PLANNED | S21 cleanup primitive |
-| S23 | Adaptive auto-scroll và resumable frontier | BLOCKED | S21 |
+| S22 | Region drawing launch, interaction và accessibility | DONE | S21 cleanup primitive |
+| S23 | Adaptive auto-scroll và resumable frontier | PLANNED | S21–S22 |
 | S24 | Auto-PDF và mode-aware image/PDF output | BLOCKED | S23 |
 | S25 | Stored settings, event-driven progress và simplified popup | BLOCKED | S21–S24 stable contracts |
 | S26 | Gap closure hardening, migration, docs và RC 0.2.0 | BLOCKED | S21–S25 |
@@ -154,6 +154,15 @@ Bấm “Vẽ vùng chọn” phải tạo một hành trình rõ ràng: popup �
 - AC-31–AC-34 pass.
 - User không cần click ra ngoài popup hoặc đoán bước tiếp theo.
 - No orphan selector/job.
+
+## S22 implementation evidence
+
+- Ready ACK chỉ được trả sau root attach, listener setup, dialog focus và first render.
+- Popup chỉ đóng sau ACK; timeout/injection failure đi qua S21 reset và để lại zero orphan job/root/lease.
+- Pointer create/move/eight-handle resize, two-axis edge auto-scroll và toolbar luôn tương tác được trên selection.
+- Keyboard Space/toolbar create, arrows move, Alt resize, Shift acceleration, Enter commit và Escape cancel.
+- Handle hit target tối thiểu 24 CSS px; selector bị remove và chờ hai animation frame trước capture.
+- Final gate: formatting, ESLint, strict TypeScript, audits, 295/295 unit tests trên 84 files, 4/4 PDF benchmarks, verified build, reproducible ZIP, 44/44 Playwright E2E và packaged lifecycle smoke đều PASS.
 
 # 7. S23 — Adaptive auto-scroll và resumable frontier
 
@@ -352,10 +361,10 @@ S21 Reset/cleanup
 
 # 13. Current session handoff
 
-**Current session: S21 — Reset lifecycle và “Chụp mới”.**
+**Current session: S23 — Adaptive auto-scroll và resumable frontier.**
 
-1. Merge PR kế hoạch sau review.
-2. Tạo `agent/s21-capture-reset` từ `main`.
-3. Viết contract/service/tests trước UI.
-4. Không triển khai selector/adaptive/export/redesign ngoài scope S21.
-5. Draft PR; mark ready chỉ sau clean read-only CI.
+1. Bắt đầu từ baseline S22 đã merge.
+2. Viết frontier/stable-end contracts và persistence trước engine/UI.
+3. Kiểm thử actual-browser 30k/100k/>100k, finite lazy growth, infinite guard và worker restart.
+4. Giữ nguyên S21 cleanup và S22 selector semantics.
+5. Không kéo S24 output routing hoặc S25 popup redesign vào scope S23.
