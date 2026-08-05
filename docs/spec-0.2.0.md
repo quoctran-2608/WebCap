@@ -3,7 +3,7 @@ product: WebCap
 document: Engineering Specification Addendum
 version: 0.2.0
 date: 2026-08-04
-status: Approved for implementation planning
+status: Active implementation specification
 repository: quoctran-2608/WebCap
 extends: ../SPEC.md
 prd: ../PRD_WebCap_v1.1.md
@@ -206,6 +206,16 @@ Sau mỗi stored tile, persist frontier và opaque `sourceDocumentToken`. Recove
 5. nếu invalid, settle job thành retryable partial với Keep/Restart/Reset.
 
 Không auto-resume nếu tab navigated, document token đổi hoặc pixel geometry không tương thích. Resume idempotent và không tạo duplicate tile index/output rect.
+
+## 4.6 Locked S23 implementation semantics
+
+- Adaptive planning is row-incremental. The frontier is persisted after a complete durable row, not merely after a screenshot is requested.
+- A pending row may contain stored columns after interruption; resume skips those columns, completes the row and only then advances `capturedBottomCss`/`nextYCss`.
+- The adaptive target height grows monotonically. Width, viewport, DPR, pixel-scale or document-token drift fails safely; document shrink below the observed frontier is not accepted.
+- Natural completion requires three stable bottom rounds and a final probe. The legacy `100_000` CSS-height preparation limit is not an adaptive capture stop.
+- Guard exits return a rectangular contiguous prefix with `max-duration`, `max-tiles`, `max-stored-bytes` or `storage-pressure`; an incomplete row is removed before partial settlement.
+- Startup recovery restores the exact tab lease and resumes eligible full-page scroll jobs. Idempotent content preparation reuses its cached payload but binds the response envelope to the current request ID, avoiding stale-worker `RequestIdMismatch`.
+- S23 acceptance evidence is 306 unit tests, four PDF benchmarks, 48 actual-browser E2E cases including >100k/lazy/infinite/restart fixtures, a reproducible build and packaged lifecycle smoke.
 
 # 5. Auto-PDF và mode-aware output
 

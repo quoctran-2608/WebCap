@@ -10,14 +10,14 @@ prd: ./PRD_WebCap_v1.1.md
 spec: ./docs/spec-0.2.0.md
 audit: ./docs/audits/0.1.0-gap-audit.md
 release_target: 0.2.0
-current_session: S23
+current_session: S24
 ---
 
 # WebCap — Implementation plan 0.2.0
 
 Roadmap `S00–S20` đã tạo release candidate 0.1.0. Roadmap mới `S21–S26` xử lý các khoảng trống thực tế: reset/chụp mới, region drawing có thể nhìn thấy và sử dụng được, adaptive auto-scroll, auto-PDF/output routing, settings/UI/progress và hardening release.
 
-S21–S22 đã hoàn tất reset lifecycle và region selector đáng tin cậy mà không thay manifest, package version hoặc artifact 0.1.0. S23 là session active tiếp theo.
+S21–S23 đã hoàn tất reset lifecycle, region selector đáng tin cậy và adaptive auto-scroll có resumable frontier mà không thay manifest, package version hoặc artifact 0.1.0. S24 là session active tiếp theo.
 
 # 1. Nguồn sự thật
 
@@ -56,8 +56,8 @@ S21–S22 đã hoàn tất reset lifecycle và region selector đáng tin cậy 
 | --- | --- | --- | --- |
 | S21 | Reset lifecycle và “Chụp mới” | DONE | S20 |
 | S22 | Region drawing launch, interaction và accessibility | DONE | S21 cleanup primitive |
-| S23 | Adaptive auto-scroll và resumable frontier | PLANNED | S21–S22 |
-| S24 | Auto-PDF và mode-aware image/PDF output | BLOCKED | S23 |
+| S23 | Adaptive auto-scroll và resumable frontier | DONE | S21–S22 |
+| S24 | Auto-PDF và mode-aware image/PDF output | PLANNED | S23 |
 | S25 | Stored settings, event-driven progress và simplified popup | BLOCKED | S21–S24 stable contracts |
 | S26 | Gap closure hardening, migration, docs và RC 0.2.0 | BLOCKED | S21–S25 |
 
@@ -206,6 +206,22 @@ Chụp finite page từ đầu đến stable end, kể cả >100k và lazy growt
 - AC-19–AC-21 và AC-38 pass.
 - Không silent truncation.
 - Không full-page canvas/multi-tile decode.
+
+## S23 implementation evidence
+
+- Full-page jobs created by the 0.2 flow route to an incremental adaptive scroll engine; region and element retain the deterministic coordinator.
+- The persisted frontier advances only after a complete row has durable tile Blobs. A partially stored row resumes only missing columns and is rolled back before any guard-limited partial result is exposed.
+- Finite document growth is expected. Completion requires bottom reach, three stable rounds and a final probe; pages beyond 100,000 CSS pixels no longer stop at the legacy height cap.
+- Duration, tile, byte-budget and storage failures preserve a rectangular contiguous prefix with an explicit partial reason.
+- Document token, width, viewport and DPR guards prevent tiles from different page identities from being joined.
+- Service-worker restart recovery reuses the durable prefix and re-prepares the same page. Cached page-preparation responses are re-enveloped with the current transport request ID to keep idempotency protocol-safe.
+- Final clean gate: formatting, ESLint, strict TypeScript, privacy/dependency/release/critical-security audits, 306/306 unit tests on 88 files, 4/4 PDF benchmarks, verified build, reproducible ZIP, 48/48 Playwright E2E and packaged lifecycle smoke all PASS.
+
+## Exit disposition
+
+- AC-19, AC-20, AC-21 and AC-38: PASS.
+- No arbitrary 100,000 CSS-pixel adaptive stop and no silent complete status for resource-limited output.
+- PDF/output routing remains intentionally deferred to S24.
 
 # 8. S24 — Auto-PDF và mode-aware output
 

@@ -1,43 +1,45 @@
 # S23 — Adaptive auto-scroll and resumable frontier
 
-Status: IMPLEMENTED, final clean repository gate running
+Status: DONE
 Target release: WebCap 0.2.0
+Completed: 2026-08-05
 
 ## Delivered
 
-- Incremental row planning without a fixed 100,000 CSS-pixel full-page stopping cap.
-- Persisted adaptive frontier advanced only after a complete row is stored.
-- Resume support for stored prefixes and partially stored rows without recapturing stored columns.
+- Incremental full-page row planning without a fixed 100,000 CSS-pixel capture stop.
+- Persisted adaptive frontier advanced only after every tile in a row is durably stored.
+- Resume of complete prefix rows and partially stored rows without recapturing stored columns.
 - Source-document token plus document-width, viewport-size and DPR identity guards.
-- Finite height growth as an expected condition; document shrink or navigation fails safely.
-- Three stable-bottom rounds plus a final probe before declaring natural completion.
-- Explicit duration, tile, byte-budget and storage-quota partial-stop reasons.
-- Incomplete-row rollback on quota or byte-budget failure so retained output remains rectangular and continuous.
-- Mode-aware coordination: full-page jobs use adaptive scroll while region and element jobs retain the deterministic coordinator.
-- Row-aware fixed/sticky handling and two-axis capture coverage.
-- Startup recovery for eligible persisted adaptive jobs after service-worker restart.
-- Idempotent page-preparation responses are re-enveloped with the current request ID so a restarted worker can safely reuse an existing prepared page.
+- Finite height growth as expected behavior; shrink, navigation or geometry drift fails safely.
+- Three stable-bottom rounds plus a final probe before natural completion.
+- Explicit duration, tile, byte-budget and storage partial-stop reasons.
+- Incomplete-row rollback so retained output remains rectangular and continuous.
+- Mode-aware coordination: full-page uses adaptive scroll while region and element retain the deterministic coordinator.
+- Startup recovery after service-worker restart.
+- Idempotent page-preparation responses re-enveloped with the current request ID.
 
-## Safety invariants
+## Locked safety invariants
 
-- The committed frontier never advances before every tile in the row is stored.
+- Frontier never advances before a complete stored row.
 - Stored prefix rows are immutable and are not recaptured after growth or restart.
-- A partially stored row may resume, but it is never exposed as a completed partial result.
+- A partially stored row is never exposed as completed partial output.
 - Navigation, width, viewport or DPR drift cannot join tiles from different page identities.
-- Infinite or device-exhausting pages end with an explicit partial reason; they are not silently truncated.
-- Cleanup restores the source page and releases the exact job lifecycle ownership.
-- Cached content-script responses never reuse a stale transport request ID.
+- Infinite or device-exhausting pages end with an explicit partial reason, not silent truncation.
+- Cleanup restores the source page and releases exact lifecycle ownership.
+- Cached preparation payloads never reuse stale transport request IDs.
 
-## Evidence in progress
+## Final evidence
 
 - Formatting, ESLint, strict TypeScript, privacy/dependency/release/critical-security audits: PASS.
-- Unit suite baseline: 305 tests, including adaptive planner, stable-end, finite growth, partial-row resume, navigation guard and persisted recovery.
-- Added unit coverage for re-enveloping cached page-preparation responses without mutating their payload.
-- PDF benchmarks: 4/4; production build and reproducible ZIP: PASS.
-- Actual-browser cases cover a page beyond 100k CSS pixels, finite lazy growth, infinite max-tile partial and service-worker restart recovery.
-- The restart diagnostic identified `E_PROTOCOL_MESSAGE / RequestIdMismatch`: the content script returned a cached ready response with the previous worker's request ID. The protocol fix reuses the ready payload but binds it to the current request envelope.
-- Focused unit gates and the actual-browser service-worker restart recovery case: PASS after the protocol fix.
-- Full 48-case Playwright regression and packaged lifecycle are running as the final core gate.
+- Unit: 306/306 tests on 88 files.
+- PDF performance reference: 4/4 scenarios PASS.
+- Production Manifest V3 build and two-run reproducible ZIP: PASS.
+- Reproducible ZIP: 1,157,200 bytes, SHA-256 `71abe04631a22d8fdebcf7b8ddfecce8475a22290a8c366ae10e04aa01cf82be`.
+- Actual-browser regression: 48/48 Playwright E2E PASS in 5.8 minutes.
+- Adaptive acceptance includes >100k CSS pixels, finite lazy growth, infinite max-tile partial and persisted-prefix recovery after a real extension service-worker target restart.
+- Release DPR/zoom matrix and region/element/scroll-area/visible/PDF regressions: PASS.
+- Packaged lifecycle on Chrome for Testing 151: clean install, simulated 0.0.9 → 0.1.0 update, stable extension ID, local storage retention and uninstall verification PASS.
+- No package/manifest version or permission change; the 0.1.0 artifact boundary remains intact.
 
 ## Deferred by scope
 
