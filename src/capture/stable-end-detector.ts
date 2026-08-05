@@ -29,11 +29,10 @@ export function observeStableEnd(
   const grew = observation.documentHeight > frontier.observedDocumentHeightCss + epsilonCss;
   const atBottom =
     observation.actualScrollY + observation.viewportHeight >= observation.documentHeight - epsilonCss;
-  const stableObservation =
-    atBottom && !grew && observation.stableSamples > 0 && observation.mutationCount === 0;
+  const settledAtBottom = atBottom && !grew && observation.stableSamples > 0;
   const stableBottomRounds = grew
     ? 0
-    : stableObservation
+    : settledAtBottom
       ? frontier.stableBottomRounds + 1
       : 0;
   const complete = stableBottomRounds > Math.max(0, requiredStableRounds);
