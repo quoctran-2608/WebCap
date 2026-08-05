@@ -26,8 +26,53 @@ if (decoded.split(staleEnglishCopy).length !== 2) {
   throw new Error("S22 English i18n anchor is not unique in the staged patch.");
 }
 await writeFile(runtimePath, decoded.replace(staleEnglishCopy, baselineEnglishCopy));
+
+function replaceUnique(source, before, after, label) {
+  const first = source.indexOf(before);
+  if (first < 0 || source.indexOf(before, first + before.length) >= 0) {
+    throw new Error(`S22 lint-fix anchor is missing or not unique: ${label}`);
+  }
+  return source.slice(0, first) + after + source.slice(first + before.length);
+}
+
 try {
   await import(new URL(`../${runtimePath}?${Date.now()}`, import.meta.url));
+
+  const e2ePath = "tests/e2e/region-selector-accessibility.spec.ts";
+  let e2e = await readFile(e2ePath, "utf8");
+  e2e = replaceUnique(
+    e2e,
+    `import { expect, test } from "./extension.fixture";\n`,
+    `import { expect, test } from "./extension.fixture";\n\ninterface RegionOpenResponse {\n  type: string;\n  payload: {\n    jobId: string;\n    selectorInstanceId: string;\n    reused: boolean;\n    capabilities: {\n      pointerCreate: boolean;\n      keyboardCreate: boolean;\n      autoScroll: boolean;\n      resizeHandles: number;\n    };\n  };\n}\n`,
+    "region response interface",
+  );
+  e2e = replaceUnique(e2e, `        }, id),`, `        }, jobId),`, "job id poll argument");
+  e2e = replaceUnique(
+    e2e,
+    `  const responses = await serviceWorker.evaluate(`,
+    `  const responses = (await serviceWorker.evaluate(`,
+    "typed response start",
+  );
+  e2e = replaceUnique(
+    e2e,
+    `    { id: tabId, job: jobId },\n  );\n\n  expect(responses[0])`,
+    `    { id: tabId, job: jobId },\n  )) as RegionOpenResponse[];\n\n  expect(responses[0])`,
+    "typed response end",
+  );
+  await writeFile(e2ePath, e2e, "utf8");
+
+  const serviceTestPath = "tests/unit/region-selection-service.test.ts";
+  const serviceTest = await readFile(serviceTestPath, "utf8");
+  await writeFile(
+    serviceTestPath,
+    replaceUnique(
+      serviceTest,
+      `function adapter(response: unknown | Promise<unknown>):`,
+      `function adapter(response: unknown):`,
+      "service adapter response type",
+    ),
+    "utf8",
+  );
 } finally {
   await rm(runtimePath, { force: true });
 }
