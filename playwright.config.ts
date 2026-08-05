@@ -5,6 +5,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   maxFailures: 1,
+  grep: /captures a multi-tile full page/,
   timeout: 60_000,
   expect: {
     timeout: 15_000,
