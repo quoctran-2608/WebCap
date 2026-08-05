@@ -96,7 +96,8 @@ async function readAdaptiveJob(serviceWorker: Worker, jobId: string): Promise<Ad
     const read = <T>(request: IDBRequest<T>) =>
       new Promise<T>((resolve, reject) => {
         request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error ?? new Error("Unable to read WebCap database."));
+        request.onerror = () =>
+          reject(request.error ?? new Error("Unable to read WebCap database."));
       });
     const transaction = database.transaction(["jobs", "tiles"], "readonly");
     const [jobValue, tileValues] = await Promise.all([
@@ -293,9 +294,9 @@ test("@smoke stops an infinite feed with an explicit continuous max-tiles partia
   expect(state.totalTiles).toBe(6);
   expect(state.targetRect?.height).toBeGreaterThan(0);
   expectContinuousRows(state);
-  expect(await targetPage.evaluate(() => Number(document.body.dataset.appended ?? "0"))).toBeGreaterThan(
-    0,
-  );
+  expect(
+    await targetPage.evaluate(() => Number(document.body.dataset.appended ?? "0")),
+  ).toBeGreaterThan(0);
   expect(await targetPage.evaluate(() => ({ x: scrollX, y: scrollY }))).toEqual(before);
 });
 
