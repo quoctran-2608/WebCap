@@ -36,73 +36,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Update and format milestone documents
-        env:
-          S24_DOC_SCRIPT_GZ_B64: >-
-            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
-            0Y/vdv4PRe86fiosAAA=
         run: |
-          printf '%s' "$S24_DOC_SCRIPT_GZ_B64" | tr -d '[:space:]' | base64 --decode | gzip --decompress > /tmp/close-s24-docs.py
-          python /tmp/close-s24-docs.py
+          python scripts/close-s24-docs-once.py
           pnpm exec prettier --write PLAN.md README.md CHANGELOG.md docs/spec-0.2.0.md
           git checkout origin/main -- .github/workflows/ci.yml
           rm .github/workflows/close-s24-docs-once.yml
+          rm scripts/close-s24-docs-once.py
       - name: Commit clean milestone close
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add PLAN.md README.md CHANGELOG.md docs/spec-0.2.0.md .github/workflows/ci.yml .github/workflows/close-s24-docs-once.yml
+          git add PLAN.md README.md CHANGELOG.md docs/spec-0.2.0.md .github/workflows/ci.yml .github/workflows/close-s24-docs-once.yml scripts/close-s24-docs-once.py
           git commit -m "docs: close S24 output milestone"
           git push origin HEAD:agent/s24-auto-output
 
