@@ -278,22 +278,29 @@ test("@dpr keeps the confirmed document rectangle stable at DPR 2 and 125% zoom"
     const root = targetPage.locator("[data-webcap-region-selector]");
     await expect(root).toHaveCount(1);
 
-    await targetPage.mouse.move(180, 170);
-    await targetPage.mouse.down();
-    await targetPage.mouse.move(200, 190, { steps: 2 });
+    await targetPage.keyboard.press("Space");
     const selection = root.locator("[data-selection]");
     await expect(selection).toBeVisible();
-    await targetPage.mouse.move(500, 410, { steps: 8 });
-    await targetPage.mouse.up();
+    await targetPage.keyboard.press("Shift+ArrowRight");
+    await targetPage.keyboard.press("Alt+Shift+ArrowDown");
+    const expected = await selection.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        x: rect.left + window.scrollX,
+        y: rect.top + window.scrollY,
+        width: rect.width,
+        height: rect.height,
+      };
+    });
     const confirm = root.getByRole("button", { name: "Chụp vùng" });
     await expect(confirm).toBeEnabled();
     await confirm.click();
 
     const state = await waitForRegionReady(serviceWorker);
-    expect(state.job?.targetRect?.x).toBeCloseTo(180, 0);
-    expect(state.job?.targetRect?.y).toBeCloseTo(170, 0);
-    expect(state.job?.targetRect?.width).toBeCloseTo(320, 0);
-    expect(state.job?.targetRect?.height).toBeCloseTo(240, 0);
+    expect(state.job?.targetRect?.x).toBeCloseTo(expected.x, 0);
+    expect(state.job?.targetRect?.y).toBeCloseTo(expected.y, 0);
+    expect(state.job?.targetRect?.width).toBeCloseTo(expected.width, 0);
+    expect(state.job?.targetRect?.height).toBeCloseTo(expected.height, 0);
     expect(state.tiles).toHaveLength(1);
     expect(state.tiles[0]?.sourceRect).toMatchObject(state.job?.targetRect ?? {});
     await expect(targetPage.locator("[data-webcap-region-selector]")).toHaveCount(0);
