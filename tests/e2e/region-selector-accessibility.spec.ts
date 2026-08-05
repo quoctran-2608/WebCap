@@ -48,7 +48,11 @@ async function latestRegionJobId(serviceWorker: Worker): Promise<string> {
   });
 }
 
-async function waitForRegionReady(serviceWorker: Worker, jobId: string): Promise<void> {
+async function waitForRegionState(
+  serviceWorker: Worker,
+  jobId: string,
+  expectedState: "ready" | "cancelled",
+): Promise<void> {
   await expect
     .poll(
       () =>
@@ -69,7 +73,7 @@ async function waitForRegionReady(serviceWorker: Worker, jobId: string): Promise
         }, jobId),
       { timeout: 45_000 },
     )
-    .toBe("ready");
+    .toBe(expectedState);
 }
 
 async function launchRegionSelector(popup: Page, targetPage: Page): Promise<Locator> {
@@ -143,6 +147,10 @@ test("@smoke closes popup only after a focused ready selector and reuses duplica
   expect(
     await root.evaluate((node) => node.shadowRoot?.activeElement?.getAttribute("role") ?? null),
   ).toBe("dialog");
+
+  await targetPage.keyboard.press("Escape");
+  await expect(root).toHaveCount(0);
+  await waitForRegionState(serviceWorker, jobId, "cancelled");
 });
 
 test("@smoke creates, moves, resizes, and commits a region using only the keyboard", async ({
@@ -179,5 +187,5 @@ test("@smoke creates, moves, resizes, and commits a region using only the keyboa
 
   await targetPage.keyboard.press("Enter");
   await expect(root).toHaveCount(0);
-  await waitForRegionReady(serviceWorker, jobId);
+  await waitForRegionState(serviceWorker, jobId, "ready");
 });
