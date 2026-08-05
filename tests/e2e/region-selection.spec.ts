@@ -18,6 +18,14 @@ interface RegionState {
     state: string;
     targetRect: { x: number; y: number; width: number; height: number } | null;
     activeEngine?: string;
+    activeOutputFormat?: string;
+    outputArtifactId?: string;
+    output?: {
+      artifactId: string;
+      format: string;
+      mimeType: string;
+      byteLength: number;
+    };
     completedTiles: number;
     totalTiles: number;
     cleanupCompleted: boolean;
@@ -78,6 +86,14 @@ async function readRegionState(serviceWorker: Worker): Promise<RegionState> {
       state: string;
       targetRect?: { x: number; y: number; width: number; height: number };
       activeEngine?: string;
+      activeOutputFormat?: string;
+      outputArtifactId?: string;
+      output?: {
+        artifactId: string;
+        format: string;
+        mimeType: string;
+        byteLength: number;
+      };
       completedTiles: number;
       totalTiles: number;
       updatedAt: string;
@@ -134,6 +150,13 @@ async function readRegionState(serviceWorker: Worker): Promise<RegionState> {
               state: job.state,
               targetRect: job.targetRect ?? null,
               ...(job.activeEngine === undefined ? {} : { activeEngine: job.activeEngine }),
+              ...(job.activeOutputFormat === undefined
+                ? {}
+                : { activeOutputFormat: job.activeOutputFormat }),
+              ...(job.outputArtifactId === undefined
+                ? {}
+                : { outputArtifactId: job.outputArtifactId }),
+              ...(job.output === undefined ? {} : { output: job.output }),
               completedTiles: job.completedTiles,
               totalTiles: job.totalTiles,
               cleanupCompleted: job.cleanup.completed,
@@ -165,7 +188,7 @@ async function startRegionSelection(popup: Page, targetPage: Page): Promise<void
   });
 }
 
-async function waitForRegionReady(serviceWorker: Worker): Promise<RegionState> {
+async function waitForRegionCompleted(serviceWorker: Worker): Promise<RegionState> {
   await expect
     .poll(
       async () => {
@@ -177,7 +200,7 @@ async function waitForRegionReady(serviceWorker: Worker): Promise<RegionState> {
       },
       { timeout: 45_000 },
     )
-    .toBe("ready");
+    .toBe("completed");
   return readRegionState(serviceWorker);
 }
 
@@ -206,12 +229,22 @@ test("@smoke selects a region longer than the viewport and captures it without t
   await root.getByRole("button", { name: "Chụp vùng" }).click();
   await expect(root).toHaveCount(0);
 
-  const state = await waitForRegionReady(serviceWorker);
+  const state = await waitForRegionCompleted(serviceWorker);
   expect(state.job).toMatchObject({
-    state: "ready",
+    state: "completed",
     activeEngine: "cdp",
+    activeOutputFormat: "png",
     cleanupCompleted: true,
+    outputArtifactId: expect.any(String),
+    output: {
+      artifactId: expect.any(String),
+      format: "png",
+      mimeType: "image/png",
+      byteLength: expect.any(Number),
+    },
   });
+  expect(state.job?.outputArtifactId).toBe(state.job?.output?.artifactId);
+  expect(state.job?.output?.byteLength).toBeGreaterThan(0);
   expect(state.job?.targetRect?.x).toBeCloseTo(160, 0);
   expect(state.job?.targetRect?.y).toBeCloseTo(180, 0);
   expect(state.job?.targetRect?.width).toBeCloseTo(540, 0);
@@ -227,7 +260,10 @@ test("@smoke selects a region longer than the viewport and captures it without t
   await targetPage.bringToFront();
   await serviceWorker.evaluate(async (id) => chrome.tabs.update(id, { active: true }), tabId);
   const restoredPopup = await openPopup();
-  await expect(restoredPopup.getByText("Tile set vùng chọn đã sẵn sàng.")).toBeVisible();
+  const result = restoredPopup.getByTestId("tiled-output-result");
+  await expect(result).toBeVisible({ timeout: 15_000 });
+  await expect(result).toHaveAttribute("data-format", "png");
+  await expect(result.getByRole("heading", { name: "Ảnh đã sẵn sàng" })).toBeVisible();
 });
 
 test("@smoke cancels region selection with Escape and restores the page", async ({
@@ -296,7 +332,7 @@ test("@dpr keeps the confirmed document rectangle stable at DPR 2 and 125% zoom"
     await expect(confirm).toBeEnabled();
     await confirm.click();
 
-    const state = await waitForRegionReady(serviceWorker);
+    const state = await waitForRegionCompleted(serviceWorker);
     expect(state.job?.targetRect?.x).toBeCloseTo(expected.x, 0);
     expect(state.job?.targetRect?.y).toBeCloseTo(expected.y, 0);
     expect(state.job?.targetRect?.width).toBeCloseTo(expected.width, 0);

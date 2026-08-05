@@ -9,6 +9,15 @@ interface ScrollAreaState {
     targetRect: { x: number; y: number; width: number; height: number } | null;
     descriptor: { selectionId: string; captureKind: string; scrollable: boolean } | null;
     activeEngine?: string;
+    activeOutputFormat?: string;
+    outputArtifactId?: string;
+    output?: {
+      artifactId: string;
+      format: string;
+      mimeType: string;
+      byteLength: number;
+      pageCount?: number;
+    };
     completedTiles: number;
     totalTiles: number;
     cleanupCompleted: boolean;
@@ -51,6 +60,15 @@ async function readScrollAreaState(serviceWorker: Worker): Promise<ScrollAreaSta
       targetRect?: { x: number; y: number; width: number; height: number };
       targetDescriptor?: { selectionId: string; captureKind: string; scrollable: boolean };
       activeEngine?: string;
+      activeOutputFormat?: string;
+      outputArtifactId?: string;
+      output?: {
+        artifactId: string;
+        format: string;
+        mimeType: string;
+        byteLength: number;
+        pageCount?: number;
+      };
       completedTiles: number;
       totalTiles: number;
       cleanup: { completed: boolean };
@@ -88,6 +106,13 @@ async function readScrollAreaState(serviceWorker: Worker): Promise<ScrollAreaSta
               targetRect: job.targetRect ?? null,
               descriptor: job.targetDescriptor ?? null,
               ...(job.activeEngine === undefined ? {} : { activeEngine: job.activeEngine }),
+              ...(job.activeOutputFormat === undefined
+                ? {}
+                : { activeOutputFormat: job.activeOutputFormat }),
+              ...(job.outputArtifactId === undefined
+                ? {}
+                : { outputArtifactId: job.outputArtifactId }),
+              ...(job.output === undefined ? {} : { output: job.output }),
               completedTiles: job.completedTiles,
               totalTiles: job.totalTiles,
               cleanupCompleted: job.cleanup.completed,
@@ -112,6 +137,16 @@ async function readScrollAreaState(serviceWorker: Worker): Promise<ScrollAreaSta
       })),
     };
   });
+}
+
+async function resolveTab(serviceWorker: Worker, page: Page): Promise<number> {
+  return serviceWorker.evaluate(async (url) => {
+    const tab = (await chrome.tabs.query({})).find((candidate) => candidate.url === url);
+    if (tab?.id === undefined) {
+      throw new Error("The scroll-area fixture tab could not be resolved.");
+    }
+    return tab.id;
+  }, page.url());
 }
 
 async function startScrollAreaSelection(popup: Page): Promise<void> {
@@ -150,6 +185,7 @@ test("@smoke captures nested scroll content and restores every scroll position",
   openPopup,
 }) => {
   await targetPage.goto("http://127.0.0.1:4174/scroll-area.html");
+  const tabId = await resolveTab(serviceWorker, targetPage);
   const target = targetPage.locator("#nested-scroll");
   await target.scrollIntoViewIfNeeded();
   const before = await targetPage.evaluate(() => ({
@@ -168,14 +204,26 @@ test("@smoke captures nested scroll content and restores every scroll position",
   await targetPage.bringToFront();
   await selectContainer(targetPage, target);
 
-  const state = await waitForState(serviceWorker, "ready");
+  const state = await waitForState(serviceWorker, "completed");
   expect(state.job).toMatchObject({
-    state: "ready",
+    state: "completed",
     activeEngine: "scroll",
+    activeOutputFormat: "pdf",
     cleanupCompleted: true,
+    outputArtifactId: expect.any(String),
+    output: {
+      artifactId: expect.any(String),
+      format: "pdf",
+      mimeType: "application/pdf",
+      byteLength: expect.any(Number),
+      pageCount: expect.any(Number),
+    },
     targetRect: { x: 0, y: 0, width: dimensions.width, height: dimensions.height },
     descriptor: { captureKind: "full-scroll-content", scrollable: true },
   });
+  expect(state.job?.outputArtifactId).toBe(state.job?.output?.artifactId);
+  expect(state.job?.output?.byteLength).toBeGreaterThan(0);
+  expect(state.job?.output?.pageCount).toBeGreaterThan(0);
   expect(state.tiles.length).toBeGreaterThan(1);
   expect(state.tiles.every((tile) => tile.blobSize > 0 && tile.captureCrop !== null)).toBe(true);
   expect(state.tiles[0]?.captureCrop).toMatchObject({
@@ -189,6 +237,14 @@ test("@smoke captures nested scroll content and restores every scroll position",
     outerTop: (document.querySelector("#outer-scroll") as HTMLElement).scrollTop,
   }));
   expect(after).toEqual(before);
+
+  await targetPage.bringToFront();
+  await serviceWorker.evaluate(async (id) => chrome.tabs.update(id, { active: true }), tabId);
+  const resultPopup = await openPopup();
+  const result = resultPopup.getByTestId("tiled-output-result");
+  await expect(result).toBeVisible({ timeout: 15_000 });
+  await expect(result).toHaveAttribute("data-format", "pdf");
+  await expect(result.getByRole("heading", { name: "PDF đã sẵn sàng" })).toBeVisible();
 });
 
 test("@smoke covers a wide scroll area with a two-dimensional internal grid", async ({
@@ -210,7 +266,20 @@ test("@smoke covers a wide scroll area with a two-dimensional internal grid", as
   await targetPage.bringToFront();
   await selectContainer(targetPage, target);
 
-  const state = await waitForState(serviceWorker, "ready");
+  const state = await waitForState(serviceWorker, "completed");
+  expect(state.job).toMatchObject({
+    state: "completed",
+    activeOutputFormat: "pdf",
+    outputArtifactId: expect.any(String),
+    output: {
+      artifactId: expect.any(String),
+      format: "pdf",
+      mimeType: "application/pdf",
+      byteLength: expect.any(Number),
+      pageCount: expect.any(Number),
+    },
+  });
+  expect(state.job?.outputArtifactId).toBe(state.job?.output?.artifactId);
   expect(state.job?.targetRect).toEqual({ x: 0, y: 0, width: before.width, height: before.height });
   expect(new Set(state.tiles.map((tile) => tile.column)).size).toBeGreaterThan(1);
   expect(new Set(state.tiles.map((tile) => tile.row)).size).toBeGreaterThan(1);
