@@ -32,7 +32,7 @@ Target release: WebCap 0.2.0
 - Unit suite: 305 tests, including adaptive planner, stable-end, finite growth, partial-row resume, navigation guard and persisted recovery.
 - PDF benchmarks: 4/4; production build and reproducible ZIP: PASS.
 - Actual-browser cases cover a page beyond 100k CSS pixels, finite lazy growth, infinite max-tile partial and service-worker restart recovery.
-- The first clean browser run passed 46/48 cases; both remaining failures were test-harness assumptions after successful runtime behavior. The PDF assertion and CDP worker-restart observation have been corrected without changing product code.
+- The first clean browser run passed 46/48 cases; both remaining failures were test-harness assumptions after successful runtime behavior. The PDF assertion was corrected, and restart evidence now proves a new CDP service-worker target ID before reading continued frontier progress from the popup extension origin.
 - Full 48-case Playwright regression and packaged lifecycle are running as the final core gate.
 
 ## Deferred by scope
