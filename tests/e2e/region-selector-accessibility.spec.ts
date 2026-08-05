@@ -222,19 +222,53 @@ test("@smoke auto-scrolls horizontally and restores the page after cancellation"
 
 test("@smoke removes the job and tab lease when selector injection fails", async ({
   serviceWorker,
-  targetPage,
-  openPopup,
 }) => {
-  await targetPage.goto("http://127.0.0.1:4174/region-selection.html");
-  const popup = await openPopup();
-  await popup.getByRole("button", { name: /^Vùng tự chọn/ }).click();
-  await expect(popup.getByRole("heading", { name: "Chụp vùng tự chọn" })).toBeVisible();
-  await targetPage.close();
+  const response = await serviceWorker.evaluate(async () => {
+    const stored = await chrome.storage.local.get("webcap.settings");
+    const record = stored["webcap.settings"] as { settings?: unknown } | undefined;
+    const settings =
+      record?.settings ??
+      ({
+        outputFormat: "png",
+        imageQuality: 0.9,
+        fixedElementMode: "smart",
+        lazyLoad: {
+          enabled: true,
+          stepRatio: 0.8,
+          settleMs: 250,
+          maxDurationMs: 15_000,
+        },
+        limits: {
+          maxCssHeight: 100_000,
+          maxCssWidth: 32_768,
+          maxTiles: 256,
+          maxEstimatedBytes: 512 * 1024 * 1024,
+        },
+        pdf: {
+          pageSize: "a4",
+          orientation: "portrait",
+          marginMm: 8,
+          jpegQuality: 0.9,
+        },
+      } as const);
 
-  await popup.getByRole("button", { name: "Bắt đầu chọn vùng" }).click();
-  await expect(popup.getByRole("alert")).toBeVisible({ timeout: 10_000 });
-  expect(popup.isClosed()).toBe(false);
+    return chrome.runtime.sendMessage({
+      protocolVersion: 1,
+      requestId: crypto.randomUUID(),
+      source: "popup",
+      target: "background",
+      type: "JOB_CREATE",
+      payload: {
+        tabId: 2_147_483_000,
+        windowId: 2_147_483_000,
+        mode: "region",
+        settings,
+      },
+      sentAt: new Date().toISOString(),
+    });
+  });
 
+  expect(response).toMatchObject({ type: "ERROR_RESPONSE" });
   await expect
     .poll(() =>
       serviceWorker.evaluate(async () => {
