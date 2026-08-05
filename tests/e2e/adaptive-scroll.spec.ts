@@ -1,9 +1,6 @@
 import type { BrowserContext, Page, Worker } from "@playwright/test";
 
-import {
-  createJobCreateMessage,
-  createJobGetMessage,
-} from "@shared/contracts/job-messages";
+import { createJobCreateMessage, createJobGetMessage } from "@shared/contracts/job-messages";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 
 import { expect, test } from "./extension.fixture";
@@ -103,8 +100,7 @@ async function readAdaptiveJobInExtension(id: string): Promise<AdaptiveJobState>
   const read = <T>(request: IDBRequest<T>) =>
     new Promise<T>((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () =>
-        reject(request.error ?? new Error("Unable to read WebCap database."));
+      request.onerror = () => reject(request.error ?? new Error("Unable to read WebCap database."));
     });
   const transaction = database.transaction(["jobs", "tiles"], "readonly");
   const [jobValue, tileValues] = await Promise.all([
