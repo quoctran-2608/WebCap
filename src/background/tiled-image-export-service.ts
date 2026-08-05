@@ -109,12 +109,14 @@ export class TiledImageExportService {
       { sourceArtifactExists: true },
     );
     if (!this.operations.has(jobId)) {
-      const operation = this.run(exporting, format, quality ?? current.settings.imageQuality).finally(
-        () => {
-          this.operations.delete(jobId);
-          this.cancelledJobs.delete(jobId);
-        },
-      );
+      const operation = this.run(
+        exporting,
+        format,
+        quality ?? current.settings.imageQuality,
+      ).finally(() => {
+        this.operations.delete(jobId);
+        this.cancelledJobs.delete(jobId);
+      });
       this.operations.set(jobId, operation);
       void operation.catch(() => undefined);
     }
