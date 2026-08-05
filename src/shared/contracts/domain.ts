@@ -123,6 +123,7 @@ export const AdaptiveCaptureFrontierSchema = z
     startedAt: IsoDateTimeSchema,
     lastGrowthAt: IsoDateTimeSchema,
     sourceDocumentToken: z.string().min(1).max(240),
+    documentWidthCss: PositiveFiniteNumberSchema,
     viewportWidthCss: PositiveFiniteNumberSchema,
     viewportHeightCss: PositiveFiniteNumberSchema,
     devicePixelRatio: PositiveFiniteNumberSchema,
