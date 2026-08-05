@@ -242,7 +242,7 @@ async function restartExtensionWorker(
   }
 
   const workerUrl = worker.url();
-  const extensionOrigin = new URL(workerUrl).origin;
+  const extensionOrigin = `chrome-extension://${new URL(workerUrl).host}`;
   const session = await browser.newBrowserCDPSession();
   try {
     await session.send("Target.setDiscoverTargets", { discover: true });
