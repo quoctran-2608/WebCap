@@ -1,6 +1,9 @@
 import type { BrowserContext, Page, Worker } from "@playwright/test";
 
-import { createJobCreateMessage } from "@shared/contracts/job-messages";
+import {
+  createJobCreateMessage,
+  createJobGetMessage,
+} from "@shared/contracts/job-messages";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 
 import { expect, test } from "./extension.fixture";
@@ -25,6 +28,11 @@ interface AdaptiveJobState {
     outputRect: { x: number; y: number; width: number; height: number } | null;
     blobSize: number;
   }>;
+}
+
+interface WorkerRestartEvidence {
+  previousTargetId: string;
+  restartedTargetId: string;
 }
 
 async function resolveTab(
@@ -86,83 +94,89 @@ async function createAdaptiveJob(
   return (response.payload as { job: { id: string } }).job.id;
 }
 
-async function readAdaptiveJob(serviceWorker: Worker, jobId: string): Promise<AdaptiveJobState> {
-  return serviceWorker.evaluate(async (id) => {
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open("webcap-db", 1);
+async function readAdaptiveJobInExtension(id: string): Promise<AdaptiveJobState> {
+  const database = await new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open("webcap-db", 1);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error("Unable to open WebCap database."));
+  });
+  const read = <T>(request: IDBRequest<T>) =>
+    new Promise<T>((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error ?? new Error("Unable to open WebCap database."));
+      request.onerror = () =>
+        reject(request.error ?? new Error("Unable to read WebCap database."));
     });
-    const read = <T>(request: IDBRequest<T>) =>
-      new Promise<T>((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () =>
-          reject(request.error ?? new Error("Unable to read WebCap database."));
-      });
-    const transaction = database.transaction(["jobs", "tiles"], "readonly");
-    const [jobValue, tileValues] = await Promise.all([
-      read<unknown>(transaction.objectStore("jobs").get(id)),
-      read<unknown[]>(transaction.objectStore("tiles").getAll()),
-    ]);
-    database.close();
-    const job = jobValue as
-      | {
-          state: string;
-          completedTiles: number;
-          totalTiles: number;
-          targetRect?: { x: number; y: number; width: number; height: number };
-          partialCapture?: { reason: string };
-          adaptiveFrontier?: {
-            nextYCss: number;
-            capturedBottomCss: number;
-            observedDocumentHeightCss: number;
-            capturedRows: number;
-            storedBytes: number;
-          };
-        }
-      | undefined;
-    const tiles = (
-      tileValues as Array<{
-        jobId: string;
-        index: number;
-        tile: {
-          row: number;
-          status: string;
-          outputRectCss?: { x: number; y: number; width: number; height: number };
+  const transaction = database.transaction(["jobs", "tiles"], "readonly");
+  const [jobValue, tileValues] = await Promise.all([
+    read<unknown>(transaction.objectStore("jobs").get(id)),
+    read<unknown[]>(transaction.objectStore("tiles").getAll()),
+  ]);
+  database.close();
+  const job = jobValue as
+    | {
+        state: string;
+        completedTiles: number;
+        totalTiles: number;
+        targetRect?: { x: number; y: number; width: number; height: number };
+        partialCapture?: { reason: string };
+        adaptiveFrontier?: {
+          nextYCss: number;
+          capturedBottomCss: number;
+          observedDocumentHeightCss: number;
+          capturedRows: number;
+          storedBytes: number;
         };
-        blob?: Blob;
-      }>
-    )
-      .filter((record) => record.jobId === id)
-      .sort((left, right) => left.index - right.index)
-      .map((record) => ({
-        index: record.index,
-        row: record.tile.row,
-        status: record.tile.status,
-        outputRect: record.tile.outputRectCss ?? null,
-        blobSize: record.blob?.size ?? 0,
-      }));
-    if (job === undefined) {
-      return {
-        state: "missing",
-        completedTiles: 0,
-        totalTiles: 0,
-        targetRect: null,
-        partialReason: null,
-        frontier: null,
-        tiles,
+      }
+    | undefined;
+  const tiles = (
+    tileValues as Array<{
+      jobId: string;
+      index: number;
+      tile: {
+        row: number;
+        status: string;
+        outputRectCss?: { x: number; y: number; width: number; height: number };
       };
-    }
+      blob?: Blob;
+    }>
+  )
+    .filter((record) => record.jobId === id)
+    .sort((left, right) => left.index - right.index)
+    .map((record) => ({
+      index: record.index,
+      row: record.tile.row,
+      status: record.tile.status,
+      outputRect: record.tile.outputRectCss ?? null,
+      blobSize: record.blob?.size ?? 0,
+    }));
+  if (job === undefined) {
     return {
-      state: job.state,
-      completedTiles: job.completedTiles,
-      totalTiles: job.totalTiles,
-      targetRect: job.targetRect ?? null,
-      partialReason: job.partialCapture?.reason ?? null,
-      frontier: job.adaptiveFrontier ?? null,
+      state: "missing",
+      completedTiles: 0,
+      totalTiles: 0,
+      targetRect: null,
+      partialReason: null,
+      frontier: null,
       tiles,
     };
-  }, jobId);
+  }
+  return {
+    state: job.state,
+    completedTiles: job.completedTiles,
+    totalTiles: job.totalTiles,
+    targetRect: job.targetRect ?? null,
+    partialReason: job.partialCapture?.reason ?? null,
+    frontier: job.adaptiveFrontier ?? null,
+    tiles,
+  };
+}
+
+async function readAdaptiveJob(serviceWorker: Worker, jobId: string): Promise<AdaptiveJobState> {
+  return serviceWorker.evaluate(readAdaptiveJobInExtension, jobId);
+}
+
+async function readAdaptiveJobFromPage(page: Page, jobId: string): Promise<AdaptiveJobState> {
+  return page.evaluate(readAdaptiveJobInExtension, jobId);
 }
 
 async function waitForAdaptiveReady(
@@ -180,6 +194,23 @@ async function waitForAdaptiveReady(
     )
     .toBe("ready");
   return readAdaptiveJob(serviceWorker, jobId);
+}
+
+async function waitForAdaptiveReadyFromPage(
+  page: Page,
+  jobId: string,
+  timeout = 120_000,
+): Promise<AdaptiveJobState> {
+  await expect
+    .poll(
+      async () => {
+        const state = await readAdaptiveJobFromPage(page, jobId);
+        return state.state;
+      },
+      { timeout },
+    )
+    .toBe("ready");
+  return readAdaptiveJobFromPage(page, jobId);
 }
 
 function expectContinuousRows(state: AdaptiveJobState): void {
@@ -208,7 +239,8 @@ async function restartExtensionWorker(
   extensionId: string,
   popup: Page,
   targetPage: Page,
-): Promise<Worker> {
+  jobId: string,
+): Promise<WorkerRestartEvidence> {
   const session = await context.newCDPSession(popup);
   const targets = (await session.send("Target.getTargets")) as {
     targetInfos: Array<{ targetId: string; type: string; url: string }>;
@@ -224,8 +256,17 @@ async function restartExtensionWorker(
 
   await session.send("Target.closeTarget", { targetId: serviceWorkerTarget.targetId });
   await targetPage.bringToFront();
-  await popup.reload({ waitUntil: "domcontentloaded" });
-  await targetPage.bringToFront();
+  const wakeRequest = createJobGetMessage({
+    requestId: crypto.randomUUID(),
+    jobId,
+    sentAt: new Date().toISOString(),
+  });
+  const wakeResponse = popup
+    .evaluate(async (message) => {
+      const result: unknown = await chrome.runtime.sendMessage(message);
+      return result;
+    }, wakeRequest)
+    .catch(() => undefined);
 
   const deadline = Date.now() + 20_000;
   while (Date.now() < deadline) {
@@ -239,21 +280,16 @@ async function restartExtensionWorker(
         target.url.startsWith(`chrome-extension://${extensionId}/`),
     );
     if (restarted !== undefined) {
-      const candidates = context
-        .serviceWorkers()
-        .filter((candidate) => candidate.url().startsWith(`chrome-extension://${extensionId}/`));
-      for (const candidate of candidates) {
-        const available = await candidate
-          .evaluate(() => chrome.runtime.getManifest().manifest_version === 3)
-          .catch(() => false);
-        if (available) {
-          return candidate;
-        }
-      }
+      await wakeResponse;
+      await targetPage.bringToFront();
+      return {
+        previousTargetId: serviceWorkerTarget.targetId,
+        restartedTargetId: restarted.targetId,
+      };
     }
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error("The restarted extension service worker did not become observable.");
+  throw new Error("The restarted extension service-worker target did not become observable.");
 }
 
 test("@smoke captures a real page beyond 100k CSS pixels without the legacy height cap", async ({
@@ -358,8 +394,9 @@ test("@smoke resumes the persisted prefix after an extension service-worker relo
     )
     .toBeGreaterThan(0);
   const beforeRestart = await readAdaptiveJob(serviceWorker, jobId);
-  const restartedWorker = await restartExtensionWorker(context, extensionId, popup, targetPage);
-  const final = await waitForAdaptiveReady(restartedWorker, jobId);
+  const restart = await restartExtensionWorker(context, extensionId, popup, targetPage, jobId);
+  expect(restart.restartedTargetId).not.toBe(restart.previousTargetId);
+  const final = await waitForAdaptiveReadyFromPage(popup, jobId);
 
   expect(final.completedTiles).toBeGreaterThanOrEqual(beforeRestart.completedTiles);
   expect(final.frontier?.capturedBottomCss).toBeGreaterThanOrEqual(
