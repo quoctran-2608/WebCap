@@ -236,3 +236,14 @@ The automated privacy test also observes extension/fixture traffic during the tr
 9. Confirm settings, language and files already present in Chrome Downloads remain unchanged.
 
 Automated coverage is in `tests/unit/capture-reset-*.test.ts`, `tests/unit/capture-data-cleanup-service.test.ts`, the late-output exporter tests and `tests/e2e/capture-reset.spec.ts`.
+
+## S22 — Reliable region selector
+
+1. Open a normal long page, choose **Vùng tự chọn**, and start selection. Confirm the popup closes only after the dim mask, crosshair, toolbar, and focused dialog are visible.
+2. Trigger two duplicate open messages for the same job. Confirm there is one selector root and both ACKs return the same selector-instance ID.
+3. Create a rectangle with the pointer; move it and resize all eight handles. Confirm every handle remains easy to hit and the toolbar stays clickable above the rectangle.
+4. Hold the pointer near the bottom and right edges on a tall/wide page. Confirm vertical and horizontal auto-scroll extend the document rectangle; Escape restores both scroll axes and focus.
+5. Create with Space or the toolbar. Verify arrows move, Shift+arrows move 10 px, Alt+arrows resize, Enter commits, and Escape cancels.
+6. Repeat at DPR 2 and 125% zoom. Compare the displayed CSS document rectangle with the persisted target rectangle.
+7. Force selector injection against a missing tab. Confirm the popup receives an error and IndexedDB/session storage contain zero orphan region jobs, summaries, tiles, selector roots, or tab leases.
+8. Capture a region and inspect the first pixels. Confirm the dim mask, crosshair, toolbar, handles, and labels are absent from the output.

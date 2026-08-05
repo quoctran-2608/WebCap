@@ -1,6 +1,6 @@
 # S22 — Reliable and accessible region selector
 
-Status: IMPLEMENTED, final repository gate pending  
+Status: DONE pending merge of PR #27
 Target release: WebCap 0.2.0
 
 ## Delivered
@@ -25,10 +25,11 @@ Target release: WebCap 0.2.0
 
 ## Evidence
 
-- Formatting, ESLint, strict TypeScript, unit tests, and production build: PASS before the full repository gate.
-- Unit coverage includes contracts, readiness timeout, keyboard geometry, duplicate responses, and S21 reset routing on launch failure.
-- Browser coverage includes popup-close ordering, focused readiness, duplicate opens, pointer and keyboard flows, 24-pixel handles, vertical and horizontal auto-scroll, DPR/zoom stability, overlay exclusion, page restoration, and zero-orphan launch failure.
-- Full audits, PDF benchmarks, reproducible package, complete E2E, and packaged lifecycle remain the final merge gate.
+- Formatting, ESLint, strict TypeScript, privacy/dependency/release/critical-security audits, and production build: PASS.
+- Unit: 295/295 across 84 files, including contracts, readiness timeout, keyboard geometry, duplicate responses, and S21 reset routing on launch failure.
+- PDF benchmark: 4/4 scenarios; reproducible release ZIP: PASS.
+- Browser: 44/44 Playwright E2E, including popup-close ordering, focused readiness, duplicate opens, pointer and keyboard flows, 24-pixel handles, two-axis auto-scroll, DPR/zoom stability, overlay exclusion, page restoration, and zero-orphan launch failure.
+- Packaged install/update/storage-retention/uninstall lifecycle smoke: PASS.
 
 ## Deferred by scope
 
