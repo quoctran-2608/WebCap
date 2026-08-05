@@ -188,10 +188,8 @@ test("@smoke exports a stored full-page tile set as a loadable paged PDF", async
     .toBe("completed");
 
   const completed = await readPdfState(serviceWorker);
-  expect(completed.job).toMatchObject({
-    state: "completed",
-    tileCount: 2,
-  });
+  expect(completed.job).toMatchObject({ state: "completed" });
+  expect(completed.job?.tileCount).toBe(ready.job?.tileCount);
   expect(completed.job?.totalPages ?? 0).toBeGreaterThan(1);
   expect(completed.job?.completedPages).toBe(completed.job?.totalPages);
   expect(completed.artifact).toMatchObject({
