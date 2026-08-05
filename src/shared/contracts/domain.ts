@@ -32,6 +32,29 @@ export const JobStateSchema = z.enum([
 export const FixedElementModeSchema = z.enum(["preserve", "smart", "remove"]);
 export const ImageFormatSchema = z.enum(["png", "jpeg", "webp"]);
 export const OutputFormatSchema = z.enum(["png", "jpeg", "webp", "pdf"]);
+export const CaptureCompletionPolicySchema = z
+  .object({
+    primaryOutput: OutputFormatSchema,
+    autoExport: z.boolean(),
+    openEditorAfterCapture: z.boolean(),
+    allowGuardedImageFallback: z.boolean(),
+  })
+  .strict();
+export const CaptureOutputSchema = z
+  .object({
+    artifactId: z.string().min(1).max(160),
+    sourceArtifactId: z.string().min(1).max(160),
+    format: OutputFormatSchema,
+    mimeType: z.string().min(1).max(120),
+    filename: z.string().min(1).max(180),
+    byteLength: NonNegativeIntegerSchema,
+    width: PositiveIntegerSchema,
+    height: PositiveIntegerSchema,
+    pageCount: PositiveIntegerSchema.optional(),
+    createdAt: IsoDateTimeSchema,
+    expiresAt: IsoDateTimeSchema,
+  })
+  .strict();
 export const ExportProgressSchema = z
   .object({
     completedPages: NonNegativeIntegerSchema,
@@ -204,6 +227,9 @@ export const CaptureJobSchema = z
     totalTiles: NonNegativeIntegerSchema,
     adaptiveFrontier: AdaptiveCaptureFrontierSchema.optional(),
     settings: CaptureSettingsSchema,
+    completionPolicy: CaptureCompletionPolicySchema.optional(),
+    activeOutputFormat: OutputFormatSchema.optional(),
+    output: CaptureOutputSchema.optional(),
     cleanup: CleanupStateSchema,
     partialCapture: PartialCaptureSchema.optional(),
     exportProgress: ExportProgressSchema.optional(),
@@ -221,6 +247,8 @@ export type JobState = z.infer<typeof JobStateSchema>;
 export type FixedElementMode = z.infer<typeof FixedElementModeSchema>;
 export type ImageFormat = z.infer<typeof ImageFormatSchema>;
 export type OutputFormat = z.infer<typeof OutputFormatSchema>;
+export type CaptureCompletionPolicy = z.infer<typeof CaptureCompletionPolicySchema>;
+export type CaptureOutput = z.infer<typeof CaptureOutputSchema>;
 export type ExportProgress = z.infer<typeof ExportProgressSchema>;
 export type Rect = z.infer<typeof RectSchema>;
 export type ElementTargetDescriptor = z.infer<typeof ElementTargetDescriptorSchema>;
