@@ -98,9 +98,11 @@ test("@smoke edits, restores, exports, and downloads PDF without recapture", asy
   const popup = await openPopup();
   await popup.getByRole("button", { name: /^Toàn bộ trang/ }).click();
   await popup.getByRole("button", { name: "Bắt đầu chụp toàn trang" }).click();
-  await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({
-    timeout: 45_000,
-  });
+  const result = popup.getByTestId("tiled-output-result");
+  await expect(result).toBeVisible({ timeout: 45_000 });
+  await expect(result).toHaveAttribute("data-format", "pdf");
+  await expect(result.getByRole("heading", { name: "PDF đã sẵn sàng" })).toBeVisible();
+  await expect(result.getByRole("button", { name: "Mở trình biên tập PDF" })).toBeVisible();
 
   const editorPromise = context.waitForEvent("page", {
     predicate: (page) => page.url().startsWith(`chrome-extension://${extensionId}/editor.html`),
