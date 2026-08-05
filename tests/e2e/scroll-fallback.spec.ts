@@ -16,6 +16,15 @@ interface FallbackState {
   job: {
     state: string;
     activeEngine?: string;
+    activeOutputFormat?: string;
+    outputArtifactId?: string;
+    output?: {
+      artifactId: string;
+      format: string;
+      mimeType: string;
+      byteLength: number;
+      pageCount?: number;
+    };
     completedTiles: number;
     totalTiles: number;
     cleanupCompleted: boolean;
@@ -105,6 +114,15 @@ async function readFallbackState(serviceWorker: Worker): Promise<FallbackState> 
       mode: string;
       state: string;
       activeEngine?: string;
+      activeOutputFormat?: string;
+      outputArtifactId?: string;
+      output?: {
+        artifactId: string;
+        format: string;
+        mimeType: string;
+        byteLength: number;
+        pageCount?: number;
+      };
       completedTiles: number;
       totalTiles: number;
       updatedAt: string;
@@ -152,6 +170,13 @@ async function readFallbackState(serviceWorker: Worker): Promise<FallbackState> 
           : {
               state: job.state,
               ...(job.activeEngine === undefined ? {} : { activeEngine: job.activeEngine }),
+              ...(job.activeOutputFormat === undefined
+                ? {}
+                : { activeOutputFormat: job.activeOutputFormat }),
+              ...(job.outputArtifactId === undefined
+                ? {}
+                : { outputArtifactId: job.outputArtifactId }),
+              ...(job.output === undefined ? {} : { output: job.output }),
               completedTiles: job.completedTiles,
               totalTiles: job.totalTiles,
               cleanupCompleted: job.cleanup.completed,
@@ -188,10 +213,32 @@ async function startFullPageFallback(
       },
       { timeout: 60_000 },
     )
-    .toBe("ready");
+    .toBe("completed");
   await popup.bringToFront();
-  await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({ timeout: 5_000 });
+  const result = popup.getByTestId("tiled-output-result");
+  await expect(result).toBeVisible({ timeout: 5_000 });
+  await expect(result).toHaveAttribute("data-format", "pdf");
   await activateFixtureTab(serviceWorker, targetPage);
+}
+
+function expectCompletedPdf(job: FallbackState["job"]): void {
+  expect(job).toMatchObject({
+    state: "completed",
+    activeEngine: "scroll",
+    activeOutputFormat: "pdf",
+    outputArtifactId: expect.any(String),
+    output: {
+      artifactId: expect.any(String),
+      format: "pdf",
+      mimeType: "application/pdf",
+      byteLength: expect.any(Number),
+      pageCount: expect.any(Number),
+    },
+    cleanupCompleted: true,
+  });
+  expect(job?.outputArtifactId).toBe(job?.output?.artifactId);
+  expect(job?.output?.byteLength).toBeGreaterThan(0);
+  expect(job?.output?.pageCount ?? 0).toBeGreaterThan(0);
 }
 
 function expectContinuousRows(tiles: FallbackState["tiles"]): void {
@@ -226,11 +273,7 @@ test("@smoke uses smart fixed policy and restores the page after scroll fallback
     await startFullPageFallback(popup, targetPage, serviceWorker);
 
     const state = await readFallbackState(serviceWorker);
-    expect(state.job).toMatchObject({
-      state: "ready",
-      activeEngine: "scroll",
-      cleanupCompleted: true,
-    });
+    expectCompletedPdf(state.job);
     expect(state.job?.completedTiles).toBe(state.job?.totalTiles);
     expect(state.tiles.length).toBe(state.job?.totalTiles);
     expect(state.tiles.every((tile) => tile.blobSize > 0)).toBe(true);
@@ -260,11 +303,7 @@ test("@smoke covers a wide table with a two-dimensional fallback grid", async ({
     await startFullPageFallback(popup, targetPage, serviceWorker);
 
     const state = await readFallbackState(serviceWorker);
-    expect(state.job).toMatchObject({
-      state: "ready",
-      activeEngine: "scroll",
-      cleanupCompleted: true,
-    });
+    expectCompletedPdf(state.job);
     expect(new Set(state.tiles.map((tile) => tile.column)).size).toBeGreaterThan(1);
     expect(new Set(state.tiles.map((tile) => tile.row)).size).toBeGreaterThan(1);
     expect(state.tiles.every((tile) => tile.outputWidth > 0 && tile.outputHeight > 0)).toBe(true);
