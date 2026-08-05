@@ -1,0 +1,133 @@
+name: Retry S24 Phase 1 After Lint Fix
+
+on:
+  push:
+    branches: [agent/s24-auto-output]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: s24-phase1-fix
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out S24 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/s24-auto-output
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply, validate, and publish a clean result
+        shell: bash
+        run: |
+          set +e
+          : > /tmp/s24-phase1.log
+          git show fc7f224e710114a4e08300bfb2413d233464d6e1:scripts/s24-phase1-apply.py > /tmp/s24-phase1-apply.py
+          python /tmp/s24-phase1-apply.py >> /tmp/s24-phase1.log 2>&1
+          status=$?
+
+          if [ "$status" -eq 0 ]; then
+            python - <<'PY' >> /tmp/s24-phase1.log 2>&1
+          from pathlib import Path
+          path = Path('tests/unit/tiled-image-exporter.test.ts')
+          text = path.read_text()
+          replacements = [
+              (
+                  '    const put = vi.fn(async (_record: ArtifactRecord): Promise<void> => undefined);',
+                  '''    const put = vi.fn((record: ArtifactRecord): Promise<void> => {
+                      void record;
+                      return Promise.resolve();
+                    });''',
+              ),
+              (
+                  '        async decode(): Promise<DecodedTiledImage> {',
+                  '        decode(): Promise<DecodedTiledImage> {',
+              ),
+              (
+                  '          return { width: 100, height: 100, source: {} as CanvasImageSource, close };',
+                  '''          return Promise.resolve({
+                      width: 100,
+                      height: 100,
+                      source: {} as CanvasImageSource,
+                      close,
+                    });''',
+              ),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'Expected one lint-fix anchor, found {count}: {old!r}')
+              text = text.replace(old, new)
+          path.write_text(text)
+          PY
+            status=$?
+          fi
+
+          if [ "$status" -eq 0 ]; then
+            pnpm exec prettier --write \
+              src/offscreen/tiled-image-exporter.ts \
+              src/shared/errors/error.ts \
+              src/shared/i18n.ts \
+              src/shared/contracts/offscreen.ts \
+              src/background/offscreen-service.ts \
+              src/offscreen/entry.ts \
+              tests/unit/tiled-image-exporter.test.ts >> /tmp/s24-phase1.log 2>&1
+            status=$?
+          fi
+          if [ "$status" -eq 0 ]; then pnpm lint >> /tmp/s24-phase1.log 2>&1; status=$?; fi
+          if [ "$status" -eq 0 ]; then pnpm typecheck >> /tmp/s24-phase1.log 2>&1; status=$?; fi
+          if [ "$status" -eq 0 ]; then pnpm test:unit >> /tmp/s24-phase1.log 2>&1; status=$?; fi
+          if [ "$status" -eq 0 ]; then pnpm build >> /tmp/s24-phase1.log 2>&1; status=$?; fi
+
+          git config user.name "OpenAI coding agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [ "$status" -eq 0 ]; then
+            rm -f docs/sessions/s24-phase1-diagnostic.md .github/workflows/s24-phase1-fix.yml
+            git add \
+              src/offscreen/tiled-image-exporter.ts \
+              src/shared/errors/error.ts \
+              src/shared/i18n.ts \
+              src/shared/contracts/offscreen.ts \
+              src/background/offscreen-service.ts \
+              src/offscreen/entry.ts \
+              tests/unit/tiled-image-exporter.test.ts \
+              docs/sessions/s24-phase1-diagnostic.md \
+              .github/workflows/s24-phase1-fix.yml
+            git commit -m "Add guarded tiled image export pipeline"
+          else
+            git reset --hard HEAD
+            {
+              echo '# S24 phase 1 diagnostic'
+              echo
+              echo "Exit status: $status"
+              echo
+              echo '```text'
+              tail -c 50000 /tmp/s24-phase1.log
+              echo
+              echo '```'
+            } > docs/sessions/s24-phase1-diagnostic.md
+            rm .github/workflows/s24-phase1-fix.yml
+            git add docs/sessions/s24-phase1-diagnostic.md .github/workflows/s24-phase1-fix.yml
+            git commit -m "Update S24 phase 1 validation diagnostic"
+          fi
+
+          git push origin HEAD:agent/s24-auto-output
