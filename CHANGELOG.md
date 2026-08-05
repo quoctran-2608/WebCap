@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Mode-aware completion routing that automatically creates PDF for full-page and scroll-area captures, returns guarded PNG/JPEG/WebP for region and element captures, and preserves the existing visible-image flow.
+- Durable output metadata and terminal-job restoration across popup reopen and Manifest V3 service-worker restart, with existing artifact reconciliation preventing duplicate output creation.
+- Guarded sequential tiled-image composition with canvas dimension, total pixel-area and estimated working-set limits before allocation.
+- Explicit `E_IMAGE_OUTPUT_TOO_LARGE` PDF fallback that reuses the same job and exact stored tile Blobs without selector reopen or pixel recapture.
+- Editable auto-generated PDFs: an explicit edit reopens `completed` output safely, removes only the old PDF artifact and preserves source tiles for replacement export.
+- S24 browser coverage for automatic PDF/image result cards, popup lifecycle recovery, editor re-export, and oversized-image fallback; the clean gate passes 325 unit tests across 92 files, four PDF benchmarks, 49 Playwright E2E cases and packaged lifecycle smoke.
 - Versioned `CAPTURE_RESET` flow for visible sessions, persistent jobs and active-tab scope with request deduplication and idempotent missing-record behavior.
 - Shared capture-owned cleanup covering source/output artifacts, tiles, PDF edit manifests, job records, session summaries and exact tab locks.
 - User-facing “New capture” actions for preview and every terminal tiled state, plus confirmation before discarding an active capture.

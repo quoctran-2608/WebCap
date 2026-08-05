@@ -7,49 +7,13 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  close-s24-docs:
-    if: github.event_name == 'pull_request' && github.head_ref == 'agent/s24-auto-output'
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Check out branch
-        uses: actions/checkout@v4
-        with:
-          ref: agent/s24-auto-output
-          fetch-depth: 0
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.15.1
-          run_install: false
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.22.0
-          cache: pnpm
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Update and format milestone documents
-        run: |
-          python scripts/close-s24-docs-once.py
-          pnpm exec prettier --write PLAN.md README.md CHANGELOG.md docs/spec-0.2.0.md
-          git checkout origin/main -- .github/workflows/ci.yml
-          rm .github/workflows/close-s24-docs-once.yml
-          rm scripts/close-s24-docs-once.py
-      - name: Commit clean milestone close
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add PLAN.md README.md CHANGELOG.md docs/spec-0.2.0.md .github/workflows/ci.yml .github/workflows/close-s24-docs-once.yml scripts/close-s24-docs-once.py
-          git commit -m "docs: close S24 output milestone"
-          git push origin HEAD:agent/s24-auto-output
-
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 30

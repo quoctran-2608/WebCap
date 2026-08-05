@@ -8,14 +8,14 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 **0.1.0 release candidate remains complete and unchanged.** It has a deterministic, verified 24-entry Chrome Web Store ZIP (`webcap-0.1.0.zip`, 1,097,035 bytes, SHA-256 `630c44c07e72da0d5edc1c82c013ecf6caf995e0542ee19679380081e7b0cb7a`). The final gate passed formatting, ESLint, strict TypeScript, privacy/license/release/critical-security audits, 279 unit tests across 79 files, four PDF benchmarks, a verified Manifest V3 build, and 38 Playwright E2E cases including DPR 1/1.5/2 at 80/100/125/150% zoom. No tag, GitHub Release, Chrome Web Store upload, review submission, or publication has been performed.
 
-**0.2.0 implementation is active. S21 capture reset, S22 region-selector reliability and S23 adaptive auto-scroll are complete; S24 auto-PDF/output routing is next.** S23 captures finite pages beyond the legacy 100,000 CSS-pixel cap, follows bounded lazy growth to a stable end, persists a row-safe resumable frontier and returns explicit contiguous partial output at resource guards. Service-worker restart recovery reuses stored tiles without recapturing the prefix, while document identity/geometry guards prevent cross-page stitching. S24–S26 remain planned for automatic PDF and mode-aware output, settings/events/UI, and release hardening.
+**0.2.0 implementation is active. S21 capture reset, S22 region-selector reliability, S23 adaptive auto-scroll and S24 automatic mode-aware output are complete; S25 settings/events/simplified popup is next.** Full-page and scroll-area captures now create PDF automatically, while region and element captures create guarded PNG/JPEG/WebP output. Durable result metadata survives popup reopen and service-worker restart, auto-generated PDFs remain editable without recapture, and oversized image output offers an explicit PDF fallback that reuses the same stored tiles. S25–S26 remain planned for stored settings, event-driven progress, popup simplification and release hardening.
 
-## Planned 0.2.0 outcomes
+## 0.2.0 outcomes and remaining work
 
-- One-click **Full page → PDF**: capture from document start, continue through finite lazy growth, restore the page and automatically create a PDF.
-- A reliable **Draw region** flow: the popup closes only after the selector is ready, the overlay appears immediately, pointer and keyboard can create/adjust the rectangle, and selector UI is excluded from output.
-- A clear **New capture** action that safely cancels or discards the current local job and allows another capture on the same tab.
-- Mode-aware output: region/element default to guarded image output; full page defaults to PDF; oversized images receive an explicit PDF fallback.
+- Delivered in S23–S24: one-click **Full page → PDF** captures from document start, follows finite lazy growth, restores the page and automatically creates a PDF.
+- Delivered in S22–S24: **Draw region** closes the popup only after selector readiness, supports pointer and keyboard editing, excludes selector UI and returns a guarded image result.
+- Delivered in S21: **New capture** safely cancels or discards the current local job and allows another capture on the same tab.
+- Delivered in S24: region/element default to guarded image output, full-page/scroll-area default to PDF, and oversized images receive an explicit no-recapture PDF fallback.
 - Stored format, quality, PDF and fixed/sticky preferences are actually applied to new jobs.
 - Event-driven progress with slow reconciliation instead of continuous 350 ms polling.
 - A simpler popup focused on capture goals, progress, download, edit and new capture; technical details move to help and diagnostics.
