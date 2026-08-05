@@ -14,8 +14,8 @@ async function updatePlan() {
   source = replaceUnique(source, "current_session: S22", "current_session: S23", "PLAN current session");
   source = replaceUnique(
     source,
-    "S21 đã hoàn tất reset/chụp mới và cleanup primitive dùng chung. S22 đang là milestone kế tiếp: làm cho region selector mở đáng tin cậy, hiển thị rõ, thao tác được bằng pointer/keyboard và cleanup sạch khi launch thất bại.",
-    "S21–S22 đã hoàn tất reset lifecycle và region selector đáng tin cậy. S23 là milestone kế tiếp: adaptive auto-scroll, stable-end detection và resumable frontier cho trang dài/lazy mà không làm mất prefix đã lưu.",
+    "S21 triển khai reset/chụp mới mà không thay manifest, package version hoặc artifact 0.1.0. S22 là session active tiếp theo.",
+    "S21–S22 đã hoàn tất reset lifecycle và region selector đáng tin cậy mà không thay manifest, package version hoặc artifact 0.1.0. S23 là session active tiếp theo.",
     "PLAN introduction",
   );
   source = replaceUnique(
