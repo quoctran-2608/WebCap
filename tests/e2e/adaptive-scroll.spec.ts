@@ -32,11 +32,6 @@ interface WorkerRestartEvidence {
   wakeResponseType: string;
 }
 
-interface WorkerRestartResult {
-  evidence: WorkerRestartEvidence;
-  popup: Page;
-}
-
 async function resolveTab(
   serviceWorker: Worker,
   page: Page,
@@ -235,37 +230,26 @@ function expectContinuousRows(state: AdaptiveJobState): void {
   expect(bottom).toBeCloseTo(state.targetRect?.height ?? 0, 0);
 }
 
-async function openReloadedExtensionPage(popup: Page, popupUrl: string): Promise<Page> {
-  const browserContext = popup.context();
-  const deadline = Date.now() + 20_000;
-  let lastError: unknown;
-
-  while (Date.now() < deadline) {
-    const candidate = await browserContext.newPage();
-    try {
-      await candidate.goto(popupUrl, { waitUntil: "domcontentloaded" });
-      return candidate;
-    } catch (error) {
-      lastError = error;
-      await candidate.close().catch(() => undefined);
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    }
-  }
-
-  throw new Error(
-    `The extension page did not become available after runtime reload: ${String(lastError)}`,
-  );
-}
-
 async function restartExtensionWorker(
   worker: Worker,
   popup: Page,
   targetPage: Page,
   jobId: string,
-): Promise<WorkerRestartResult> {
-  const popupUrl = popup.url();
+): Promise<WorkerRestartEvidence> {
+  const extensionOrigin = new URL(popup.url()).origin;
+  const session = await popup.context().newCDPSession(targetPage);
+  const targets = (await session.send("Target.getTargets")) as {
+    targetInfos: Array<{ targetId: string; type: string; url: string }>;
+  };
+  const workerTarget = targets.targetInfos.find(
+    (candidate) =>
+      candidate.type === "service_worker" && candidate.url.startsWith(`${extensionOrigin}/`),
+  );
+  if (workerTarget === undefined) {
+    throw new Error("The extension service-worker target could not be resolved.");
+  }
 
-  await worker.evaluate(() => chrome.runtime.reload()).catch(() => undefined);
+  await session.send("Target.closeTarget", { targetId: workerTarget.targetId });
   await expect
     .poll(
       () =>
@@ -279,14 +263,12 @@ async function restartExtensionWorker(
     )
     .toBe(true);
 
-  const restartedPopup = await openReloadedExtensionPage(popup, popupUrl);
-  await targetPage.bringToFront();
   const wakeRequest = createJobGetMessage({
     requestId: crypto.randomUUID(),
     jobId,
     sentAt: new Date().toISOString(),
   });
-  const wakeResponse: unknown = await restartedPopup.evaluate(async (message) => {
+  const wakeResponse: unknown = await popup.evaluate(async (message) => {
     const result: unknown = await chrome.runtime.sendMessage(message);
     return result;
   }, wakeRequest);
@@ -303,10 +285,7 @@ async function restartExtensionWorker(
     );
   }
   await targetPage.bringToFront();
-  return {
-    evidence: { previousWorkerStopped: true, wakeResponseType: wakeResponse.type },
-    popup: restartedPopup,
-  };
+  return { previousWorkerStopped: true, wakeResponseType: wakeResponse.type };
 }
 
 test("@smoke captures a real page beyond 100k CSS pixels without the legacy height cap", async ({
@@ -387,7 +366,7 @@ test("@smoke stops an infinite feed with an explicit continuous max-tiles partia
   expect(await targetPage.evaluate(() => ({ x: scrollX, y: scrollY }))).toEqual(before);
 });
 
-test("@smoke resumes the persisted prefix after an extension service-worker reload", async ({
+test("@smoke resumes the persisted prefix after an extension service-worker restart", async ({
   serviceWorker,
   targetPage,
   openPopup,
@@ -410,11 +389,8 @@ test("@smoke resumes the persisted prefix after an extension service-worker relo
     .toBeGreaterThan(0);
   const beforeRestart = await readAdaptiveJob(serviceWorker, jobId);
   const restart = await restartExtensionWorker(serviceWorker, popup, targetPage, jobId);
-  expect(restart.evidence).toEqual({
-    previousWorkerStopped: true,
-    wakeResponseType: "JOB_RESPONSE",
-  });
-  const final = await waitForAdaptiveReadyFromPage(restart.popup, jobId);
+  expect(restart).toEqual({ previousWorkerStopped: true, wakeResponseType: "JOB_RESPONSE" });
+  const final = await waitForAdaptiveReadyFromPage(popup, jobId);
 
   expect(final.completedTiles).toBeGreaterThanOrEqual(beforeRestart.completedTiles);
   expect(final.frontier?.capturedBottomCss).toBeGreaterThanOrEqual(
