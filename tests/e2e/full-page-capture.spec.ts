@@ -179,16 +179,18 @@ test("@smoke captures a multi-tile full page, persists tiles, restores, and deta
   const state = await readFullPageState(serviceWorker);
   expect(state.job).toMatchObject({
     state: "ready",
-    activeEngine: "cdp",
-    completedTiles: 2,
-    totalTiles: 2,
+    activeEngine: "scroll",
     cleanupCompleted: true,
-    tileStatuses: ["stored", "stored"],
   });
-  expect(state.tiles.map((tile) => tile.index)).toEqual([0, 1]);
+  expect(state.job?.completedTiles).toBeGreaterThan(0);
+  expect(state.job?.completedTiles).toBe(state.job?.totalTiles);
+  expect(state.job?.tileStatuses.every((status) => status === "stored")).toBe(true);
+  expect(state.tiles.map((tile) => tile.index)).toEqual(
+    Array.from({ length: state.tiles.length }, (_, index) => index),
+  );
   expect(state.tiles.every((tile) => tile.status === "stored" && tile.blobSize > 0)).toBe(true);
   expect(state.tiles.every((tile) => tile.byteLength === tile.blobSize)).toBe(true);
-  expect(state.tiles.every((tile) => tile.outputRect === null)).toBe(true);
+  expect(state.tiles.every((tile) => tile.outputRect !== null)).toBe(true);
   expect(await snapshotPage(targetPage)).toEqual(before);
 
   await expect
@@ -236,7 +238,7 @@ test("@smoke cancels full-page preparation and restores page state", async ({
   expect(await snapshotPage(targetPage)).toEqual(before);
 });
 
-test("@smoke falls back to scroll capture when the debugger is already occupied", async ({
+test("@smoke keeps adaptive full-page capture independent of debugger occupancy", async ({
   serviceWorker,
   targetPage,
   openPopup,
