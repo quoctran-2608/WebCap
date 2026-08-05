@@ -32,6 +32,11 @@ interface WorkerRestartEvidence {
   wakeResponseType: string;
 }
 
+interface WorkerRestartResult {
+  evidence: WorkerRestartEvidence;
+  popup: Page;
+}
+
 async function resolveTab(
   serviceWorker: Worker,
   page: Page,
@@ -235,7 +240,10 @@ async function restartExtensionWorker(
   popup: Page,
   targetPage: Page,
   jobId: string,
-): Promise<WorkerRestartEvidence> {
+): Promise<WorkerRestartResult> {
+  const popupUrl = popup.url();
+  const browserContext = popup.context();
+
   await worker.evaluate(() => chrome.runtime.reload()).catch(() => undefined);
   await expect
     .poll(
@@ -250,14 +258,15 @@ async function restartExtensionWorker(
     )
     .toBe(true);
 
-  await popup.reload({ waitUntil: "domcontentloaded" });
+  const restartedPopup = await browserContext.newPage();
+  await restartedPopup.goto(popupUrl, { waitUntil: "domcontentloaded" });
   await targetPage.bringToFront();
   const wakeRequest = createJobGetMessage({
     requestId: crypto.randomUUID(),
     jobId,
     sentAt: new Date().toISOString(),
   });
-  const wakeResponse: unknown = await popup.evaluate(async (message) => {
+  const wakeResponse: unknown = await restartedPopup.evaluate(async (message) => {
     const result: unknown = await chrome.runtime.sendMessage(message);
     return result;
   }, wakeRequest);
@@ -274,7 +283,10 @@ async function restartExtensionWorker(
     );
   }
   await targetPage.bringToFront();
-  return { previousWorkerStopped: true, wakeResponseType: wakeResponse.type };
+  return {
+    evidence: { previousWorkerStopped: true, wakeResponseType: wakeResponse.type },
+    popup: restartedPopup,
+  };
 }
 
 test("@smoke captures a real page beyond 100k CSS pixels without the legacy height cap", async ({
@@ -378,8 +390,11 @@ test("@smoke resumes the persisted prefix after an extension service-worker relo
     .toBeGreaterThan(0);
   const beforeRestart = await readAdaptiveJob(serviceWorker, jobId);
   const restart = await restartExtensionWorker(serviceWorker, popup, targetPage, jobId);
-  expect(restart).toEqual({ previousWorkerStopped: true, wakeResponseType: "JOB_RESPONSE" });
-  const final = await waitForAdaptiveReadyFromPage(popup, jobId);
+  expect(restart.evidence).toEqual({
+    previousWorkerStopped: true,
+    wakeResponseType: "JOB_RESPONSE",
+  });
+  const final = await waitForAdaptiveReadyFromPage(restart.popup, jobId);
 
   expect(final.completedTiles).toBeGreaterThanOrEqual(beforeRestart.completedTiles);
   expect(final.frontier?.capturedBottomCss).toBeGreaterThanOrEqual(
