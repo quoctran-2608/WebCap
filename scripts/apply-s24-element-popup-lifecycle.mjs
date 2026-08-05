@@ -13,8 +13,8 @@ let source = readFileSync(path, "utf8");
 
 source = replaceOnce(
   source,
-  `  const before = await snapshotPage(targetPage);\n  const popup = await openPopup();\n  await startElementSelection(popup);`,
-  `  const before = await snapshotPage(targetPage);\n  const tabId = await resolveTab(serviceWorker, targetPage);\n  const popup = await openPopup();\n  await startElementSelection(popup);`,
+  `  const root = targetPage.locator("[data-webcap-element-selector]");\n  await expect(root).toHaveCount(1);\n  const child = targetPage.locator("#target-child");`,
+  `  const root = targetPage.locator("[data-webcap-element-selector]");\n  await expect(root).toHaveCount(1);\n  const tabId = await resolveTab(serviceWorker, targetPage);\n  const child = targetPage.locator("#target-child");`,
   "normal element tab id",
 );
 
