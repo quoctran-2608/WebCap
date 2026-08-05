@@ -1,26 +1,27 @@
 # S24 completion services diagnostic
 
+Retry trigger: syntax fixture correction revision 2.
+
 Exit status: 2
 
 ```text
-[90msrc/background/capture-completion-policy.ts[39m 57ms (unchanged)
-[90msrc/background/capture-output.ts[39m 4ms (unchanged)
+src/background/capture-completion-policy.ts 57ms (unchanged)
+src/background/capture-output.ts 4ms (unchanged)
 src/background/tiled-image-export-service.ts 44ms
 src/background/capture-completion-service.ts 36ms
-[90msrc/background/job-coordinator.ts[39m 62ms (unchanged)
+src/background/job-coordinator.ts 62ms (unchanged)
 src/background/job-state-machine.ts 21ms
-[90msrc/background/pdf-export-service.ts[39m 20ms (unchanged)
-[90msrc/shared/contracts/domain.ts[39m 27ms (unchanged)
-[90msrc/storage/artifact-repository.ts[39m 15ms (unchanged)
-[90mtests/unit/capture-completion-policy.test.ts[39m 3ms (unchanged)
-[[31merror[39m] tests/unit/tiled-image-export-service.test.ts: SyntaxError: Argument expression expected. (135:7)
-[[31merror[39m]   133 |               }),
-[[31merror[39m]   134 |             ),
-[[31merror[39m] > 135 |       },
-[[31merror[39m]       |       ^
-[[31merror[39m]   136 |       now: () => NOW,
-[[31merror[39m]   137 |     });
-[[31merror[39m]   138 |
-[90mtests/unit/capture-completion-service.test.ts[39m 11ms (unchanged)
-
+src/background/pdf-export-service.ts 20ms (unchanged)
+src/shared/contracts/domain.ts 27ms (unchanged)
+src/storage/artifact-repository.ts 15ms (unchanged)
+tests/unit/capture-completion-policy.test.ts 3ms (unchanged)
+[error] tests/unit/tiled-image-export-service.test.ts: SyntaxError: Argument expression expected. (135:7)
+[error]   133 |               }),
+[error]   134 |             ),
+[error] > 135 |       },
+[error]       |       ^
+[error]   136 |       now: () => NOW,
+[error]   137 |     });
+[error]   138 |
+tests/unit/capture-completion-service.test.ts 11ms (unchanged)
 ```
