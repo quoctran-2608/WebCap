@@ -5,7 +5,6 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   maxFailures: 1,
-  grep: /captures a multi-tile full page/,
   timeout: 60_000,
   expect: {
     timeout: 15_000,
@@ -24,29 +23,9 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "visible-smoke",
-      grep: /@smoke/,
+      name: "s24-full-page-diagnostic",
+      grep: /captures a multi-tile full page/,
       use: { deviceScaleFactor: 1 },
-    },
-    {
-      name: "visible-dpr2-zoom125",
-      grep: /@dpr/,
-      use: { deviceScaleFactor: 2 },
-    },
-    {
-      name: "release-matrix-dpr1",
-      grep: /@release-matrix/,
-      use: { deviceScaleFactor: 1 },
-    },
-    {
-      name: "release-matrix-dpr15",
-      grep: /@release-matrix/,
-      use: { deviceScaleFactor: 1.5 },
-    },
-    {
-      name: "release-matrix-dpr2",
-      grep: /@release-matrix/,
-      use: { deviceScaleFactor: 2 },
     },
   ],
 });
