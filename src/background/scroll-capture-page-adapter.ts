@@ -15,6 +15,8 @@ export interface ScrollCapturePageRequest {
   settleMs: number;
   expectedDocumentWidth: number;
   expectedDocumentHeight: number;
+  isFirstRow?: boolean;
+  isFinalRow?: boolean;
 }
 
 export interface ScrollCapturePageResult {
@@ -27,6 +29,7 @@ export interface ScrollCapturePageResult {
   documentWidth: number;
   documentHeight: number;
   devicePixelRatio: number;
+  documentToken: string;
   fixedCandidates: number;
   hiddenFixedElements: number;
   stableSamples: number;
@@ -63,6 +66,7 @@ const ScrollCapturePageResultSchema = z
     documentWidth: z.number().finite().positive(),
     documentHeight: z.number().finite().positive(),
     devicePixelRatio: z.number().finite().positive(),
+    documentToken: z.string().min(1).max(240),
     fixedCandidates: z.number().int().nonnegative(),
     hiddenFixedElements: z.number().int().nonnegative(),
     stableSamples: z.number().int().nonnegative(),
@@ -200,6 +204,8 @@ async function executeScrollCapture(
     observer.disconnect();
   }
 
+  const isFirstRow = request.isFirstRow ?? request.tileIndex === 0;
+  const isFinalRow = request.isFinalRow ?? request.tileIndex >= request.totalTiles - 1;
   let fixedCandidates = 0;
   let hiddenFixedElements = 0;
   if (request.fixedElementMode !== "preserve" && document.body !== null) {
@@ -228,8 +234,7 @@ async function executeScrollCapture(
       const shouldHide =
         request.fixedElementMode === "remove" ||
         (request.fixedElementMode === "smart" &&
-          ((touchesTop && request.tileIndex > 0) ||
-            (touchesBottom && request.tileIndex < request.totalTiles - 1)));
+          ((touchesTop && !isFirstRow) || (touchesBottom && !isFinalRow)));
       if (!shouldHide) {
         continue;
       }
@@ -257,6 +262,7 @@ async function executeScrollCapture(
     documentWidth: Math.max(1, size.width),
     documentHeight: Math.max(1, size.height),
     devicePixelRatio: Math.max(0.01, window.devicePixelRatio || 1),
+    documentToken: Math.round(performance.timeOrigin * 1_000).toString(36),
     fixedCandidates,
     hiddenFixedElements,
     stableSamples,
@@ -337,6 +343,8 @@ export function createChromeScrollCapturePageAdapter(): ScrollCapturePageAdapter
               settleMs: request.settleMs,
               expectedDocumentWidth: request.expectedDocumentWidth,
               expectedDocumentHeight: request.expectedDocumentHeight,
+              ...(request.isFirstRow === undefined ? {} : { isFirstRow: request.isFirstRow }),
+              ...(request.isFinalRow === undefined ? {} : { isFinalRow: request.isFinalRow }),
             },
           ],
         });
