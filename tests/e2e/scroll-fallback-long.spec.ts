@@ -6,6 +6,15 @@ interface BenchmarkJob {
   mode: string;
   state: string;
   activeEngine?: string;
+  activeOutputFormat?: string;
+  outputArtifactId?: string;
+  output?: {
+    artifactId: string;
+    format: string;
+    mimeType: string;
+    byteLength: number;
+    pageCount?: number;
+  };
   completedTiles: number;
   totalTiles: number;
   updatedAt: string;
@@ -89,15 +98,26 @@ test("@smoke captures a 10k CSS-pixel page through scroll fallback", async ({
         },
         { timeout: 75_000 },
       )
-      .toBe("ready");
+      .toBe("completed");
     const durationMs = Date.now() - startedAt;
 
     const job = await readLatestFullPageJob(serviceWorker);
     expect(job).toMatchObject({
-      state: "ready",
+      state: "completed",
       activeEngine: "scroll",
+      activeOutputFormat: "pdf",
+      outputArtifactId: expect.any(String),
+      output: {
+        artifactId: expect.any(String),
+        format: "pdf",
+        mimeType: "application/pdf",
+        byteLength: expect.any(Number),
+        pageCount: expect.any(Number),
+      },
       cleanup: { completed: true },
     });
+    expect(job?.outputArtifactId).toBe(job?.output?.artifactId);
+    expect(job?.output?.byteLength).toBeGreaterThan(0);
     expect(job?.targetRect?.height).toBeGreaterThanOrEqual(10_000);
     expect(job?.totalTiles).toBeGreaterThanOrEqual(19);
     expect(job?.completedTiles).toBe(job?.totalTiles);
@@ -110,9 +130,9 @@ test("@smoke captures a 10k CSS-pixel page through scroll fallback", async ({
     ).toBe(0);
 
     await popup.bringToFront();
-    await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({
-      timeout: 5_000,
-    });
+    const result = popup.getByTestId("tiled-output-result");
+    await expect(result).toBeVisible({ timeout: 5_000 });
+    await expect(result).toHaveAttribute("data-format", "pdf");
   } finally {
     await serviceWorker
       .evaluate(async (id) => chrome.debugger.detach({ tabId: id }), tabId)
