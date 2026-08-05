@@ -4,7 +4,6 @@ export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
   workers: 1,
-  maxFailures: 1,
   timeout: 60_000,
   expect: {
     timeout: 15_000,
@@ -23,9 +22,29 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "s24-full-page-diagnostic",
-      grep: /captures a multi-tile full page/,
+      name: "visible-smoke",
+      grep: /@smoke/,
       use: { deviceScaleFactor: 1 },
+    },
+    {
+      name: "visible-dpr2-zoom125",
+      grep: /@dpr/,
+      use: { deviceScaleFactor: 2 },
+    },
+    {
+      name: "release-matrix-dpr1",
+      grep: /@release-matrix/,
+      use: { deviceScaleFactor: 1 },
+    },
+    {
+      name: "release-matrix-dpr15",
+      grep: /@release-matrix/,
+      use: { deviceScaleFactor: 1.5 },
+    },
+    {
+      name: "release-matrix-dpr2",
+      grep: /@release-matrix/,
+      use: { deviceScaleFactor: 2 },
     },
   ],
 });

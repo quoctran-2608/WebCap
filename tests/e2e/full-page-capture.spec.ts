@@ -16,6 +16,15 @@ interface StoredFullPageState {
     id: string;
     state: string;
     activeEngine?: string;
+    activeOutputFormat?: string;
+    outputArtifactId?: string;
+    output?: {
+      artifactId: string;
+      format: string;
+      mimeType: string;
+      byteLength: number;
+      pageCount?: number;
+    };
     completedTiles: number;
     totalTiles: number;
     errorCode?: string;
@@ -91,6 +100,15 @@ async function readFullPageState(serviceWorker: Worker): Promise<StoredFullPageS
       mode: string;
       state: string;
       activeEngine?: string;
+      activeOutputFormat?: string;
+      outputArtifactId?: string;
+      output?: {
+        artifactId: string;
+        format: string;
+        mimeType: string;
+        byteLength: number;
+        pageCount?: number;
+      };
       completedTiles: number;
       totalTiles: number;
       updatedAt: string;
@@ -133,6 +151,13 @@ async function readFullPageState(serviceWorker: Worker): Promise<StoredFullPageS
               id: job.id,
               state: job.state,
               ...(job.activeEngine === undefined ? {} : { activeEngine: job.activeEngine }),
+              ...(job.activeOutputFormat === undefined
+                ? {}
+                : { activeOutputFormat: job.activeOutputFormat }),
+              ...(job.outputArtifactId === undefined
+                ? {}
+                : { outputArtifactId: job.outputArtifactId }),
+              ...(job.output === undefined ? {} : { output: job.output }),
               completedTiles: job.completedTiles,
               totalTiles: job.totalTiles,
               ...(job.error === undefined
@@ -172,16 +197,31 @@ test("@smoke captures a multi-tile full page, persists tiles, restores, and deta
 
   await selectFullPage(popup);
   await popup.getByRole("button", { name: "Bắt đầu chụp toàn trang" }).click();
-  await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({
-    timeout: 45_000,
-  });
+  const result = popup.getByTestId("tiled-output-result");
+  await expect(result).toBeVisible({ timeout: 45_000 });
+  await expect(result).toHaveAttribute("data-format", "pdf");
+  await expect(result.getByRole("heading", { name: "PDF đã sẵn sàng" })).toBeVisible();
+  await expect(result.getByRole("button", { name: "Tải xuống" })).toBeVisible();
+  await expect(result.getByRole("button", { name: "Mở trình biên tập PDF" })).toBeVisible();
 
   const state = await readFullPageState(serviceWorker);
   expect(state.job).toMatchObject({
-    state: "ready",
+    state: "completed",
     activeEngine: "scroll",
+    activeOutputFormat: "pdf",
     cleanupCompleted: true,
+    outputArtifactId: expect.any(String),
+    output: {
+      artifactId: expect.any(String),
+      format: "pdf",
+      mimeType: "application/pdf",
+      byteLength: expect.any(Number),
+      pageCount: expect.any(Number),
+    },
   });
+  expect(state.job?.outputArtifactId).toBe(state.job?.output?.artifactId);
+  expect(state.job?.output?.byteLength).toBeGreaterThan(0);
+  expect(state.job?.output?.pageCount).toBeGreaterThan(0);
   expect(state.job?.completedTiles).toBeGreaterThan(0);
   expect(state.job?.completedTiles).toBe(state.job?.totalTiles);
   expect(state.job?.tileStatuses.every((status) => status === "stored")).toBe(true);
