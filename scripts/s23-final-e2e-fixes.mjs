@@ -13,6 +13,19 @@ async function patchRestartHarness() {
   let source = await readFile(path, "utf8");
   source = replaceUnique(
     source,
+    `async function restartExtensionWorker(
+  context: BrowserContext,
+  extensionId: string,
+  worker: Worker,
+  popup: Page,`,
+    `async function restartExtensionWorker(
+  context: BrowserContext,
+  extensionId: string,
+  popup: Page,`,
+    "obsolete worker parameter",
+  );
+  source = replaceUnique(
+    source,
     `  const nextWorker = context.waitForEvent("serviceworker", {
     predicate: (candidate) =>
       candidate !== worker && candidate.url().startsWith(\`chrome-extension://\${extensionId}/\`),
@@ -56,6 +69,19 @@ async function patchRestartHarness() {
   }
   throw new Error("The restarted extension service worker did not become observable.");`,
     "CDP restart observation",
+  );
+  source = replaceUnique(
+    source,
+    `  const restartedWorker = await restartExtensionWorker(
+    context,
+    extensionId,
+    serviceWorker,
+    popup,`,
+    `  const restartedWorker = await restartExtensionWorker(
+    context,
+    extensionId,
+    popup,`,
+    "restart helper call",
   );
   await writeFile(path, source, "utf8");
 }
