@@ -391,3 +391,38 @@ Deferred sau 0.2.0: advanced crop, original PDF page ranges, one-long-page PDF, 
 - S24 auto-export/output policy có thể tắt mà giữ tiles.
 - S25 UI/settings có thể rollback presentation, không rollback contracts.
 - Không package/upload 0.2.0 trước S26 gate và approval riêng.
+
+# 10. S21 implementation lock
+
+S21 khóa các quyết định reset sau; session sau không được thay semantics nếu không có ADR và migration riêng.
+
+## 10.1 Contract và idempotency
+
+- Message `CAPTURE_RESET` version 1 có ba scope: `visible-session`, `job`, `tab`.
+- Payload chỉ cho phép disposition `discard-local-data`; không truyền binary, URL hoặc page content.
+- Response trả counters theo ownership, trạng thái cancellation và optional safe warning.
+- Router dùng request dedupe hiện có; replay cùng `requestId` trả cùng response mà không xóa lần hai.
+- Job/session đã mất được coi là success idempotent.
+
+## 10.2 Active-reset ordering
+
+Thứ tự bắt buộc:
+
+1. đóng selector thuộc job nếu có;
+2. yêu cầu capture hoặc PDF export cancel;
+3. chờ coordinator `waitForIdle` để callback bất đồng bộ dừng;
+4. chạy page/engine cleanup và restore;
+5. xóa manifest, artifacts, tiles, job, summary và lock;
+6. trả report, kèm `E_CLEANUP_PARTIAL` nếu một bước best-effort không hoàn tất.
+
+Không được xóa local records trước khi tác vụ active dừng, vì callback muộn có thể ghi lại output hoặc job state.
+
+## 10.3 Late-output protection
+
+- Image/PDF output hoàn tất sau reset phải tự xóa artifact vừa tạo và trả `E_CANCELLED`.
+- Reset visible xóa mọi artifact có `jobId` bằng source capture ID, không chỉ output đang hiển thị.
+- Reset không xóa settings, locale hoặc file đã được Chrome Downloads lưu ra ngoài extension storage.
+
+## 10.4 Shared cleanup primitive
+
+`CaptureOwnedDataCleanupService` là primitive duy nhất cho user reset và được tái sử dụng dần bởi expiry/launch-failure cleanup. Ownership boundary gồm PDF edit manifest, thumbnail/output/source artifacts, tiles, job, metadata summary và exact matching tab lock. Không xóa record của job khác chỉ vì cùng tab.

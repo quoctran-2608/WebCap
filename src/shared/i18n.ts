@@ -21,6 +21,7 @@ const VI = {
   "common.privacy": "Quyền riêng tư và quyền truy cập",
   "common.permissions": "Các quyền WebCap sử dụng",
   "common.close": "Đóng",
+  "common.newCapture": "Chụp mới",
   "popup.brandEyebrow": "TIỆN ÍCH CHROME",
   "popup.workerLabel": "Service worker",
   "popup.extensionStatus": "Trạng thái extension",
@@ -57,6 +58,13 @@ const VI = {
   "popup.stopKeep": "Dừng và giữ {count} tile",
   "popup.cancelDiscard": "Hủy và xóa phần tạm",
   "popup.cancelCapture": "Hủy chụp",
+  "popup.reset.active": "Hủy và chụp mới",
+  "popup.reset.running": "Đang làm mới…",
+  "popup.reset.success": "Đã dọn lượt chụp trước. Bạn có thể bắt đầu lượt chụp mới.",
+  "popup.reset.partial":
+    "Đã làm mới dữ liệu chụp. Một bước khôi phục không hoàn tất; hãy tải lại trang nếu thấy trạng thái bất thường.",
+  "popup.reset.confirmActive":
+    "Lượt chụp đang chạy sẽ bị hủy và toàn bộ dữ liệu tạm sẽ bị xóa. Bạn có muốn tiếp tục?",
   "popup.capture.capturing": "Đang chụp tab hiện tại…",
   "popup.capture.captured": "Đã chụp xong, chuẩn bị mã hóa…",
   "popup.capture.processing": "Đang tạo ảnh xem trước…",
@@ -264,6 +272,7 @@ const EN: Record<MessageKey, string> = {
   "common.privacy": "Privacy and permissions",
   "common.permissions": "Permissions WebCap uses",
   "common.close": "Close",
+  "common.newCapture": "New capture",
   "popup.brandEyebrow": "CHROME EXTENSION",
   "popup.workerLabel": "Service worker",
   "popup.extensionStatus": "Extension status",
@@ -300,6 +309,13 @@ const EN: Record<MessageKey, string> = {
   "popup.stopKeep": "Stop and keep {count} tiles",
   "popup.cancelDiscard": "Cancel and delete temporary data",
   "popup.cancelCapture": "Cancel capture",
+  "popup.reset.active": "Cancel and start new",
+  "popup.reset.running": "Resetting…",
+  "popup.reset.success": "The previous capture was cleared. You can start a new capture.",
+  "popup.reset.partial":
+    "Capture data was reset, but one restore step was incomplete. Reload the page if anything looks unusual.",
+  "popup.reset.confirmActive":
+    "The active capture will be cancelled and all temporary data will be deleted. Continue?",
   "popup.capture.capturing": "Capturing the current tab…",
   "popup.capture.captured": "Capture complete; preparing encoding…",
   "popup.capture.processing": "Creating preview…",

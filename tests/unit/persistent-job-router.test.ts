@@ -109,6 +109,8 @@ class FakeCoordinator implements PersistentJobCoordinatorPort {
       failedJobs: 0,
       deletedTiles: 0,
       deletedArtifacts: 0,
+      deletedManifests: 0,
+      clearedSessions: 0,
     });
   }
 }
@@ -233,6 +235,7 @@ describe("persistent job router", () => {
       ...dependencies(jobs, dedupe),
       pdfExports: {
         start: () => Promise.resolve(jobs.current as CaptureJob),
+        cancel: () => Promise.resolve(jobs.current as CaptureJob),
         handleProgress: () => Promise.reject(new Error("progress persistence failed")),
       },
     });

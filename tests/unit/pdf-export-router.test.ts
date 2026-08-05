@@ -49,14 +49,15 @@ function dedupe(): DedupeRepositoryPort {
 
 function dependencies() {
   const start = vi.fn(() => Promise.resolve(exportingJob()));
+  const cancel = vi.fn(() => Promise.resolve(exportingJob()));
   const handleProgress = vi.fn(() => Promise.resolve(exportingJob()));
   const value: PersistentJobRouterDependencies = {
     jobs: {} as PersistentJobCoordinatorPort,
     dedupe: dedupe(),
-    pdfExports: { start, handleProgress },
+    pdfExports: { start, cancel, handleProgress },
     now: () => NOW,
   };
-  return { value, start, handleProgress };
+  return { value, start, cancel, handleProgress };
 }
 
 describe("PDF export routing", () => {

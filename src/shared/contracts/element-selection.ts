@@ -46,6 +46,16 @@ export const ElementSelectionOpenMessageSchema = BackgroundToContentSchema.exten
     .strict(),
 }).strict();
 
+export const ElementSelectionCloseMessageSchema = BackgroundToContentSchema.extend({
+  type: z.literal("ELEMENT_SELECTION_CLOSE"),
+  payload: z.object({ jobId: IdentifierSchema }).strict(),
+}).strict();
+
+export const ElementSelectionClosedMessageSchema = ContentToBackgroundSchema.extend({
+  type: z.literal("ELEMENT_SELECTION_CLOSED"),
+  payload: z.object({ jobId: IdentifierSchema, closed: z.boolean() }).strict(),
+}).strict();
+
 export const ElementSelectionOpenedMessageSchema = ContentToBackgroundSchema.extend({
   type: z.literal("ELEMENT_SELECTION_OPENED"),
   payload: z.object({ jobId: IdentifierSchema, reused: z.boolean() }).strict(),
@@ -111,6 +121,8 @@ export const ElementTargetValidatedMessageSchema = ContentToBackgroundSchema.ext
 }).strict();
 
 export type ElementSelectionOpenMessage = z.infer<typeof ElementSelectionOpenMessageSchema>;
+export type ElementSelectionCloseMessage = z.infer<typeof ElementSelectionCloseMessageSchema>;
+export type ElementSelectionClosedMessage = z.infer<typeof ElementSelectionClosedMessageSchema>;
 export type ElementSelectionOpenedMessage = z.infer<typeof ElementSelectionOpenedMessageSchema>;
 export type ElementSelectionCommitMessage = z.infer<typeof ElementSelectionCommitMessageSchema>;
 export type ElementSelectionCancelMessage = z.infer<typeof ElementSelectionCancelMessageSchema>;
@@ -132,6 +144,22 @@ export function createElementSelectionOpenMessage(options: {
     target: "content",
     type: "ELEMENT_SELECTION_OPEN",
     payload: { jobId: options.jobId, captureKind: options.captureKind },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createElementSelectionCloseMessage(options: {
+  requestId: string;
+  jobId: string;
+  sentAt: string;
+}): ElementSelectionCloseMessage {
+  return ElementSelectionCloseMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "content",
+    type: "ELEMENT_SELECTION_CLOSE",
+    payload: { jobId: options.jobId },
     sentAt: options.sentAt,
   });
 }
@@ -191,6 +219,31 @@ export function parseElementSelectionOpenResponse(
       retryable: false,
       fallbackAllowed: false,
       causeCode: "InvalidElementSelectionResponse",
+    }),
+  );
+}
+
+export function parseElementSelectionCloseResponse(
+  value: unknown,
+  expectedRequestId: string,
+): Result<ElementSelectionClosedMessage, WebCapErrorData> {
+  const closed = ElementSelectionClosedMessageSchema.safeParse(value);
+  if (closed.success && closed.data.requestId === expectedRequestId) {
+    return ok(closed.data);
+  }
+  const failure = ElementSelectionErrorMessageSchema.safeParse(value);
+  if (failure.success && failure.data.requestId === expectedRequestId) {
+    return err(failure.data.payload);
+  }
+  return err(
+    createWebCapError({
+      code: "E_PROTOCOL_MESSAGE",
+      stage: "protocol",
+      message: "The content script returned an invalid element selector close response.",
+      userMessageKey: "errors.elementSelectionProtocol",
+      retryable: false,
+      fallbackAllowed: false,
+      causeCode: "InvalidElementSelectionCloseResponse",
     }),
   );
 }

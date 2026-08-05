@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { OffscreenService } from "@background/offscreen-service";
 import type { DownloadService } from "@background/download-service";
@@ -115,5 +115,69 @@ describe("ImageExportService", () => {
         quality: 1,
       }),
     ).rejects.toThrow("quota");
+  });
+  it("deletes an output that finishes after its source was reset", async () => {
+    let resolveProcessing!: (value: {
+      artifactId: string;
+      sourceArtifactId: string;
+      format: "png";
+      mimeType: "image/png";
+      filename: string;
+      byteLength: number;
+      width: number;
+      height: number;
+      createdAt: string;
+      expiresAt: string;
+    }) => void;
+    const deleted: string[] = [];
+    const service = new ImageExportService({
+      artifacts: {
+        ...repository,
+        delete: (artifactId) => {
+          deleted.push(artifactId);
+          return Promise.resolve(true);
+        },
+      },
+      offscreen: {
+        processImage: (options: {
+          sourceArtifactId: string;
+          outputArtifactId: string;
+          filename: string;
+          createdAt: string;
+          expiresAt: string;
+        }) =>
+          new Promise((resolve) => {
+            resolveProcessing = () =>
+              resolve({
+                artifactId: options.outputArtifactId,
+                sourceArtifactId: options.sourceArtifactId,
+                format: "png",
+                mimeType: "image/png",
+                filename: options.filename,
+                byteLength: 10,
+                width: 1,
+                height: 1,
+                createdAt: options.createdAt,
+                expiresAt: options.expiresAt,
+              });
+          }),
+      } as unknown as OffscreenService,
+      downloads: {} as DownloadService,
+      createId: () => "late-output",
+    });
+
+    const exportPromise = service.exportCapture({
+      requestId: "late-request",
+      sourceArtifactId: "source-1",
+      format: "png",
+      quality: 1,
+    });
+    await vi.waitFor(() => expect(resolveProcessing).toBeTypeOf("function"));
+    const cancelPromise = service.cancelBySourceArtifactId("source-1");
+    resolveProcessing({} as never);
+
+    await cancelPromise;
+    await expect(exportPromise).rejects.toMatchObject({ name: "E_CANCELLED" });
+    expect(deleted).toContain("late-output");
   });
 });

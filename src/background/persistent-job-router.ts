@@ -26,6 +26,12 @@ import { CdpCaptureEngine } from "@capture/cdp-capture-engine";
 import { ScrollAreaCaptureEngine } from "@capture/scroll-area-capture-engine";
 import { ScrollCaptureEngine } from "@capture/scroll-capture-engine";
 import { DEDUPE_RECORD_SCHEMA_VERSION, DEDUPE_TTL_MS } from "@shared/constants";
+import {
+  CaptureResetResponseSchema,
+  createCaptureResetResponse,
+  type CaptureResetReport,
+  type CaptureResetResponse,
+} from "@shared/contracts/capture-reset";
 import type { CaptureJob } from "@shared/contracts/domain";
 import type { StoredDedupeRecord } from "@shared/contracts/job";
 import {
@@ -63,15 +69,20 @@ import {
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
 import { IndexedDbDedupeRepository, type DedupeRepositoryPort } from "@storage/dedupe-repository";
+import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
 import { IndexedDbJobArtifactCleanupRepository } from "@storage/job-artifact-cleanup-repository";
 import { IndexedDbJobRepository } from "@storage/job-repository";
 import { JobSessionRepository } from "@storage/job-session-repository";
+import { PdfEditManifestRepository } from "@storage/pdf-edit-manifest-repository";
 import { IndexedDbTileRepository } from "@storage/tile-repository";
 
+import { CaptureOwnedDataCleanupService } from "./capture-data-cleanup-service";
+import { CaptureResetService } from "./capture-reset-service";
 import { PersistentJobCoordinator, type PersistentJobCoordinatorPort } from "./job-coordinator";
+import { getMessageRouterDependencies } from "./message-router";
 
 export type PersistentJobRouterResponse =
-  JobResponseMessage | JobActiveResponseMessage | ErrorResponseMessage;
+  JobResponseMessage | JobActiveResponseMessage | CaptureResetResponse | ErrorResponseMessage;
 
 export type RegionSelectionRouterResponse = RegionSelectionEventAckMessage | ErrorResponseMessage;
 export type ElementSelectionRouterResponse = ElementSelectionEventAckMessage | ErrorResponseMessage;
@@ -84,10 +95,13 @@ export interface FullPageCapturePort {
     reason?: string,
     disposition?: "discard" | "keep-partial",
   ): Promise<CaptureJob>;
+  waitForIdle?(jobId: string): Promise<void>;
 }
 
 export interface PdfExportPort {
   start(jobId: string, settings?: CaptureJob["settings"]["pdf"]): Promise<CaptureJob>;
+  cancel(jobId: string): Promise<CaptureJob>;
+  waitForIdle?(jobId: string): Promise<void>;
   handleProgress(progress: {
     jobId: string;
     completedPages: number;
@@ -104,6 +118,7 @@ export interface PersistentJobRouterDependencies {
   regions?: RegionSelectionPort;
   elements?: ElementSelectionPort & ElementTargetValidationPort;
   pdfExports?: PdfExportPort;
+  reset?: Pick<CaptureResetService, "reset">;
 }
 
 let sharedDependencies: PersistentJobRouterDependencies | undefined;
@@ -112,7 +127,7 @@ function addMilliseconds(date: Date, milliseconds: number): string {
   return new Date(date.getTime() + milliseconds).toISOString();
 }
 
-function defaultDependencies(): PersistentJobRouterDependencies {
+export function getPersistentJobRouterDependencies(): PersistentJobRouterDependencies {
   if (sharedDependencies !== undefined) {
     return sharedDependencies;
   }
@@ -120,6 +135,15 @@ function defaultDependencies(): PersistentJobRouterDependencies {
   const jobRepository = new IndexedDbJobRepository();
   const sessions = new JobSessionRepository();
   const tiles = new IndexedDbTileRepository();
+  const jobArtifacts = new IndexedDbJobArtifactCleanupRepository();
+  const manifests = new PdfEditManifestRepository();
+  const ownedDataCleanup = new CaptureOwnedDataCleanupService({
+    jobs: jobRepository,
+    sessions,
+    tiles,
+    artifacts: jobArtifacts,
+    manifests,
+  });
   const pages = new PagePreparationService({
     browser: createChromePagePreparationAdapter(),
   });
@@ -130,7 +154,8 @@ function defaultDependencies(): PersistentJobRouterDependencies {
     jobs: jobRepository,
     sessions,
     tiles,
-    artifacts: new IndexedDbJobArtifactCleanupRepository(),
+    artifacts: jobArtifacts,
+    ownedDataCleanup,
     cleanup: {
       async cleanup(job) {
         if (job.mode === "scroll-area") {
@@ -178,10 +203,35 @@ function defaultDependencies(): PersistentJobRouterDependencies {
     targetValidator: elements,
   });
   const regions = new RegionSelectionService(createChromeRegionSelectionBrowserAdapter());
+  const artifacts = new IndexedDbArtifactRepository();
   const pdfExports = new PdfExportService({
     jobs,
     tiles,
     offscreen: new OffscreenService(),
+    manifests,
+    artifacts,
+  });
+  const visible = getMessageRouterDependencies();
+  if (
+    visible.visibleSessions === undefined ||
+    visible.artifacts === undefined ||
+    visible.artifactsByJob === undefined
+  ) {
+    throw new Error("Visible capture reset dependencies are unavailable.");
+  }
+  const reset = new CaptureResetService({
+    jobs,
+    cleanup: ownedDataCleanup,
+    captures,
+    scrollAreaCaptures,
+    pdfExports,
+    regionSelections: regions,
+    elementSelections: elements,
+    visibleSessions: visible.visibleSessions,
+    visibleCapture: visible.visibleCapture,
+    imageExport: visible.imageExport,
+    artifacts: visible.artifacts,
+    artifactsByJob: visible.artifactsByJob,
   });
   const dedupe = new IndexedDbDedupeRepository();
   sharedDependencies = {
@@ -191,6 +241,7 @@ function defaultDependencies(): PersistentJobRouterDependencies {
     regions,
     elements,
     pdfExports,
+    reset,
     dedupe,
     now: () => new Date(),
   };
@@ -217,7 +268,8 @@ export function isPersistentJobMessageType(value: unknown): boolean {
     type === "JOB_GET" ||
     type === "JOB_GET_ACTIVE" ||
     type === "JOB_CANCEL" ||
-    type === "PDF_EXPORT_START"
+    type === "PDF_EXPORT_START" ||
+    type === "CAPTURE_RESET"
   );
 }
 
@@ -262,6 +314,10 @@ async function readCachedResponse(
   if (activeResponse.success) {
     return activeResponse.data;
   }
+  const resetResponse = CaptureResetResponseSchema.safeParse(record.response);
+  if (resetResponse.success) {
+    return resetResponse.data;
+  }
   const errorResponse = ErrorResponseMessageSchema.safeParse(record.response);
   return errorResponse.success ? errorResponse.data : undefined;
 }
@@ -291,7 +347,9 @@ async function cacheResponse(
 }
 
 type JobRequestResult =
-  { kind: "job"; job: CaptureJob } | { kind: "active"; job: CaptureJob | null };
+  | { kind: "job"; job: CaptureJob }
+  | { kind: "active"; job: CaptureJob | null }
+  | { kind: "reset"; report: CaptureResetReport };
 
 async function executeJobRequest(
   request: PersistentJobRequest,
@@ -378,6 +436,22 @@ async function executeJobRequest(
         job: await dependencies.pdfExports.start(request.payload.jobId, request.payload.settings),
       };
     }
+    case "CAPTURE_RESET": {
+      if (dependencies.reset === undefined) {
+        throw createWebCapRuntimeError(
+          createWebCapError({
+            code: "E_CLEANUP_PARTIAL",
+            stage: "cleanup",
+            message: "The capture reset service is unavailable.",
+            userMessageKey: "errors.cleanupPartial",
+            retryable: true,
+            fallbackAllowed: false,
+            causeCode: "CaptureResetServiceMissing",
+          }),
+        );
+      }
+      return { kind: "reset", report: await dependencies.reset.reset(request) };
+    }
     case "JOB_CANCEL": {
       const job = await dependencies.jobs.get(request.payload.jobId);
       if (job === undefined) {
@@ -449,23 +523,42 @@ export async function routePersistentJobMessage(
             job: result.job,
             sentAt: dependencies.now().toISOString(),
           })
-        : createJobResponseMessage({
-            requestId: parsed.value.requestId,
-            job: result.job,
-            sentAt: dependencies.now().toISOString(),
-          });
+        : result.kind === "reset"
+          ? createCaptureResetResponse({
+              requestId: parsed.value.requestId,
+              target: parsed.value.source,
+              report: result.report,
+              sentAt: dependencies.now().toISOString(),
+            })
+          : createJobResponseMessage({
+              requestId: parsed.value.requestId,
+              job: result.job,
+              sentAt: dependencies.now().toISOString(),
+            });
+    const responseJobId =
+      result.kind === "job"
+        ? result.job.id
+        : result.kind === "active"
+          ? result.job?.id
+          : result.report.jobId;
     await cacheResponse(
       parsed.value.type,
       parsed.value.requestId,
-      result.job?.id,
+      responseJobId,
       response,
       dependencies,
     );
     return response;
   } catch (error) {
     const normalized = normalizeError(error, {
-      stage: parsed.value.type === "JOB_CANCEL" ? "cleanup" : "storage",
-      userMessageKey: parsed.value.type === "JOB_CANCEL" ? "errors.jobCancel" : "errors.jobCommand",
+      stage:
+        parsed.value.type === "JOB_CANCEL" || parsed.value.type === "CAPTURE_RESET"
+          ? "cleanup"
+          : "storage",
+      userMessageKey:
+        parsed.value.type === "JOB_CANCEL" || parsed.value.type === "CAPTURE_RESET"
+          ? "errors.jobCancel"
+          : "errors.jobCommand",
       retryable: true,
       fallbackAllowed: false,
     });
@@ -479,7 +572,9 @@ export async function routePersistentJobMessage(
       parsed.value.type === "JOB_CANCEL" ||
       parsed.value.type === "PDF_EXPORT_START"
         ? parsed.value.payload.jobId
-        : undefined;
+        : parsed.value.type === "CAPTURE_RESET" && parsed.value.payload.scope === "job"
+          ? parsed.value.payload.jobId
+          : undefined;
     await cacheResponse(parsed.value.type, parsed.value.requestId, jobId, response, dependencies);
     return response;
   }
@@ -724,7 +819,7 @@ export async function routePdfExportProgressMessage(
 }
 
 export function registerPersistentJobRouter(): void {
-  const dependencies = defaultDependencies();
+  const dependencies = getPersistentJobRouterDependencies();
   chrome.runtime.onMessage.addListener(
     (
       message: unknown,

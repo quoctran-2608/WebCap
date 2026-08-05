@@ -1,5 +1,10 @@
 import { throwRemoteWebCapError } from "@shared/errors/remote-error";
 import { DEFAULT_REQUEST_TIMEOUT_MS } from "@shared/constants";
+import {
+  createCaptureResetRequest,
+  isCaptureResetResponse,
+  type CaptureResetReport,
+} from "@shared/contracts/capture-reset";
 import type { CaptureJob, ImageFormat } from "@shared/contracts/domain";
 import {
   createJobCancelMessage,
@@ -147,4 +152,51 @@ export function cancelFullPageCapture(jobId: string): Promise<CaptureJob> {
 
 export function stopFullPageCapture(jobId: string): Promise<CaptureJob> {
   return requestFullPageCancellation(jobId, "keep-partial");
+}
+
+export async function resetCapture(
+  options:
+    | {
+        scope: "visible-session";
+      }
+    | {
+        scope: "job";
+        jobId: string;
+      }
+    | {
+        scope: "tab";
+        tabId: number;
+      },
+): Promise<CaptureResetReport> {
+  const request =
+    options.scope === "job"
+      ? createCaptureResetRequest({
+          requestId: crypto.randomUUID(),
+          sentAt: new Date().toISOString(),
+          scope: "job",
+          jobId: options.jobId,
+        })
+      : options.scope === "tab"
+        ? createCaptureResetRequest({
+            requestId: crypto.randomUUID(),
+            sentAt: new Date().toISOString(),
+            scope: "tab",
+            tabId: options.tabId,
+          })
+        : createCaptureResetRequest({
+            requestId: crypto.randomUUID(),
+            sentAt: new Date().toISOString(),
+            scope: "visible-session",
+          });
+  const response: unknown = await Promise.race([
+    chrome.runtime.sendMessage(request),
+    rejectAfter(DEFAULT_REQUEST_TIMEOUT_MS),
+  ]);
+  if (isErrorResponseMessage(response)) {
+    throwRemoteWebCapError(response.payload);
+  }
+  if (!isCaptureResetResponse(response) || response.requestId !== request.requestId) {
+    throw new TypeError("Service worker returned an invalid capture reset response.");
+  }
+  return response.payload;
 }

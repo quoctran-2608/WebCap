@@ -932,13 +932,25 @@ interface RegionSelectionOpenRequest {
   sentAt: string;
 }
 
-function isRegionSelectionOpenRequest(value: unknown): value is RegionSelectionOpenRequest {
+interface RegionSelectionCloseRequest {
+  protocolVersion: 1;
+  requestId: string;
+  source: "background";
+  target: "content";
+  type: "REGION_SELECTION_CLOSE";
+  payload: { jobId: string };
+  sentAt: string;
+}
+
+type RegionSelectionRequest = RegionSelectionOpenRequest | RegionSelectionCloseRequest;
+
+function isRegionSelectionRequest(value: unknown): value is RegionSelectionRequest {
   return (
     isRecord(value) &&
     value.protocolVersion === PAGE_PREPARATION_PROTOCOL_VERSION &&
     value.source === "background" &&
     value.target === "content" &&
-    value.type === "REGION_SELECTION_OPEN" &&
+    (value.type === "REGION_SELECTION_OPEN" || value.type === "REGION_SELECTION_CLOSE") &&
     hasString(value, "requestId") &&
     hasString(value, "sentAt") &&
     isRecord(value.payload) &&
@@ -947,8 +959,8 @@ function isRegionSelectionOpenRequest(value: unknown): value is RegionSelectionO
 }
 
 function regionSelectionResponse(
-  request: RegionSelectionOpenRequest,
-  type: "REGION_SELECTION_OPENED" | "REGION_SELECTION_ERROR",
+  request: RegionSelectionRequest,
+  type: "REGION_SELECTION_OPENED" | "REGION_SELECTION_CLOSED" | "REGION_SELECTION_ERROR",
   payload: unknown,
 ): Record<string, unknown> {
   return {
@@ -963,7 +975,7 @@ function regionSelectionResponse(
 }
 
 function regionSelectionError(
-  request: RegionSelectionOpenRequest,
+  request: RegionSelectionRequest,
   message: string,
   causeCode: string,
 ): Record<string, unknown> {
@@ -1001,11 +1013,25 @@ function ensureRegionSelectionRuntime(state: PagePreparationRuntimeState): void 
   }
 
   state.regionListener = (message, sender, sendResponse) => {
-    if (!isRegionSelectionOpenRequest(message) || sender.id !== chrome.runtime.id) {
+    if (!isRegionSelectionRequest(message) || sender.id !== chrome.runtime.id) {
       return false;
     }
 
     const current = state.region;
+    if (message.type === "REGION_SELECTION_CLOSE") {
+      const closed = current?.jobId === message.payload.jobId;
+      if (current?.jobId === message.payload.jobId) {
+        current.dispose();
+        delete state.region;
+      }
+      sendResponse(
+        regionSelectionResponse(message, "REGION_SELECTION_CLOSED", {
+          jobId: message.payload.jobId,
+          closed,
+        }),
+      );
+      return false;
+    }
     if (current?.jobId === message.payload.jobId) {
       sendResponse(
         regionSelectionResponse(message, "REGION_SELECTION_OPENED", {
@@ -1133,6 +1159,16 @@ interface ElementSelectionOpenRequest {
   sentAt: string;
 }
 
+interface ElementSelectionCloseRequest {
+  protocolVersion: 1;
+  requestId: string;
+  source: "background";
+  target: "content";
+  type: "ELEMENT_SELECTION_CLOSE";
+  payload: { jobId: string };
+  sentAt: string;
+}
+
 interface ElementTargetRevalidateRequest {
   protocolVersion: 1;
   requestId: string;
@@ -1143,7 +1179,8 @@ interface ElementTargetRevalidateRequest {
   sentAt: string;
 }
 
-type ElementSelectionRequest = ElementSelectionOpenRequest | ElementTargetRevalidateRequest;
+type ElementSelectionRequest =
+  ElementSelectionOpenRequest | ElementSelectionCloseRequest | ElementTargetRevalidateRequest;
 
 interface ScrollAreaStyleMutation {
   element: HTMLElement;
@@ -1209,6 +1246,7 @@ function isElementSelectionRequest(value: unknown): value is ElementSelectionReq
     return false;
   }
   return (
+    value.type === "ELEMENT_SELECTION_CLOSE" ||
     (value.type === "ELEMENT_SELECTION_OPEN" &&
       (value.payload.captureKind === "visible-bounds" ||
         value.payload.captureKind === "full-scroll-content")) ||
@@ -1219,7 +1257,11 @@ function isElementSelectionRequest(value: unknown): value is ElementSelectionReq
 
 function elementSelectionResponse(
   request: ElementSelectionRequest,
-  type: "ELEMENT_SELECTION_OPENED" | "ELEMENT_TARGET_VALIDATED" | "ELEMENT_SELECTION_ERROR",
+  type:
+    | "ELEMENT_SELECTION_OPENED"
+    | "ELEMENT_SELECTION_CLOSED"
+    | "ELEMENT_TARGET_VALIDATED"
+    | "ELEMENT_SELECTION_ERROR",
   payload: unknown,
 ): Record<string, unknown> {
   return {
@@ -1690,6 +1732,39 @@ function installElementSelectionRuntime(): { installed: boolean; reused: boolean
       return true;
     }
     if (!isElementSelectionRequest(message)) return false;
+
+    if (message.type === "ELEMENT_SELECTION_CLOSE") {
+      const controller = state.controller;
+      let closed = controller?.jobId === message.payload.jobId;
+      if (controller?.jobId === message.payload.jobId) {
+        controller.dispose();
+        delete state.controller;
+      }
+      for (const [selectionId, target] of state.targets) {
+        if (target.jobId !== message.payload.jobId) continue;
+        if (target.scrollAreaSnapshot !== undefined) {
+          restoreScrollAreaMutations(target.scrollAreaSnapshot);
+          if (target.element instanceof HTMLElement && target.element.isConnected) {
+            target.element.scrollLeft = target.scrollAreaSnapshot.originalScrollLeft;
+            target.element.scrollTop = target.scrollAreaSnapshot.originalScrollTop;
+          }
+          window.scrollTo({
+            left: target.scrollAreaSnapshot.originalDocumentScrollX,
+            top: target.scrollAreaSnapshot.originalDocumentScrollY,
+            behavior: "auto",
+          });
+        }
+        state.targets.delete(selectionId);
+        closed = true;
+      }
+      sendResponse(
+        elementSelectionResponse(message, "ELEMENT_SELECTION_CLOSED", {
+          jobId: message.payload.jobId,
+          closed,
+        }),
+      );
+      return false;
+    }
 
     if (message.type === "ELEMENT_TARGET_REVALIDATE") {
       const stored = state.targets.get(message.payload.descriptor.selectionId);

@@ -37,6 +37,23 @@ export const RegionSelectionOpenMessageSchema = BackgroundToContentSchema.extend
   payload: z.object({ jobId: IdentifierSchema }).strict(),
 }).strict();
 
+export const RegionSelectionCloseMessageSchema = BackgroundToContentSchema.extend({
+  type: z.literal("REGION_SELECTION_CLOSE"),
+  payload: z.object({ jobId: IdentifierSchema }).strict(),
+}).strict();
+
+export const RegionSelectionClosedMessageSchema = z
+  .object({
+    protocolVersion: z.literal(PROTOCOL_VERSION),
+    requestId: IdentifierSchema,
+    source: z.literal("content"),
+    target: z.literal("background"),
+    type: z.literal("REGION_SELECTION_CLOSED"),
+    payload: z.object({ jobId: IdentifierSchema, closed: z.boolean() }).strict(),
+    sentAt: IsoDateTimeSchema,
+  })
+  .strict();
+
 export const RegionSelectionOpenedMessageSchema = z
   .object({
     protocolVersion: z.literal(PROTOCOL_VERSION),
@@ -111,6 +128,8 @@ export const RegionSelectionEventAckMessageSchema = z
   .strict();
 
 export type RegionSelectionOpenMessage = z.infer<typeof RegionSelectionOpenMessageSchema>;
+export type RegionSelectionCloseMessage = z.infer<typeof RegionSelectionCloseMessageSchema>;
+export type RegionSelectionClosedMessage = z.infer<typeof RegionSelectionClosedMessageSchema>;
 export type RegionSelectionOpenedMessage = z.infer<typeof RegionSelectionOpenedMessageSchema>;
 export type RegionSelectionOpenErrorMessage = z.infer<typeof RegionSelectionOpenErrorMessageSchema>;
 export type RegionSelectionCommitMessage = z.infer<typeof RegionSelectionCommitMessageSchema>;
@@ -129,6 +148,22 @@ export function createRegionSelectionOpenMessage(options: {
     source: "background",
     target: "content",
     type: "REGION_SELECTION_OPEN",
+    payload: { jobId: options.jobId },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createRegionSelectionCloseMessage(options: {
+  requestId: string;
+  jobId: string;
+  sentAt: string;
+}): RegionSelectionCloseMessage {
+  return RegionSelectionCloseMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "content",
+    type: "REGION_SELECTION_CLOSE",
     payload: { jobId: options.jobId },
     sentAt: options.sentAt,
   });
@@ -209,6 +244,31 @@ export function parseRegionSelectionOpenResponse(
       retryable: false,
       fallbackAllowed: false,
       causeCode: "InvalidRegionSelectionResponse",
+    }),
+  );
+}
+
+export function parseRegionSelectionCloseResponse(
+  value: unknown,
+  expectedRequestId: string,
+): Result<RegionSelectionClosedMessage, WebCapErrorData> {
+  const closed = RegionSelectionClosedMessageSchema.safeParse(value);
+  if (closed.success && closed.data.requestId === expectedRequestId) {
+    return ok(closed.data);
+  }
+  const failure = RegionSelectionOpenErrorMessageSchema.safeParse(value);
+  if (failure.success && failure.data.requestId === expectedRequestId) {
+    return err(failure.data.payload);
+  }
+  return err(
+    createWebCapError({
+      code: "E_PROTOCOL_MESSAGE",
+      stage: "protocol",
+      message: "The content script returned an invalid region close response.",
+      userMessageKey: "errors.regionSelectionProtocol",
+      retryable: false,
+      fallbackAllowed: false,
+      causeCode: "InvalidRegionSelectionCloseResponse",
     }),
   );
 }

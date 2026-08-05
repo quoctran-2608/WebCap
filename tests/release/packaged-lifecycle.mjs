@@ -93,21 +93,40 @@ async function getExtensionWorker(context) {
 }
 
 async function inspectExtension(worker) {
-  return worker.evaluate(async () => {
-    const chromeApi = globalThis.chrome;
-    const manifest = chromeApi.runtime.getManifest();
-    const self = await chromeApi.management.getSelf();
-    return {
-      id: chromeApi.runtime.id,
-      version: manifest.version,
-      manifestVersion: manifest.manifest_version,
-      minimumChromeVersion: manifest.minimum_chrome_version,
-      permissions: [...self.permissions].sort(),
-      hostPermissions: [...self.hostPermissions].sort(),
-      installType: self.installType,
-      enabled: self.enabled,
-    };
-  });
+  const deadline = Date.now() + 30_000;
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      const result = await worker.evaluate(async () => {
+        const chromeApi = globalThis.chrome;
+        if (
+          typeof chromeApi !== "object" ||
+          typeof chromeApi.runtime?.getManifest !== "function" ||
+          typeof chromeApi.management?.getSelf !== "function"
+        ) {
+          return null;
+        }
+        const manifest = chromeApi.runtime.getManifest();
+        const self = await chromeApi.management.getSelf();
+        return {
+          id: chromeApi.runtime.id,
+          version: manifest.version,
+          manifestVersion: manifest.manifest_version,
+          minimumChromeVersion: manifest.minimum_chrome_version,
+          permissions: [...self.permissions].sort(),
+          hostPermissions: [...self.hostPermissions].sort(),
+          installType: self.installType,
+          enabled: self.enabled,
+        };
+      });
+      if (result !== null) return result;
+    } catch (error) {
+      lastError = error;
+    }
+    await delay(100);
+  }
+  const suffix = lastError instanceof Error ? ` Last error: ${lastError.message}` : "";
+  throw new Error(`Timed out waiting for the extension runtime API.${suffix}`);
 }
 
 async function setLifecycleMarker(worker, value) {

@@ -222,3 +222,17 @@ Run `pnpm test:unit` for the coordinate matrix, protocol, selector service, rout
 10. Run `pnpm audit`, then inspect `docs/dependency-license-audit.md`. Every direct dependency must resolve to installed metadata and an approved license; the audit must fail on missing metadata or an incompatible direct license. Finish with the full format, lint, typecheck, unit, benchmark, production build, and Playwright suite.
 
 The automated privacy test also observes extension/fixture traffic during the trust flow and rejects unexpected external HTTP(S) requests. This proves the selected capture/localization/diagnostics path is local-first; it is not a claim that Chrome itself never performs browser-maintenance traffic outside the tested context.
+
+## S21 capture reset and new-capture validation
+
+1. Create a visible PNG preview, then click **Chụp mới**. Confirm the preview disappears, the success notice is announced, `webcap.visible-session` is absent and the IndexedDB artifact store contains no records owned by that capture.
+2. Without reloading the extension, create a second visible preview on the same tab. Confirm it receives a different artifact ID and succeeds normally.
+3. Complete a full-page capture to `ready`, click **Chụp mới**, and inspect IndexedDB: the job, tiles, PDF edit manifest and owned artifacts are gone; the per-tab session lock is released.
+4. Start another full-page capture on the same tab. While it is preparing/capturing, click **Hủy và chụp mới**, accept the confirmation, and verify the original scroll, focus, document/body styles and WebCap preparation/selector roots are restored.
+5. Repeat reset after `failed`, `cancelled` and PDF `completed` states. Every state must return to an enabled capture action without reloading the popup.
+6. Retry the same reset request ID from an extension test context. The second response must equal the first and must not delete unrelated jobs or artifacts.
+7. Force one cleanup repository to fail. The reset report must contain safe `E_CLEANUP_PARTIAL` guidance while all remaining cleanup operations still execute.
+8. Delay image/PDF processing, issue reset, then allow processing to finish. The late output must be deleted and the operation must settle as `E_CANCELLED`; no session/job may reappear.
+9. Confirm settings, language and files already present in Chrome Downloads remain unchanged.
+
+Automated coverage is in `tests/unit/capture-reset-*.test.ts`, `tests/unit/capture-data-cleanup-service.test.ts`, the late-output exporter tests and `tests/e2e/capture-reset.spec.ts`.

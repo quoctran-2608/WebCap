@@ -14,6 +14,7 @@ import {
 } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
 import type { JobArtifactCleanupPort } from "@storage/job-artifact-cleanup-repository";
+import type { CaptureOwnedDataCleanupPort } from "./capture-data-cleanup-service";
 import type { JobRepositoryPort } from "@storage/job-repository";
 import type { JobSessionRepositoryPort } from "@storage/job-session-repository";
 import type { TileRepositoryPort } from "@storage/tile-repository";
@@ -48,6 +49,8 @@ export interface JobCleanupReport {
   failedJobs: number;
   deletedTiles: number;
   deletedArtifacts: number;
+  deletedManifests: number;
+  clearedSessions: number;
 }
 
 export interface PersistentJobCoordinatorPort {
@@ -76,6 +79,7 @@ export interface PersistentJobCoordinatorOptions {
   tiles: TileRepositoryPort;
   artifacts: JobArtifactCleanupPort;
   cleanup?: JobCleanupPort;
+  ownedDataCleanup?: CaptureOwnedDataCleanupPort;
   now?: () => Date;
   idFactory?: () => string;
 }
@@ -160,6 +164,7 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
   private readonly tiles: TileRepositoryPort;
   private readonly artifacts: JobArtifactCleanupPort;
   private readonly cleanup: JobCleanupPort;
+  private readonly ownedDataCleanup: CaptureOwnedDataCleanupPort | undefined;
   private readonly now: () => Date;
   private readonly idFactory: () => string;
   private initializationPromise: Promise<void> | undefined;
@@ -170,6 +175,7 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
     this.tiles = options.tiles;
     this.artifacts = options.artifacts;
     this.cleanup = options.cleanup ?? noOpCleanup;
+    this.ownedDataCleanup = options.ownedDataCleanup;
     this.now = options.now ?? (() => new Date());
     this.idFactory = options.idFactory ?? (() => crypto.randomUUID());
   }
@@ -496,6 +502,8 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
       failedJobs: 0,
       deletedTiles: 0,
       deletedArtifacts: 0,
+      deletedManifests: 0,
+      clearedSessions: 0,
     };
 
     for (const job of expired) {
@@ -506,11 +514,22 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
       }
 
       try {
-        report.deletedTiles += await this.tiles.deleteByJob(job.id);
-        report.deletedArtifacts += await this.artifacts.deleteByJob(job.id);
-        await this.jobs.delete(job.id);
-        await this.sessions.deleteJob(job.id);
-        report.deletedJobs += 1;
+        if (this.ownedDataCleanup !== undefined) {
+          const cleanup = await this.ownedDataCleanup.cleanupJob(job.id, job.tabId);
+          report.deletedJobs += cleanup.deletedJobs;
+          report.deletedTiles += cleanup.deletedTiles;
+          report.deletedArtifacts += cleanup.deletedArtifacts;
+          report.deletedManifests += cleanup.deletedManifests;
+          report.clearedSessions += cleanup.clearedSessions;
+          if (cleanup.warning !== undefined) report.failedJobs += 1;
+        } else {
+          report.deletedTiles += await this.tiles.deleteByJob(job.id);
+          report.deletedArtifacts += await this.artifacts.deleteByJob(job.id);
+          await this.jobs.delete(job.id);
+          await this.sessions.deleteJob(job.id);
+          report.deletedJobs += 1;
+          report.clearedSessions += 1;
+        }
       } catch {
         report.failedJobs += 1;
       }

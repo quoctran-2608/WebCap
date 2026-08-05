@@ -59,7 +59,14 @@ function createDependencies() {
     }),
   );
   const cancel = vi.fn(() => true);
-  const visibleCapture: VisibleCaptureCoordinatorPort = { start, cancel };
+  const waitForIdle = vi.fn(() => Promise.resolve());
+  const releaseCapture = vi.fn(() => true);
+  const visibleCapture: VisibleCaptureCoordinatorPort = {
+    start,
+    cancel,
+    waitForIdle,
+    releaseCapture,
+  };
   const exportCapture = vi.fn(
     (options: Parameters<ImageExportCoordinatorPort["exportCapture"]>[0]) =>
       Promise.resolve({
@@ -81,7 +88,12 @@ function createDependencies() {
       }),
   );
   const downloadArtifact = vi.fn(() => Promise.resolve(77));
-  const imageExport: ImageExportCoordinatorPort = { exportCapture, downloadArtifact };
+  const cancelBySourceArtifactId = vi.fn(() => Promise.resolve());
+  const imageExport: ImageExportCoordinatorPort = {
+    exportCapture,
+    downloadArtifact,
+    cancelBySourceArtifactId,
+  };
   const session = createSessionRepository();
 
   return {

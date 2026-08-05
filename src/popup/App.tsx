@@ -24,6 +24,7 @@ import {
   cancelFullPageCapture,
   getActiveCaptureJob,
   getCaptureJob,
+  resetCapture,
   startElementCapture,
   startFullPageCapture,
   startRegionCapture,
@@ -170,6 +171,8 @@ export function App(): React.JSX.Element {
   const [pdfDownload, setPdfDownload] = useState<PdfOriginalDownload>();
   const [pdfError, setPdfError] = useState<string>();
   const [diagnosticsNotice, setDiagnosticsNotice] = useState<string>();
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetNotice, setResetNotice] = useState<string>();
   const resumedSessionRef = useRef<string | undefined>(undefined);
   const activeCaptureRequestIdRef = useRef<string | undefined>(undefined);
   const feedbackHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -288,7 +291,7 @@ export function App(): React.JSX.Element {
     selectedMode === "region" ||
     selectedMode === "element" ||
     selectedMode === "scroll-area";
-  const busy = tiledMode ? fullPageBusy : visibleBusy;
+  const busy = (tiledMode ? fullPageBusy : visibleBusy) || resetBusy;
   const terminal = tiledMode
     ? fullPageJob !== undefined &&
       ["ready", "exporting", "completed", "failed", "cancelled"].includes(fullPageJob.state)
@@ -587,6 +590,38 @@ export function App(): React.JSX.Element {
     syncFullPageJob,
     syncSession,
   ]);
+
+  const handleNewCapture = useCallback(async (): Promise<void> => {
+    const active = fullPageBusy || visibleBusy;
+    if (active && !globalThis.confirm(t(locale, "popup.reset.confirmActive"))) {
+      return;
+    }
+
+    setResetBusy(true);
+    setResetNotice(undefined);
+    setUiError(undefined);
+    try {
+      const report =
+        fullPageJob !== undefined
+          ? await resetCapture({ scope: "job", jobId: fullPageJob.id })
+          : await resetCapture({ scope: "visible-session" });
+      setFullPageJob(undefined);
+      setSession(undefined);
+      setLocalStatus("idle");
+      setPreviewUrl(undefined);
+      activeCaptureRequestIdRef.current = undefined;
+      resumedSessionRef.current = undefined;
+      setResetNotice(
+        report.warning === undefined
+          ? t(locale, "popup.reset.success")
+          : t(locale, "popup.reset.partial"),
+      );
+    } catch (error) {
+      setUiError(genericErrorCopy(locale, error));
+    } finally {
+      setResetBusy(false);
+    }
+  }, [fullPageBusy, fullPageJob, locale, visibleBusy]);
 
   const handleStopPartial = useCallback(async (): Promise<void> => {
     if (fullPageJob === undefined || fullPageJob.completedTiles === 0) return;
@@ -1000,6 +1035,14 @@ export function App(): React.JSX.Element {
                 ? t(locale, "popup.cancelDiscard")
                 : t(locale, "popup.cancelCapture")}
             </button>
+            <button
+              className="secondary-action"
+              type="button"
+              disabled={resetBusy}
+              onClick={() => void handleNewCapture()}
+            >
+              {resetBusy ? t(locale, "popup.reset.running") : t(locale, "popup.reset.active")}
+            </button>
           </div>
         ) : selectedMode === "visible" && session?.artifact !== undefined ? null : (
           <button
@@ -1119,10 +1162,10 @@ export function App(): React.JSX.Element {
                 <button
                   className="secondary-action"
                   type="button"
-                  disabled={!canCapture}
-                  onClick={() => void handleVisibleCapture()}
+                  disabled={resetBusy}
+                  onClick={() => void handleNewCapture()}
                 >
-                  {t(locale, "popup.preview.recapture")}
+                  {resetBusy ? t(locale, "popup.reset.running") : t(locale, "common.newCapture")}
                 </button>
               </div>
             </figcaption>
@@ -1148,6 +1191,14 @@ export function App(): React.JSX.Element {
               >
                 {t(locale, "popup.openEditor")}
               </button>
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={resetBusy}
+                onClick={() => void handleNewCapture()}
+              >
+                {resetBusy ? t(locale, "popup.reset.running") : t(locale, "common.newCapture")}
+              </button>
             </div>
           )}
           {tiledMode && fullPageJob?.state === "completed" && (
@@ -1163,6 +1214,14 @@ export function App(): React.JSX.Element {
               >
                 {t(locale, "popup.openDownloadPdf")}
               </button>
+              <button
+                className="secondary-action"
+                type="button"
+                disabled={resetBusy}
+                onClick={() => void handleNewCapture()}
+              >
+                {resetBusy ? t(locale, "popup.reset.running") : t(locale, "common.newCapture")}
+              </button>
             </div>
           )}
           {tiledMode && fullPageJob?.state === "cancelled" && (
@@ -1170,6 +1229,14 @@ export function App(): React.JSX.Element {
               <p>{tiledStatusCopy(locale, fullPageJob)}</p>
               <button className="text-action" type="button" onClick={() => void handleRetry()}>
                 {t(locale, "common.retry")}
+              </button>
+              <button
+                className="text-action"
+                type="button"
+                disabled={resetBusy}
+                onClick={() => void handleNewCapture()}
+              >
+                {t(locale, "common.newCapture")}
               </button>
             </div>
           )}
@@ -1202,18 +1269,34 @@ export function App(): React.JSX.Element {
                     ? t(locale, "popup.retryFullPage")
                     : t(locale, `popup.reselect.${selectedMode}` as MessageKey)}
               </button>
+              <button
+                className="text-action"
+                type="button"
+                disabled={resetBusy}
+                onClick={() => void handleNewCapture()}
+              >
+                {t(locale, "common.newCapture")}
+              </button>
             </div>
           )}
           {selectedMode === "visible" &&
             status === "completed" &&
             session?.downloadId !== undefined && (
-              <p
+              <div
                 className="feedback feedback--success"
                 data-testid="download-success"
                 data-download-id={session.downloadId}
               >
-                {captureStatusCopy(locale, "completed")}
-              </p>
+                <p>{captureStatusCopy(locale, "completed")}</p>
+                <button
+                  className="text-action"
+                  type="button"
+                  disabled={resetBusy}
+                  onClick={() => void handleNewCapture()}
+                >
+                  {t(locale, "common.newCapture")}
+                </button>
+              </div>
             )}
           {selectedMode === "visible" && status === "cancelled" && (
             <div className="feedback feedback--neutral">
@@ -1225,6 +1308,14 @@ export function App(): React.JSX.Element {
                 onClick={() => void handleVisibleCapture()}
               >
                 {t(locale, "common.retry")}
+              </button>
+              <button
+                className="text-action"
+                type="button"
+                disabled={resetBusy}
+                onClick={() => void handleNewCapture()}
+              >
+                {t(locale, "common.newCapture")}
               </button>
             </div>
           )}
@@ -1261,6 +1352,11 @@ export function App(): React.JSX.Element {
               </div>
             )}
         </div>
+        {resetNotice !== undefined && (
+          <p className="feedback feedback--success" role="status" data-testid="reset-success">
+            {resetNotice}
+          </p>
+        )}
       </section>
 
       <footer className="trust-footer">

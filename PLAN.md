@@ -3,21 +3,21 @@ product: WebCap
 document: Active Implementation Plan
 version: 1.1
 date: 2026-08-04
-status: Planned
+status: Active
 repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.1.md
 spec: ./docs/spec-0.2.0.md
 audit: ./docs/audits/0.1.0-gap-audit.md
 release_target: 0.2.0
-current_session: S21
+current_session: S22
 ---
 
 # WebCap — Implementation plan 0.2.0
 
 Roadmap `S00–S20` đã tạo release candidate 0.1.0. Roadmap mới `S21–S26` xử lý các khoảng trống thực tế: reset/chụp mới, region drawing có thể nhìn thấy và sử dụng được, adaptive auto-scroll, auto-PDF/output routing, settings/UI/progress và hardening release.
 
-PR kế hoạch chỉ cập nhật tài liệu. Không thay source, manifest, package version hoặc artifact 0.1.0.
+S21 triển khai reset/chụp mới mà không thay manifest, package version hoặc artifact 0.1.0. S22 là session active tiếp theo.
 
 # 1. Nguồn sự thật
 
@@ -54,8 +54,8 @@ PR kế hoạch chỉ cập nhật tài liệu. Không thay source, manifest, pa
 
 | Session | Capability | Status | Depends on |
 | --- | --- | --- | --- |
-| S21 | Reset lifecycle và “Chụp mới” | PLANNED | S20 |
-| S22 | Region drawing launch, interaction và accessibility | BLOCKED | S21 cleanup primitive |
+| S21 | Reset lifecycle và “Chụp mới” | DONE | S20 |
+| S22 | Region drawing launch, interaction và accessibility | PLANNED | S21 cleanup primitive |
 | S23 | Adaptive auto-scroll và resumable frontier | BLOCKED | S21 |
 | S24 | Auto-PDF và mode-aware image/PDF output | BLOCKED | S23 |
 | S25 | Stored settings, event-driven progress và simplified popup | BLOCKED | S21–S24 stable contracts |
@@ -91,6 +91,24 @@ Cho phép bỏ capture hiện tại và bắt đầu lại ở mọi state; tạ
 - AC-25–AC-27 pass.
 - Không còn dead-end terminal.
 - Settings, locale và downloaded files được giữ.
+
+
+## Implementation evidence
+
+- Contract `CAPTURE_RESET` hỗ trợ scope `visible-session`, `job` và `tab`, response report versioned và request dedupe.
+- `CaptureResetService` điều phối selector cancellation, active capture/PDF cancellation, `waitForIdle`, cleanup và idempotent missing-record behavior.
+- `CaptureOwnedDataCleanupService` xóa edit manifest, output/source artifacts, tiles, job, summary và tab lock theo ownership; partial cleanup trả warning an toàn thay vì xóa mù.
+- Visible image export và PDF export xử lý race: output hoàn tất muộn sau reset bị xóa và trả `E_CANCELLED`, không hồi sinh session/job.
+- Popup có “Chụp mới” ở ready/completed/failed/cancelled và preview; reset active yêu cầu xác nhận.
+- Region/element selector có typed close command để reset không để overlay orphan.
+- Validation implementation: format, TypeScript strict, ESLint, 290/290 unit tests trên 83 files và production build pass.
+- E2E mới xác minh visible result reset rồi capture lần hai; full-page terminal reset, tạo job thứ hai cùng tab và active reset phục hồi trang, xóa job/tile.
+
+## Exit disposition
+
+- AC-25, AC-26, AC-27: PASS khi full read-only CI của PR xanh.
+- UX-RESET-001 và DATA-001 trong gap audit: CLOSED by S21.
+- Settings, locale và downloaded files không thuộc reset ownership và được giữ nguyên.
 
 # 6. S22 — Region drawing launch và reliability
 
