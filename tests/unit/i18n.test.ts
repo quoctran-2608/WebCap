@@ -25,8 +25,8 @@ describe("UI localization", () => {
     expect(t("en", "popup.output.detail", { format: "PDF", bytes: "2 MB" })).toBe("PDF · 2 MB");
     expect(t("vi", "popup.output.pages", { count: 4 })).toBe("4 trang PDF");
     expect(t("en", "popup.output.pages", { count: 4 })).toBe("4 PDF pages");
-    expect(t("vi", "popup.exportPdfFallback")).toContain("không chụp lại");
-    expect(t("en", "popup.exportPdfFallback")).toContain("without recapturing");
+    expect(t("vi", "popup.exportPdfFallback")).toBe("Chuyển sang PDF không chụp lại");
+    expect(t("en", "popup.exportPdfFallback")).toBe("Switch to PDF without recapturing");
   });
 
   it("provides useful localized copy for every normalized error code", () => {
