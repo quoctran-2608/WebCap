@@ -280,9 +280,14 @@ test("@dpr keeps the confirmed document rectangle stable at DPR 2 and 125% zoom"
 
     await targetPage.mouse.move(180, 170);
     await targetPage.mouse.down();
+    await targetPage.mouse.move(200, 190, { steps: 2 });
+    const selection = root.locator("[data-selection]");
+    await expect(selection).toBeVisible();
     await targetPage.mouse.move(500, 410, { steps: 8 });
     await targetPage.mouse.up();
-    await root.getByRole("button", { name: "Chụp vùng" }).click();
+    const confirm = root.getByRole("button", { name: "Chụp vùng" });
+    await expect(confirm).toBeEnabled();
+    await confirm.click();
 
     const state = await waitForRegionReady(serviceWorker);
     expect(state.job?.targetRect?.x).toBeCloseTo(180, 0);
