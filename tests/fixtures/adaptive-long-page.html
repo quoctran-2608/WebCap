@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Adaptive page over 100k CSS pixels</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        min-height: 101500px;
+      }
+
+      body {
+        font-family: system-ui, sans-serif;
+        background: repeating-linear-gradient(
+          to bottom,
+          #f7f3e8 0,
+          #f7f3e8 480px,
+          #dce9d5 480px,
+          #dce9d5 960px
+        );
+      }
+
+      header {
+        position: fixed;
+        inset: 0 0 auto;
+        height: 56px;
+        padding: 16px;
+        background: #153f35;
+        color: white;
+      }
+
+      main {
+        height: 101500px;
+        padding: 80px 24px 24px;
+      }
+
+      .marker {
+        position: absolute;
+        left: 24px;
+        padding: 8px 12px;
+        background: white;
+        border: 2px solid #153f35;
+      }
+
+      #start-marker {
+        top: 90px;
+      }
+
+      #end-marker {
+        top: 101390px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>WebCap adaptive long-page fixture</header>
+    <main>
+      <div id="start-marker" class="marker">start</div>
+      <div id="end-marker" class="marker">end: 101500px</div>
+    </main>
+  </body>
+</html>

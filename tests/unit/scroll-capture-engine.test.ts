@@ -31,6 +31,7 @@ function pageResult(
     documentWidth: 100,
     documentHeight: 220,
     devicePixelRatio: 1,
+    documentToken: "document-1",
     fixedCandidates: 2,
     hiddenFixedElements: request.fixedElementMode === "preserve" ? 0 : 1,
     stableSamples: 1,

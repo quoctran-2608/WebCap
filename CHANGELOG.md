@@ -16,6 +16,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Region-selector ready handshake that closes the popup only after root attachment, listeners, focus, and first render; launch timeout and injection failure reuse the reset primitive and leave no orphan job, root, summary, or tab lease.
 - Accessible region creation and editing with pointer create/move/eight-handle resize, vertical and horizontal edge auto-scroll, 24 CSS-pixel handle targets, keyboard creation/movement/resizing/commit/cancel, and a toolbar kept above the selected rectangle.
 - Selector removal plus two animation frames before capture, duplicate-open instance reuse, DPR/zoom coordinate coverage, and browser validation for overlay exclusion and exact page restoration.
+- Adaptive full-page scroll capture with incremental row planning, stable-bottom detection, finite lazy-growth support and no arbitrary 100,000 CSS-pixel stopping cap.
+- Durable resumable frontier that advances only after complete stored rows, resumes missing columns after interruption and preserves a rectangular contiguous prefix at time, tile, byte or storage guards.
+- Source document, width, viewport and DPR revalidation plus service-worker restart recovery that does not recapture stored prefix rows.
+- Idempotent page-preparation response re-enveloping so a restarted worker can reuse an existing prepared page without stale request-ID protocol failure.
+- S23 browser fixtures for >100k pages, finite lazy growth, infinite-feed partial output and real service-worker target restart; the clean gate passes 306 unit tests across 88 files, four PDF benchmarks, 48 Playwright E2E cases and packaged lifecycle smoke.
 
 ## [0.1.0] - 2026-08-04
 

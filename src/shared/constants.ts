@@ -22,6 +22,7 @@ export const FALLBACK_OVERLAP_CSS = 64;
 export const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 export const VISIBLE_CAPTURE_MIN_INTERVAL_MS = 550;
 export const JOB_PROGRESS_THROTTLE_MS = 250;
+export const ADAPTIVE_CAPTURE_MAX_DURATION_MS = 10 * 60 * 1_000;
 
 export const JOB_ABANDONED_TTL_MS = 30 * 60 * 1_000;
 export const JOB_LOCK_LEASE_MS = 2 * 60 * 1_000;

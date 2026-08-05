@@ -285,6 +285,14 @@ function responseEnvelope(
   };
 }
 
+export function rebindPagePreparationResponse(
+  response: Record<string, unknown>,
+  requestId: string,
+  sentAt: string,
+): Record<string, unknown> {
+  return { ...response, requestId, sentAt };
+}
+
 function errorResponse(request: PagePreparationRequest, error: unknown): Record<string, unknown> {
   const normalized =
     error instanceof PreparationFailure
@@ -826,7 +834,11 @@ async function handlePrepare(
   const current = state.active;
   if (current !== undefined) {
     if (current.preparationId === preparationId && current.readyResponse !== undefined) {
-      return current.readyResponse as Record<string, unknown>;
+      return rebindPagePreparationResponse(
+        current.readyResponse as Record<string, unknown>,
+        request.requestId,
+        new Date().toISOString(),
+      );
     }
     throw preparationFailure({
       code: "E_PROTOCOL_MESSAGE",

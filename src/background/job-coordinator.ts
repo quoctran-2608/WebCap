@@ -57,6 +57,7 @@ export interface PersistentJobCoordinatorPort {
   initialize(): Promise<void>;
   create(options: CreatePersistentJobOptions): Promise<CaptureJob>;
   get(jobId: string): Promise<CaptureJob | undefined>;
+  listActive?(): Promise<CaptureJob[]>;
   getActiveForTab?(tabId: number): Promise<CaptureJob | undefined>;
   update(
     jobId: string,
@@ -244,6 +245,11 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
     return this.jobs.get(jobId);
   }
 
+  async listActive(): Promise<CaptureJob[]> {
+    await this.initialize();
+    return this.jobs.listActive();
+  }
+
   async getActiveForTab(tabId: number): Promise<CaptureJob | undefined> {
     await this.initialize();
     const active = await this.jobs.listActive();
@@ -349,6 +355,15 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
 
   private async recoverJob(job: CaptureJob): Promise<CaptureJob> {
     if (["created", "ready", "failed"].includes(job.state)) {
+      return job;
+    }
+
+    const resumableAdaptiveJob =
+      job.mode === "full-page" &&
+      job.preferredEngine === "scroll" &&
+      (job.state === "preparing" ||
+        (job.state === "capturing" && job.adaptiveFrontier !== undefined));
+    if (resumableAdaptiveJob) {
       return job;
     }
 

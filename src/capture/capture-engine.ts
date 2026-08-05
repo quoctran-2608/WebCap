@@ -1,6 +1,8 @@
 import type {
+  AdaptiveCaptureFrontier,
   CaptureEngineKind,
   CaptureJob,
+  CaptureMode,
   ElementTargetDescriptor,
   CaptureSettings,
   CaptureTile,
@@ -26,14 +28,22 @@ export interface CaptureCancellation {
   throwIfCancelled(stage?: "prepare" | "measure" | "plan" | "capture" | "cleanup"): void;
 }
 
+export interface AdaptiveCaptureResumeState {
+  frontier: AdaptiveCaptureFrontier;
+  tilePlan: CaptureTile[];
+  metrics?: PageMetrics;
+}
+
 export interface CaptureEngineContext {
   jobId: string;
   tabId: number;
   windowId?: number;
+  mode?: CaptureMode;
   settings: CaptureSettings;
   targetRect?: Rect;
   targetDescriptor?: ElementTargetDescriptor;
   preparation?: PagePreparationReadyPayload;
+  resume?: AdaptiveCaptureResumeState;
   cancellation: CaptureCancellation;
   onPlan(
     metrics: PageMetrics,
@@ -41,6 +51,8 @@ export interface CaptureEngineContext {
     tiles: CaptureTile[],
     partialCapture?: PartialCapture,
   ): Promise<void>;
+  checkpointFrontier?(frontier: AdaptiveCaptureFrontier): Promise<void>;
+  discardTilesFromIndex?(firstIndex: number): Promise<void>;
   storeTile(tile: CaptureTile, blob: Blob): Promise<void>;
   reportProgress(progress: CaptureProgress): Promise<void> | void;
 }
@@ -54,6 +66,7 @@ export interface CaptureEngineResult {
 
 export interface CaptureEngine {
   readonly kind: CaptureEngineKind;
+  readonly adaptive?: boolean;
   capture(context: CaptureEngineContext): Promise<CaptureEngineResult>;
   cleanup?(context: CaptureEngineContext): Promise<void>;
 }

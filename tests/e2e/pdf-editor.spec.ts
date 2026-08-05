@@ -116,7 +116,7 @@ test("@smoke edits, restores, exports, and downloads PDF without recapture", asy
   const cards = editor.locator(".page-card");
   await expect.poll(() => cards.count()).toBeGreaterThan(2);
   const initialState = await readEditorState(editor, jobId);
-  expect(initialState.tileCount).toBe(2);
+  expect(initialState.tileCount).toBeGreaterThan(2);
   expect(initialState.tileBytes).toBeGreaterThan(0);
 
   const thumbnail = cards.first().locator("img");
