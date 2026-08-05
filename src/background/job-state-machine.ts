@@ -162,10 +162,14 @@ export function validateJobInvariants(
     job.output.artifactId !== job.outputArtifactId
   ) {
     return err(
-      stateError("Output metadata must match the persisted artifact ID.", "OutputArtifactMismatch", {
-        outputArtifactId: job.outputArtifactId,
-        metadataArtifactId: job.output.artifactId,
-      }),
+      stateError(
+        "Output metadata must match the persisted artifact ID.",
+        "OutputArtifactMismatch",
+        {
+          outputArtifactId: job.outputArtifactId,
+          metadataArtifactId: job.output.artifactId,
+        },
+      ),
     );
   }
 
