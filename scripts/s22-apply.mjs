@@ -17,7 +17,12 @@ if (
 ) {
   throw new Error(`S22 payload integrity mismatch: ${encoded.length} bytes, ${checksum}`);
 }
-await writeFile(runtimePath, gunzipSync(Buffer.from(encoded, "base64")));
+const staleEnglishAnchor = `  "selector.region.instructions":\n    "Drag to select · drag the frame to move · use arrow keys to fine-tune · Enter confirms · Esc cancels",\n  "selector.region.confirm": "Capture region",`;
+const baselineEnglishAnchor = `  "selector.region.instructions":\n    "Drag to select · drag the box to move · arrow keys to refine · Enter to confirm · Esc to cancel",\n  "selector.region.confirm": "Capture region",`;
+const runtimeSource = gunzipSync(Buffer.from(encoded, "base64"))
+  .toString("utf8")
+  .replace(staleEnglishAnchor, baselineEnglishAnchor);
+await writeFile(runtimePath, runtimeSource);
 try {
   await import(new URL(`../${runtimePath}?${Date.now()}`, import.meta.url));
 } finally {
