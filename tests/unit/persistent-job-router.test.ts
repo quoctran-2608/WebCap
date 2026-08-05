@@ -299,6 +299,52 @@ describe("persistent job router", () => {
     });
   });
 
+  it("routes export cancellation through the completion service", async () => {
+    const jobs = new FakeCoordinator();
+    const dedupe = new MemoryDedupe();
+    const exporting = {
+      ...job(),
+      state: "exporting" as const,
+      stateRevision: 4,
+      activeOutputFormat: "pdf" as const,
+      exportProgress: { completedPages: 1, totalPages: 3 },
+    };
+    jobs.current = exporting;
+    const captureCancel = vi.fn(() => Promise.resolve(exporting));
+    const completionCancel = vi.fn(() =>
+      Promise.resolve({ ...exporting, state: "ready" as const, stateRevision: 5 }),
+    );
+    const completion = {
+      startAuto: vi.fn(() => Promise.resolve(exporting)),
+      recoverAll: vi.fn(() => Promise.resolve([])),
+      cancel: completionCancel,
+      waitForIdle: vi.fn(() => Promise.resolve()),
+    };
+    const message = createJobCancelMessage({
+      requestId: "request-cancel-export",
+      sentAt: now.toISOString(),
+      jobId: exporting.id,
+      reason: "stop export",
+    });
+
+    const response = await routePersistentJobMessage(
+      message,
+      dependencies(
+        jobs,
+        dedupe,
+        { start: () => Promise.resolve(), cancel: captureCancel },
+        completion,
+      ),
+    );
+
+    expect(completionCancel).toHaveBeenCalledWith(exporting.id);
+    expect(captureCancel).not.toHaveBeenCalled();
+    expect(response).toMatchObject({
+      type: "JOB_RESPONSE",
+      payload: { job: { state: "ready" } },
+    });
+  });
+
   it("caches normalized errors for duplicate missing-job reads", async () => {
     const jobs = new FakeCoordinator();
     jobs.current = undefined;

@@ -29,6 +29,7 @@ import {
   startFullPageCapture,
   startRegionCapture,
   startScrollAreaCapture,
+  startPdfExport,
   stopFullPageCapture,
 } from "./full-page-client";
 import {
@@ -117,6 +118,16 @@ function pdfCapabilityCopy(
 }
 
 function tiledStatusCopy(locale: UiLocale, job: CaptureJob): string {
+  if (
+    job.state === "exporting" &&
+    job.activeOutputFormat !== undefined &&
+    job.activeOutputFormat !== "pdf"
+  ) {
+    return t(locale, "popup.job.imageExporting");
+  }
+  if (job.state === "completed" && job.output !== undefined && job.output.format !== "pdf") {
+    return t(locale, "popup.job.imageCompleted");
+  }
   const specializedStates = [
     "created",
     "preparing",
@@ -173,6 +184,8 @@ export function App(): React.JSX.Element {
   const [diagnosticsNotice, setDiagnosticsNotice] = useState<string>();
   const [resetBusy, setResetBusy] = useState(false);
   const [resetNotice, setResetNotice] = useState<string>();
+  const [tiledDownloading, setTiledDownloading] = useState(false);
+  const [tiledDownloadId, setTiledDownloadId] = useState<number>();
   const resumedSessionRef = useRef<string | undefined>(undefined);
   const activeCaptureRequestIdRef = useRef<string | undefined>(undefined);
   const feedbackHeadingRef = useRef<HTMLHeadingElement>(null);
@@ -291,7 +304,7 @@ export function App(): React.JSX.Element {
     selectedMode === "region" ||
     selectedMode === "element" ||
     selectedMode === "scroll-area";
-  const busy = (tiledMode ? fullPageBusy : visibleBusy) || resetBusy;
+  const busy = (tiledMode ? fullPageBusy || tiledDownloading : visibleBusy) || resetBusy;
   const terminal = tiledMode
     ? fullPageJob !== undefined &&
       ["ready", "exporting", "completed", "failed", "cancelled"].includes(fullPageJob.state)
@@ -299,6 +312,10 @@ export function App(): React.JSX.Element {
   const availableFormats = OUTPUT_FORMATS.filter(
     (format): format is ImageFormat => format !== "pdf" && capabilities.outputFormats[format],
   ).map((format) => ({ id: format, label: format.toUpperCase() }));
+  const tiledOutputHint =
+    selectedMode === "region" || selectedMode === "element"
+      ? t(locale, "popup.imageOutputHint")
+      : t(locale, "popup.pdfOutputHint");
   const selectedModeEnabled = capabilities.modes[selectedMode];
   const canCapture =
     workerStatus === "connected" &&
@@ -610,6 +627,7 @@ export function App(): React.JSX.Element {
       setSession(undefined);
       setLocalStatus("idle");
       setPreviewUrl(undefined);
+      setTiledDownloadId(undefined);
       activeCaptureRequestIdRef.current = undefined;
       resumedSessionRef.current = undefined;
       setResetNotice(
@@ -688,6 +706,34 @@ export function App(): React.JSX.Element {
       await handleOperationError(error);
     }
   }, [handleOperationError, session?.artifact, syncSession]);
+
+  const handleTiledDownload = useCallback(async (): Promise<void> => {
+    const artifactId = fullPageJob?.output?.artifactId;
+    if (artifactId === undefined) return;
+    setTiledDownloading(true);
+    setTiledDownloadId(undefined);
+    setUiError(undefined);
+    try {
+      setTiledDownloadId(await downloadArtifact(artifactId));
+    } catch (error) {
+      setUiError(genericErrorCopy(locale, error));
+    } finally {
+      setTiledDownloading(false);
+    }
+  }, [fullPageJob?.output?.artifactId, locale]);
+
+  const handleStartPdfExport = useCallback(async (): Promise<void> => {
+    if (fullPageJob === undefined) return;
+    setUiError(undefined);
+    setTiledDownloadId(undefined);
+    try {
+      const job = await startPdfExport(fullPageJob.id, fullPageJob.settings.pdf);
+      setFullPageJob(job);
+      await syncFullPageJob(job.id);
+    } catch (error) {
+      setUiError(genericErrorCopy(locale, error));
+    }
+  }, [fullPageJob, locale, syncFullPageJob]);
 
   const handleOpenPdfEditor = useCallback(async (): Promise<void> => {
     if (fullPageJob === undefined) return;
@@ -1013,7 +1059,7 @@ export function App(): React.JSX.Element {
             </select>
           </>
         ) : (
-          <p className="field-label">{t(locale, "popup.pdfOutputHint")}</p>
+          <p className="field-label">{tiledOutputHint}</p>
         )}
 
         {busy ? (
@@ -1188,6 +1234,15 @@ export function App(): React.JSX.Element {
               <button
                 className="primary-action"
                 type="button"
+                onClick={() => void handleStartPdfExport()}
+              >
+                {fullPageJob.partialCapture === undefined
+                  ? t(locale, "popup.exportPdf")
+                  : t(locale, "popup.exportPartialPdf")}
+              </button>
+              <button
+                className="secondary-action"
+                type="button"
                 onClick={() => void handleOpenPdfEditor()}
               >
                 {t(locale, "popup.openEditor")}
@@ -1202,19 +1257,46 @@ export function App(): React.JSX.Element {
               </button>
             </div>
           )}
-          {tiledMode && fullPageJob?.state === "completed" && (
-            <div className="feedback feedback--success">
+          {tiledMode && fullPageJob?.state === "completed" && fullPageJob.output !== undefined && (
+            <div
+              className="feedback feedback--success"
+              data-testid="tiled-output-result"
+              data-artifact-id={fullPageJob.output.artifactId}
+              data-format={fullPageJob.output.format}
+            >
               <h3 ref={feedbackHeadingRef} tabIndex={-1}>
-                {t(locale, "popup.pdfReady")}
+                {fullPageJob.output.format === "pdf"
+                  ? t(locale, "popup.output.pdfReady")
+                  : t(locale, "popup.output.imageReady")}
               </h3>
-              <p>{t(locale, "popup.pdfReadyDetail")}</p>
+              <p>
+                {t(locale, "popup.output.detail", {
+                  format: fullPageJob.output.format.toUpperCase(),
+                  bytes: formatBytes(fullPageJob.output.byteLength),
+                })}
+              </p>
+              {fullPageJob.output.pageCount !== undefined && (
+                <p>{t(locale, "popup.output.pages", { count: fullPageJob.output.pageCount })}</p>
+              )}
               <button
                 className="primary-action"
                 type="button"
-                onClick={() => void handleOpenPdfEditor()}
+                disabled={tiledDownloading}
+                onClick={() => void handleTiledDownload()}
               >
-                {t(locale, "popup.openDownloadPdf")}
+                {tiledDownloading
+                  ? t(locale, "popup.output.downloading")
+                  : t(locale, "common.download")}
               </button>
+              {fullPageJob.output.format === "pdf" && (
+                <button
+                  className="secondary-action"
+                  type="button"
+                  onClick={() => void handleOpenPdfEditor()}
+                >
+                  {t(locale, "popup.output.editPdf")}
+                </button>
+              )}
               <button
                 className="secondary-action"
                 type="button"
@@ -1223,6 +1305,11 @@ export function App(): React.JSX.Element {
               >
                 {resetBusy ? t(locale, "popup.reset.running") : t(locale, "common.newCapture")}
               </button>
+              {tiledDownloadId !== undefined && (
+                <p data-testid="tiled-download-success" data-download-id={tiledDownloadId}>
+                  {t(locale, "popup.output.downloadStarted")}
+                </p>
+              )}
             </div>
           )}
           {tiledMode && fullPageJob?.state === "cancelled" && (
@@ -1258,17 +1345,22 @@ export function App(): React.JSX.Element {
                 className="text-action"
                 type="button"
                 onClick={() =>
-                  fullPageJob.totalTiles > 0 &&
-                  fullPageJob.completedTiles === fullPageJob.totalTiles
-                    ? void handleOpenPdfEditor()
-                    : void handleRetry()
+                  fullPageJob.error?.code === "E_IMAGE_OUTPUT_TOO_LARGE"
+                    ? void handleStartPdfExport()
+                    : fullPageJob.totalTiles > 0 &&
+                        fullPageJob.completedTiles === fullPageJob.totalTiles
+                      ? void handleOpenPdfEditor()
+                      : void handleRetry()
                 }
               >
-                {fullPageJob.totalTiles > 0 && fullPageJob.completedTiles === fullPageJob.totalTiles
-                  ? t(locale, "popup.retryExport")
-                  : selectedMode === "full-page"
-                    ? t(locale, "popup.retryFullPage")
-                    : t(locale, `popup.reselect.${selectedMode}` as MessageKey)}
+                {fullPageJob.error?.code === "E_IMAGE_OUTPUT_TOO_LARGE"
+                  ? t(locale, "popup.exportPdfFallback")
+                  : fullPageJob.totalTiles > 0 &&
+                      fullPageJob.completedTiles === fullPageJob.totalTiles
+                    ? t(locale, "popup.retryExport")
+                    : selectedMode === "full-page"
+                      ? t(locale, "popup.retryFullPage")
+                      : t(locale, `popup.reselect.${selectedMode}` as MessageKey)}
               </button>
               <button
                 className="text-action"

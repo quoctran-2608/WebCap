@@ -546,6 +546,9 @@ async function executeJobRequest(
       if (job === undefined) {
         throw jobNotFound(request.payload.jobId);
       }
+      if (job.state === "exporting" && dependencies.completion !== undefined) {
+        return { kind: "job", job: await dependencies.completion.cancel(job.id) };
+      }
       if (job.mode === "scroll-area" && dependencies.scrollAreaCaptures !== undefined) {
         return {
           kind: "job",
