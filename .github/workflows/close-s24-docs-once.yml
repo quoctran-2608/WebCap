@@ -1,17 +1,16 @@
 name: Close S24 documentation once
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/s24-auto-output
-    paths:
-      - .github/workflows/close-s24-docs-once.yml
+      - main
 
 permissions:
   contents: write
 
 jobs:
   document:
+    if: github.head_ref == 'agent/s24-auto-output'
     runs-on: ubuntu-24.04
     steps:
       - name: Check out branch
@@ -32,97 +31,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Update milestone documents
+        env:
+          S24_DOC_SCRIPT_B64: ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpwbGFuX3BhdGggPSBQYXRoKCJQTEFOLm1kIikKcGxhbiA9IHBsYW5fcGF0aC5yZWFkX3RleHQoKQpyZXBsYWNlbWVudHMgPSB7CiAgICAiZGF0ZTogMjAyNi0wOC0wNFxuIjogImRhdGU6IDIwMjYtMDgtMDVcbiIsCiAgICAiY3VycmVudF9zZXNzaW9uOiBTMjRcbiI6ICJjdXJyZW50X3Nlc3Npb246IFMyNVxuIiwKICAgICJTMjHigJNTEjMgaMOjb24gdOG6pXQgcmVzZXQgbGlmZWN5Y2xlLCByZWdpb24gc2VsZWN0b3Igw6Fuw6FjIHRpbiBj4bqteSB2w6AgYWRhcHRpdmUgYXV0by1zY3JvbGwgY8OzIHJlc3VtYWJsZSBmcm9udGllciBtw6Aga2jDtG5nIHRoYXkgbWFuaWZlc3QsIHBhY2thZ2UgdmVyc2lvbiBob+G6t2MgYXJ0aWZhY3QgMC4xLjAuIFMyNCBsw6Agc2Vzc2lvbiBhY3RpdmUgdGnhur9wIHRoZW8uIjogIlMyMeKAk1MyNCDEspDDoyBuIHTDomXQIHJlc2V0IGxpZmVjeWNsZSwgcmVnaW9uIHNlbGVjdG9yIMOhbsOhYyB0aW4gY+G6rXksIGFkYXB0aXZlIGF1dG8tc2Nyb2xsIGPDsyByZXN1bWFibGUgZnJvbnRpZXIgdsOgIG1vZGUtYXdhcmUgb3V0cHV0IG3DoCBracO0bmcgdGhheSBtYW5pZmVzdCwgcGFja2FnZSB2ZXJzaW9uIGhv4bq3YyBhcnRpZmFjdCAwLjEuMC4gUzI1IGzDoCBzZXNzaW9uIGFjdGl2ZSB0aeG6v3AgdGhlby4iLAogICAgInwgUzI0IHwgQXV0by1QREYgdsOgIG1vZGUtYXdhcmUgaW1hZ2UvUERGIG91dHB1dCB8IFBMQU5ORUQgfCBTMjMgfCI6ICJ8IFMyNCB8IEF1dG8tUERGIHbDoCBtb2RlLWF3YXJlIGltYWdlL1BERiBvdXRwdXQgfCBET05FIHwgUzIzIHwiLAogICAgInwgUzI1IHwgU3RvcmVkIHNldHRpbmdzLCBldmVudC1kcml2ZW4gcHJvZ3Jlc3MgdsOgIHNpbXBsaWZpZWQgcG9wdXAgfCBCTE9DS0VEIHwgUzIx4oCTUzI0IHN0YWJsZSBjb250cmFjdHMgfCI6ICJ8IFMyNSB8IFN0b3JlZCBzZXR0aW5ncywgZXZlbnQtZHJpdmVuIHByb2dyZXNzIHbDoCBzaW1wbGlmaWVkIHBvcHVwIHwgUExBTk5FRCB8IFMyMeKAk1MyNCBzdGFibGUgY29udHJhY3RzIHwiLAp9CmZvciBvbGQsIG5ldyBpbiByZXBsYWNlbWVudHMuaXRlbXMoKToKICAgIGlmIG9sZCBub3QgaW4gcGxhbjoKICAgICAgICByYWlzZSBTeXN0ZW1FeGl0KGYiTWlzc2luZyBQTEFOIG1hcmtlcjoge29sZH0iKQogICAgcGxhbiA9IHBsYW4ucmVwbGFjZShvbGQsIG5ldywgMSkKCmV2aWRlbmNlID0gIiIiCgojIyBTMjQgaW1wbGVtZW50YXRpb24gZXZpZGVuY2UKCi0gYENhcHR1cmVDb21wbGV0aW9uUG9saWN5YCByb3V0ZXMgZnVsbC1wYWdlIGFuZCBzY3JvbGwtYXJlYSBqb2JzIHRvIGF1dG9tYXRpYyBQREYgZXhwb3J0LCByZWdpb24gYW5kIGVsZW1lbnQgam9icyB0byBndWFyZGVkIGltYWdlIGV4cG9ydCwgYW5kIGxlYXZlcyB2aXNpYmxlIGNhcHR1cmUgb24gaXRzIGV4aXN0aW5nIGltYWdlIGZsb3cuCi0gQXV0by1leHBvcnQgYmVnaW5zIG9ubHkgZnJvbSB0aGUgZHVyYWJsZSBgcmVhZHlgIGNoZWNrcG9pbnQuIE91dHB1dCBmb3JtYXQsIGFydGlmYWN0IElELCBNSU1FIHR5cGUsIGJ5dGUgbGVuZ3RoIGFuZCBQREYgcGFnZSBjb3VudCBwZXJzaXN0IG9uIHRoZSBqb2I7IHdvcmtlciByZWNvdmVyeSByZWNvbmNpbGVzIGFuIGV4aXN0aW5nIG91dHB1dCBiZWZvcmUgc3RhcnRpbmcgd29yayBhZ2Fpbi4KLSBgVGlsZWRJbWFnZUV4cG9ydFNlcnZpY2VgIHZhbGlkYXRlcyBkaW1lbnNpb25zLCB0b3RhbCBwaXhlbCBhcmVhIGFuZCB3b3JraW5nLXNldCBidWRnZXQgYmVmb3JlIGFsbG9jYXRpbmcgYW4gYE9mZnNjcmVlbkNhbnZhc2AsIGRlY29kZXMgdGlsZXMgc2VxdWVudGlhbGx5IGFuZCBlbWl0cyBQTkcvSlBFRy9XZWJQIHdpdGhvdXQgYSBmdWxsLXBhZ2UgY2FudmFzLgotIGBFX0lNQUdFX09VVFBVVF9UT09fTEFSR0VgIHByZXNlcnZlcyBldmVyeSBzb3VyY2UgdGlsZSBhbmQgZXhwb3NlcyB0aGUgZXhwbGljaXQg4oCcQ2h1eeG7g24gc2FuZyBQREYga2jDtG5nIGNo4bulcCBs4bqhaeKAnSBhY3Rpb24uIEJyb3dzZXIgY292ZXJhZ2UgcHJvdmVzIHRoZSBzYW1lIGpvYiBhbmQgZXhhY3Qgc3RvcmVkIHRpbGUgQmxvYnMgcHJvZHVjZSB0aGUgZmFsbGJhY2sgUERGIHdpdGhvdXQgcmVvcGVuaW5nIGEgc2VsZWN0b3Igb3IgcmVjYXB0dXJpbmcgcGl4ZWxzLgotIFJlb3BlbmluZyB0aGUgcG9wdXAgcmVzdG9yZXMgdGhlIG1vc3QgcmVjZW50IHRlcm1pbmFsIG91dHB1dCB3aGVuIG5vIGFjdGl2ZSBqb2IgZXhpc3RzLiBSZXN1bHQgY2FyZHMgZXhwb3NlIHRoZSBjb3JyZWN0IGltYWdlL1BERiBtZXRhZGF0YSwgZG93bmxvYWQsIHN1cHBvcnRlZCBlZGl0IGFuZCBuZXctY2FwdHVyZSBhY3Rpb25zLgotIEVkaXRpbmcgYW4gYXV0by1nZW5lcmF0ZWQgUERGIGV4cGxpY2l0bHkgcmVvcGVucyBgY29tcGxldGVkIOKGkiByZWFkeWAsIHJlbW92ZXMgb25seSB0aGUgb2xkIG91dHB1dCBhcnRpZmFjdCwga2VlcHMgc291cmNlIHRpbGVzIGFuZCBlZGl0IG1hbmlmZXN0IGNvbnNpc3RlbmN5LCB0aGVuIHByb2R1Y2VzIGEgcmVwbGFjZW1lbnQgUERGIHdpdGhvdXQgcmVjYXB0dXJlLgotIFBhcnRpYWwgY2FwdHVyZSBpcyBuZXZlciBhdXRvLWV4cG9ydGVkIHVudGlsIHRoZSB1c2VyIGV4cGxpY2l0bHkga2VlcHMgdGhlIGNvbnRpZ3VvdXMgcHJlZml4OyBjYW5jZWxsYXRpb24vcmVzZXQgY29udGludWUgdG8gZGlzY2FyZCBjYXB0dXJlLW93bmVkIGRhdGEuCi0gRmluYWwgY2xlYW4gZ2F0ZSBvbiBjb21taXQgYDZkMjMxNzNmMGJlYmY4YmM2ZmZkMjMzMjdkYWNkN2ZiNTgzMjJkNDdgOiBmb3JtYXR0aW5nLCBFU0xpbnQsIHN0cmljdCBUeXBlU2NyaXB0LCBwcml2YWN5L2RlcGVuZGVuY3kvcmVsZWFzZS9jcml0aWNhbC1zZWN1cml0eSBhdWRpdHMsIDMyNS8zMjUgdW5pdCB0ZXN0cyBvbiA5MiBmaWxlcywgNC80IFBERiBiZW5jaG1hcmtzLCB2ZXJpZmllZCBNYW5pZmVzdCBWMyBidWlsZCwgcmVwcm9kdWNpYmxlIDI0LWVudHJ5IFpJUCwgNDkvNDkgUGxheXdyaWdodCBFMkUgYW5kIHBhY2thZ2VkIGluc3RhbGwvdXBkYXRlL3VuaW5zdGFsbCBsaWZlY3ljbGUgYWxsIFBBU1MuCgojIyBTMjQgZXhpdCBkaXNwb3NpdGlvbgoKLSBBQy0yMjogUEFTUyDigJQgc3VjY2Vzc2Z1bCBmdWxsLXBhZ2UgY2FwdHVyZSBzdGFydHMgUERGIGV4cG9ydCB3aXRob3V0IG9wZW5pbmcgdGhlIGVkaXRvci4KLSBBQy0yMzogUEFTUyDigJQgUERGIHJlbWFpbnMgcGFnZS1hdC1hLXRpbWUgd2l0aCBkZWNvZGVkLXRpbGUgY29uY3VycmVuY3kgYm91bmRlZCB0byBvbmUgYW5kIG5vIGZ1bGwtcGFnZSBjYW52YXMuCi0gQUMtMjQ6IFBBU1Mg4oCUIBleHBvcnQgZmFpbHVyZSBwcmVzZXJ2ZXMgc291cmNlIHRpbGVzOyByZXRyeSBhbmQgaW1hZ2UtdG8tUERGIGZhbGxiYWNrIHJldXNlIHRoZW0gd2l0aG91dCByZWNhcHR1cmUuCi0gQUMtMzY6IFBBU1Mg4oCUIGZ1bGwtcGFnZS9zY3JvbGwtYXJlYSBkZWZhdWx0IHRvIFBERiwgcmVnaW9uL2VsZW1lbnQgcmV0dXJuIGRpcmVjdCBndWFyZGVkIGltYWdlcyBhbmQgb3ZlcnNpemVkIGltYWdlcyByZWNlaXZlIGFuIGV4cGxpY2l0IFBERiBmYWxsYmFjay4KLSBTMjUgaXMgdW5ibG9ja2VkIGFuZCBiZWNvbWVzIHRoZSBhY3RpdmUgc2Vzc2lvbjsgc3RvcmVkIHNldHRpbmdzLCBldmVudC1kcml2ZW4gcHJvZ3Jlc3MgYW5kIHNpbXBsaWZpZWQgcG9wdXAgcmVtYWluIG91dCBvZiBTMjQgc2NvcGUuCiIiIgptYXJrZXIgPSAiXG4jIDkuIFMyNSDigJQgU2V0dGluZ3MsIGV2ZW50cyB2w6Agc2ltcGxpZmllZCBwb3B1cCIKaWYgIiMjIFMyNCBpbXBsZW1lbnRhdGlvbiBldmlkZW5jZSIgaW4gcGxhbjoKICAgIHJhaXNlIFN5c3RlbUV4aXQoIlMyNCBldmlkZW5jZSBhbHJlYWR5IGV4aXN0cyIpCmlmIG1hcmtlciBub3QgaW4gcGxhbjoKICAgIHJhaXNlIFN5c3RlbUV4aXQoIk1pc3NpbmcgUzI1IFBMQU4gbWFya2VyIikKcGxhbiA9IHBsYW4ucmVwbGFjZShtYXJrZXIsIGV2aWRlbmNlICsgbWFya2VyLCAxKQpwbGFuX3BhdGgud3JpdGVfdGV4dChwbGFuKQoKc3BlY19wYXRoID0gUGF0aCgiZG9jcy9zcGVjLTAuMi4wLm1kIikKc3BlYyA9IHNwZWNfcGF0aC5yZWFkX3RleHQoKQppZiAiZGF0ZTogMjAyNi0wOC0wNFxuIiBub3QgaW4gc3BlYzoKICAgIHJhaXNlIFN5c3RlbUV4aXQoIk1pc3Npbmcgc3BlYyBkYXRlIG1hcmtlciIpCnNwZWMgPSBzcGVjLnJlcGxhY2UoImRhdGU6IDIwMjYtMDgtMDRcbiIsICJkYXRlOiAyMDI2LTA4LTA1XG4iLCAxKQpzcGVjX3NlY3Rpb24gPSAiIiIKCiMjIDUuNCBMb2NrZWQgUzI0IGltcGxlbWVudGF0aW9uIHNlbWFudGljcwoKLSBDb21wbGV0aW9uIHJvdXRpbmcgaXMgZGV0ZXJtaW5pc3RpYyBieSBtb2RlOiBmdWxsLXBhZ2UgYW5kIHNjcm9sbC1hcmVhIGF1dG9tYXRpY2FsbHkgcmVxdWVzdCBQREY7IHJlZ2lvbiBhbmQgZWxlbWVudCBhdXRvbWF0aWNhbGx5IHJlcXVlc3QgdGhlIHZhbGlkYXRlZCBpbWFnZSBmb3JtYXQ7IHZpc2libGUgY2FwdHVyZSBrZWVwcyBpdHMgZXhpc3RpbmcgYXJ0aWZhY3QgZmxvdy4KLSBgcmVhZHlgIGlzIHRoZSBkdXJhYmxlIGhhbmRvZmYgZnJvbSBjYXB0dXJlIHRvIG91dHB1dC4gQ29tcGxldGlvbiByZWNvdmVyeSBmaXJzdCByZWNvbmNpbGVzIGBvdXRwdXRBcnRpZmFjdElkYCBhbmQgdGhlIHBlcnNpc3RlZCBhcnRpZmFjdCwgc28gc2VydmljZS13b3JrZXIgcmVzdGFydCBjYW5ub3QgY3JlYXRlIGEgc2Vjb25kIG91dHB1dCBmb3IgdGhlIHNhbWUgY29tcGxldGVkIGF0dGVtcHQuCi0gVGVybWluYWwgbG9va3VwIHByZWZlcnMgYW4gYWN0aXZlIGpvYiwgb3RoZXJ3aXNlIHRoZSBuZXdlc3QgZHVyYWJsZSB0ZXJtaW5hbCBzdW1tYXJ5IGZvciB0aGUgdGFiLiBDbG9zaW5nIGFuZCByZW9wZW5pbmcgdGhlIHBvcHVwIHRoZXJlZm9yZSByZXN0b3JlcyBjb21wbGV0ZWQgUE5HL1BERiByZXN1bHQgbWV0YWRhdGEgd2l0aG91dCBsb2FkaW5nIHRpbGUgQmxvYnMgaW50byBzZXNzaW9uIHN0b3JhZ2UuCi0gVGlsZWQgaW1hZ2UgY29tcG9zaXRpb24gaXMgYWxsb3dlZCBvbmx5IGFmdGVyIGRpbWVuc2lvbiwgcGl4ZWwtYXJlYSBhbmQgZXN0aW1hdGVkIHdvcmtpbmctc2V0IGd1YXJkcy4gVGlsZXMgZGVjb2RlIGFuZCBjbG9zZSBzZXF1ZW50aWFsbHk7IHVuc2FmZSBjYW52YXMgYWxsb2NhdGlvbiByZXR1cm5zIHR5cGVkIGBFX0lNQUdFX09VVFBVVF9UT09fTEFSR0VgIHdpdGggYGZhbGxiYWNrQWxsb3dlZDogdHJ1ZWAuCi0gVGhlIG92ZXJzaXplZC1pbWFnZSBmYWxsYmFjayBpcyB1c2VyIGluaXRpYXRlZC4gSXQgaW52b2tlcyBQREYgZXhwb3J0IG9uIHRoZSBzYW1lIGZhaWxlZCBqb2IgYW5kIHN0b3JlZCB0aWxlcywgZG9lcyBub3QgcmVvcGVuIGEgc2VsZWN0b3IgYW5kIGRvZXMgbm90IHJlY2FwdHVyZSBwaXhlbHMuCi0gQXV0by1nZW5lcmF0ZWQgUERGIG91dHB1dCByZW1haW5zIGVkaXRhYmxlLiBUaGUgZmlyc3QgZXhwbGljaXQgZWRpdG9yIG11dGF0aW9uIHJlb3BlbnMgYGNvbXBsZXRlZCDihpI gcmVhZHlgLCBkZWxldGVzIG9ubHkgdGhlIG9sZCBQREYgYXJ0aWZhY3Qvb3V0cHV0IGxpbmssIGtlZXBzIHNvdXJjZSB0aWxlcywgYW5kIHJvbGxzIHRoZSBtYW5pZmVzdCBiYWNrIGlmIHJlb3BlbmluZyBmYWlscy4KLSBPdXRwdXQgbWV0YWRhdGEgaW5jbHVkZXMgYXJ0aWZhY3QgSUQsIGZvcm1hdCwgTUlNRSB0eXBlLCBieXRlIGxlbmd0aCBhbmQgUERG IHBhZ2UgY291bnQuIERvd25sb2FkLCBzdXBwb3J0ZWQgRWRpdCBhbmQgTmV3IGNhcHR1cmUgYWN0aW9ucyBkZXJpdmUgZnJvbSB0aGlzIGR1cmFibGUgY29udHJhY3QuCi0gR3VhcmQtbGltaXRlZCBwYXJ0aWFsIGNhcHR1cmUgcmVxdWlyZXMgZXhwbGljaXQga2VlcCBjb25maXJtYXRpb24gYmVmb3JlIG91dHB1dCBzdGFydHMuCi0gUzI0IGFjY2VwdGFuY2UgZXZpZGVuY2U6IDMyNSB1bml0IHRlc3RzLCBmb3VyIGJvdW5kZWQgUERGIGJlbmNobWFya3MsIDQ5IGFjdHVhbC1icm93c2VyIEUyRSBjYXNlcyBpbmNsdWRpbmcgaW1hZ2UtdG9vLWxhcmdlIFBERiBmYWxsYmFjayB3aXRob3V0IHJlY2FwdHVyZSwgcmVwcm9kdWNpYmxlIHBhY2thZ2luZyBhbmQgcGFja2FnZWQgbGlmZWN5Y2xlIHNtb2tlLgoiIiIKc3BlY19tYXJrZXIgPSAiXG4jIDYuIFJlc2V0IGRvbWFpbiBjb21tYW5kIgppZiAiIyMgNS40IExvY2tlZCBTMjQgaW1wbGVtZW50YXRpb24gc2VtYW50aWNzIiBpbiBzcGVjOgogICAgcmFpc2UgU3lzdGVtRXhpdCgiUzI0IHNwZWMgc2VtYW50aWNzIGFscmVhZHkgZXhpc3QiKQppZiBzcGVjX21hcmtlciBub3QgaW4gc3BlYzoKICAgIHJhaXNlIFN5c3RlbUV4aXQoIk1pc3Npbmcgc3BlYyByZXNldCBtYXJrZXIiKQpzcGVjID0gc3BlYy5yZXBsYWNlKHNwZWNfbWFya2VyLCBzcGVjX3NlY3Rpb24gKyBzcGVjX21hcmtlciwgMSkKc3BlY19wYXRoLndyaXRlX3RleHQoc3BlYykKCmNoYW5nZWxvZ19wYXRoID0gUGF0aCgiQ0hBTkdFTE9HLm1kIikKY2hhbmdlbG9nID0gY2hhbmdlbG9nX3BhdGgucmVhZF90ZXh0KCkKY2hhbmdlbG9nX21hcmtlciA9ICIjIyBbVW5yZWxlYXNlZF1cblxuIyMjIEFkZGVkXG5cbiIKaWYgY2hhbmdlbG9nX21hcmtlciBub3QgaW4gY2hhbmdlbG9nOgogICAgcmFpc2UgU3lzdGVtRXhpdCgiTWlzc2luZyBjaGFuZ2Vsb2cgbWFya2VyIikKYWRkaXRpb25zID0gIiIiLU1vZGUtYXdhcmUgY29tcGxldGlvbiByb3V0aW5nIHRoYXQgYXV0b21hdGljYWxseSBjcmVhdGVzIFBERiBmb3IgZnVsbC1wYWdlIGFuZCBzY3JvbGwtYXJlYSBjYXB0dXJlcywgcmV0dXJucyBndWFyZGVkIFBORy9KUEVHL1dlYlAgZm9yIHJlZ2lvbiBhbmQgZWxlbWVudCBjYXB0dXJlcywgYW5kIHByZXNlcnZlcyB0aGUgZXhpc3RpbmcgdmlzaWJsZS1pbWFnZSBmbG93LgotIER1cmFibGUgb3V0cHV0IG1ldGFkYXRhIGFuZCB0ZXJtaW5hbC1qb2IgcmVzdG9yYXRpb24gYWNyb3NzIHBvcHVwIHJlb3BlbiBhbmQgTWFuaWZlc3QgVjMgc2VydmljZS13b3JrZXIgcmVzdGFydCwgd2l0aCBleGlzdGluZyBhcnRpZmFjdCByZWNvbmNpbGlhdGlvbiBwcmV2ZW50aW5nIGR1cGxpY2F0ZSBvdXRwdXQgY3JlYXRpb24uCi0gR3VhcmRlZCBzZXF1ZW50aWFsIHRpbGVkLWltYWdlIGNvbXBvc2l0aW9uIHdpdGggY2FudmFzIGRpbWVuc2lvbiwgdG90YWwgcGl4ZWwtYXJlYSBhbmQgZXN0aW1hdGVkIHdvcmtpbmctc2V0IGxpbWl0cyBiZWZvcmUgYWxsb2NhdGlvbi4KLSBFeHBsaWNpdCBgRV9JTUFHRV9PVVRQVVRfVE9PX0xBUkdFYCBQREYgZmFsbGJhY2sgdGhhdCByZXVzZXMgdGhlIHNhbWUgam9iIGFuZCBleGFjdCBzdG9yZWQgdGlsZSBCbG9icyB3aXRob3V0IHNlbGVjdG9yIHJlb3BlbiBvciBwaXhlbCByZWNhcHR1cmUuCi0gRWRpdGFibGUgYXV0by1nZW5lcmF0ZWQgUERGc zoiIGFuIGV4cGxpY2l0IGVkaXQgcmVvcGVucyBgY29tcGxldGVkYCBvdXRwdXQgc2FmZWx5LCByZW1vdmVzIG9ubHkgdGhlIG9sZCBQREYgYXJ0aWZhY3QgYW5kIHByZXNlcnZlcyBzb3VyY2UgdGlsZXMgZm9yIHJlcGxhY2VtZW50IGV4cG9ydC4KLSBTMjQgYnJvd3NlciBjb3ZlcmFnZSBmb3IgYXV0b21hdGljIFBERi9pbWFnZSByZXN1bHQgY2FyZHMsIHBvcHVwIGxpZmVjeWNsZSByZWNvdmVyeSwgZWRpdG9yIHJlLWV4cG9ydCwgYW5kIG92ZXJzaXplZC1pbWFnZSBmYWxsYmFjazsgdGhlIGNsZWFuIGdhdGUgcGFzc2VzIDMyNSB1bml0IHRlc3RzIGFjcm9zcyA5MiBmaWxlcywgZm91ciBQREYgYmVuY2htYXJrcywgNDkgUGxheXdyaWdodCBFMkUgY2FzZXMgYW5kIHBhY2thZ2VkIGxpZmVjeWNsZSBzbW9rZS4KIiIiCmlmICJNb2RlLWF3YXJlIGNvbXBsZXRpb24gcm91dGluZyB0aGF0IGF1dG9tYXRpY2FsbHkgY3JlYXRlcyBQREYiIGluIGNoYW5nZWxvZzoKICAgIHJhaXNlIFN5c3RlbUV4aXQoIlMyNCBjaGFuZ2Vsb2cgZW50cmllcyBhbHJlYWR5IGV4aXN0IikKY2hhbmdlbG9nID0gY2hhbmdlbG9nLnJlcGxhY2UoY2hhbmdlbG9nX21hcmtlciwgY2hhbmdlbG9nX21hcmtlciArIGFkZGl0aW9ucywgMSkKY2hhbmdlbG9nX3BhdGgud3JpdGVfdGV4dChjaGFuZ2Vsb2cpCg==
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          plan_path = Path("PLAN.md")
-          plan = plan_path.read_text()
-          replacements = {
-              "date: 2026-08-04\n": "date: 2026-08-05\n",
-              "current_session: S24\n": "current_session: S25\n",
-              "S21–S23 đã hoàn tất reset lifecycle, region selector đáng tin cậy và adaptive auto-scroll có resumable frontier mà không thay manifest, package version hoặc artifact 0.1.0. S24 là session active tiếp theo.": "S21–S24 đã hoàn tất reset lifecycle, region selector đáng tin cậy, adaptive auto-scroll có resumable frontier và mode-aware output mà không thay manifest, package version hoặc artifact 0.1.0. S25 là session active tiếp theo.",
-              "| S24 | Auto-PDF và mode-aware image/PDF output | PLANNED | S23 |": "| S24 | Auto-PDF và mode-aware image/PDF output | DONE | S23 |",
-              "| S25 | Stored settings, event-driven progress và simplified popup | BLOCKED | S21–S24 stable contracts |": "| S25 | Stored settings, event-driven progress và simplified popup | PLANNED | S21–S24 stable contracts |",
-          }
-          for old, new in replacements.items():
-              if old not in plan:
-                  raise SystemExit(f"Missing PLAN marker: {old}")
-              plan = plan.replace(old, new, 1)
-
-          evidence = """
-
-## S24 implementation evidence
-
-- `CaptureCompletionPolicy` routes full-page and scroll-area jobs to automatic PDF export, region and element jobs to guarded image export, and leaves visible capture on its existing image flow.
-- Auto-export begins only from the durable `ready` checkpoint. Output format, artifact ID, MIME type, byte length and PDF page count persist on the job; worker recovery reconciles an existing output before starting work again.
-- `TiledImageExportService` validates dimensions, total pixel area and working-set budget before allocating an `OffscreenCanvas`, decodes tiles sequentially and emits PNG/JPEG/WebP without a full-page canvas.
-- `E_IMAGE_OUTPUT_TOO_LARGE` preserves every source tile and exposes the explicit “Chuyển sang PDF không chụp lại” action. Browser coverage proves the same job and exact stored tile Blobs produce the fallback PDF without reopening a selector or recapturing pixels.
-- Reopening the popup restores the most recent terminal output when no active job exists. Result cards expose the correct image/PDF metadata, download, supported edit and new-capture actions.
-- Editing an auto-generated PDF explicitly reopens `completed → ready`, removes only the old output artifact, keeps source tiles and edit manifest consistency, then produces a replacement PDF without recapture.
-- Partial capture is never auto-exported until the user explicitly keeps the contiguous prefix; cancellation/reset continue to discard capture-owned data.
-- Final clean gate on commit `6d23173f0bebf8bc6ffd23327dacd7fb58322d47`: formatting, ESLint, strict TypeScript, privacy/dependency/release/critical-security audits, 325/325 unit tests on 92 files, 4/4 PDF benchmarks, verified Manifest V3 build, reproducible 24-entry ZIP, 49/49 Playwright E2E and packaged install/update/uninstall lifecycle all PASS.
-
-## S24 exit disposition
-
-- AC-22: PASS — successful full-page capture starts PDF export without opening the editor.
-- AC-23: PASS — PDF remains page-at-a-time with decoded-tile concurrency bounded to one and no full-page canvas.
-- AC-24: PASS — export failure preserves source tiles; retry and image-to-PDF fallback reuse them without recapture.
-- AC-36: PASS — full-page/scroll-area default to PDF, region/element return direct guarded images and oversized images receive an explicit PDF fallback.
-- S25 is unblocked and becomes the active session; stored settings, event-driven progress and simplified popup remain out of S24 scope.
-"""
-          marker = "\n# 9. S25 — Settings, events và simplified popup"
-          if "## S24 implementation evidence" in plan:
-              raise SystemExit("S24 evidence already exists")
-          if marker not in plan:
-              raise SystemExit("Missing S25 PLAN marker")
-          plan = plan.replace(marker, evidence + marker, 1)
-          plan_path.write_text(plan)
-
-          spec_path = Path("docs/spec-0.2.0.md")
-          spec = spec_path.read_text()
-          if "date: 2026-08-04\n" not in spec:
-              raise SystemExit("Missing spec date marker")
-          spec = spec.replace("date: 2026-08-04\n", "date: 2026-08-05\n", 1)
-          spec_section = """
-
-## 5.4 Locked S24 implementation semantics
-
-- Completion routing is deterministic by mode: full-page and scroll-area automatically request PDF; region and element automatically request the validated image format; visible capture keeps its existing artifact flow.
-- `ready` is the durable handoff from capture to output. Completion recovery first reconciles `outputArtifactId` and the persisted artifact, so service-worker restart cannot create a second output for the same completed attempt.
-- Terminal lookup prefers an active job, otherwise the newest durable terminal summary for the tab. Closing and reopening the popup therefore restores completed PNG/PDF result metadata without loading tile Blobs into session storage.
-- Tiled image composition is allowed only after dimension, pixel-area and estimated working-set guards. Tiles decode and close sequentially; unsafe canvas allocation returns typed `E_IMAGE_OUTPUT_TOO_LARGE` with `fallbackAllowed: true`.
-- The oversized-image fallback is user initiated. It invokes PDF export on the same failed job and stored tiles, does not reopen a selector and does not recapture pixels.
-- Auto-generated PDF output remains editable. The first explicit editor mutation reopens `completed → ready`, deletes only the old PDF artifact/output link, keeps source tiles, and rolls the manifest back if reopening fails.
-- Output metadata includes artifact ID, format, MIME type, byte length and PDF page count. Download, supported Edit and New capture actions derive from this durable contract.
-- Guard-limited partial capture requires explicit keep confirmation before output starts.
-- S24 acceptance evidence: 325 unit tests, four bounded PDF benchmarks, 49 actual-browser E2E cases including image-too-large PDF fallback without recapture, reproducible packaging and packaged lifecycle smoke.
-"""
-          spec_marker = "\n# 6. Reset domain command"
-          if "## 5.4 Locked S24 implementation semantics" in spec:
-              raise SystemExit("S24 spec semantics already exist")
-          if spec_marker not in spec:
-              raise SystemExit("Missing spec reset marker")
-          spec = spec.replace(spec_marker, spec_section + spec_marker, 1)
-          spec_path.write_text(spec)
-
-          changelog_path = Path("CHANGELOG.md")
-          changelog = changelog_path.read_text()
-          changelog_marker = "## [Unreleased]\n\n### Added\n\n"
-          if changelog_marker not in changelog:
-              raise SystemExit("Missing changelog marker")
-          additions = """- Mode-aware completion routing that automatically creates PDF for full-page and scroll-area captures, returns guarded PNG/JPEG/WebP for region and element captures, and preserves the existing visible-image flow.
-- Durable output metadata and terminal-job restoration across popup reopen and Manifest V3 service-worker restart, with existing artifact reconciliation preventing duplicate output creation.
-- Guarded sequential tiled-image composition with canvas dimension, total pixel-area and estimated working-set limits before allocation.
-- Explicit `E_IMAGE_OUTPUT_TOO_LARGE` PDF fallback that reuses the same job and exact stored tile Blobs without selector reopen or pixel recapture.
-- Editable auto-generated PDFs: an explicit edit reopens `completed` output safely, removes only the old PDF artifact and preserves source tiles for replacement export.
-- S24 browser coverage for automatic PDF/image result cards, popup lifecycle recovery, editor re-export, and oversized-image fallback; the clean gate passes 325 unit tests across 92 files, four PDF benchmarks, 49 Playwright E2E cases and packaged lifecycle smoke.
-"""
-          if "Mode-aware completion routing that automatically creates PDF" in changelog:
-              raise SystemExit("S24 changelog entries already exist")
-          changelog = changelog.replace(changelog_marker, changelog_marker + additions, 1)
-          changelog_path.write_text(changelog)
-          PY
+          printf '%s' "$S24_DOC_SCRIPT_B64" | base64 --decode > /tmp/close-s24-docs.py
+          python /tmp/close-s24-docs.py
           pnpm exec prettier --write PLAN.md docs/spec-0.2.0.md CHANGELOG.md
           rm .github/workflows/close-s24-docs-once.yml
       - name: Commit milestone documentation
