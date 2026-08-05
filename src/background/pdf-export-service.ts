@@ -117,7 +117,8 @@ export class PdfExportService {
     const manifest = settings === undefined ? await this.manifests?.load(jobId) : undefined;
     const pdfSettings = settings ?? manifest?.settings ?? current.settings.pdf;
     const pages = manifest?.pages;
-    const totalPages = pages?.length ?? planPdfDocument(current.targetRect, pdfSettings).pages.length;
+    const totalPages =
+      pages?.length ?? planPdfDocument(current.targetRect, pdfSettings).pages.length;
     this.cancelledJobs.delete(jobId);
     const exporting = await this.jobs.transition(
       jobId,
