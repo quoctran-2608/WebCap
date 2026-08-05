@@ -211,8 +211,7 @@ describe("CaptureCompletionService", () => {
       partialCapture: {
         reason: "max-tiles",
         capturedRect: { x: 0, y: 0, width: 100, height: 300 },
-        completedTiles: 1,
-        totalTiles: 2,
+        limitValue: 2,
       },
     });
     const ports = outputPorts(harness);
