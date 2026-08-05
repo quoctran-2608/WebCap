@@ -1,4 +1,4 @@
-import type { BrowserContext, Page, Worker } from "@playwright/test";
+import type { Page, Worker } from "@playwright/test";
 
 import { createJobCreateMessage, createJobGetMessage } from "@shared/contracts/job-messages";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
@@ -28,8 +28,8 @@ interface AdaptiveJobState {
 }
 
 interface WorkerRestartEvidence {
-  previousTargetId: string;
-  restartedTargetId: string;
+  previousWorkerStopped: boolean;
+  wakeResponseType: string;
 }
 
 async function resolveTab(
@@ -231,61 +231,50 @@ function expectContinuousRows(state: AdaptiveJobState): void {
 }
 
 async function restartExtensionWorker(
-  context: BrowserContext,
-  extensionId: string,
+  worker: Worker,
   popup: Page,
   targetPage: Page,
   jobId: string,
 ): Promise<WorkerRestartEvidence> {
-  const session = await context.newCDPSession(popup);
-  const targets = (await session.send("Target.getTargets")) as {
-    targetInfos: Array<{ targetId: string; type: string; url: string }>;
-  };
-  const serviceWorkerTarget = targets.targetInfos.find(
-    (target) =>
-      target.type === "service_worker" &&
-      target.url.startsWith(`chrome-extension://${extensionId}/`),
-  );
-  if (serviceWorkerTarget === undefined) {
-    throw new Error("The extension service-worker target could not be resolved.");
-  }
+  await worker.evaluate(() => chrome.runtime.reload()).catch(() => undefined);
+  await expect
+    .poll(
+      () =>
+        worker
+          .evaluate(() => true)
+          .then(
+            () => false,
+            () => true,
+          ),
+      { timeout: 10_000 },
+    )
+    .toBe(true);
 
-  await session.send("Target.closeTarget", { targetId: serviceWorkerTarget.targetId });
+  await popup.reload({ waitUntil: "domcontentloaded" });
   await targetPage.bringToFront();
   const wakeRequest = createJobGetMessage({
     requestId: crypto.randomUUID(),
     jobId,
     sentAt: new Date().toISOString(),
   });
-  const wakeResponse = popup
-    .evaluate(async (message) => {
-      const result: unknown = await chrome.runtime.sendMessage(message);
-      return result;
-    }, wakeRequest)
-    .catch(() => undefined);
-
-  const deadline = Date.now() + 20_000;
-  while (Date.now() < deadline) {
-    const refreshedTargets = (await session.send("Target.getTargets")) as {
-      targetInfos: Array<{ targetId: string; type: string; url: string }>;
-    };
-    const restarted = refreshedTargets.targetInfos.find(
-      (target) =>
-        target.type === "service_worker" &&
-        target.targetId !== serviceWorkerTarget.targetId &&
-        target.url.startsWith(`chrome-extension://${extensionId}/`),
+  const wakeResponse: unknown = await popup.evaluate(async (message) => {
+    const result: unknown = await chrome.runtime.sendMessage(message);
+    return result;
+  }, wakeRequest);
+  if (
+    typeof wakeResponse !== "object" ||
+    wakeResponse === null ||
+    !("type" in wakeResponse) ||
+    wakeResponse.type !== "JOB_RESPONSE"
+  ) {
+    throw new Error(
+      `The restarted extension runtime returned an invalid response: ${JSON.stringify(
+        wakeResponse,
+      )}`,
     );
-    if (restarted !== undefined) {
-      await wakeResponse;
-      await targetPage.bringToFront();
-      return {
-        previousTargetId: serviceWorkerTarget.targetId,
-        restartedTargetId: restarted.targetId,
-      };
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
   }
-  throw new Error("The restarted extension service-worker target did not become observable.");
+  await targetPage.bringToFront();
+  return { previousWorkerStopped: true, wakeResponseType: wakeResponse.type };
 }
 
 test("@smoke captures a real page beyond 100k CSS pixels without the legacy height cap", async ({
@@ -367,8 +356,6 @@ test("@smoke stops an infinite feed with an explicit continuous max-tiles partia
 });
 
 test("@smoke resumes the persisted prefix after an extension service-worker reload", async ({
-  context,
-  extensionId,
   serviceWorker,
   targetPage,
   openPopup,
@@ -390,8 +377,8 @@ test("@smoke resumes the persisted prefix after an extension service-worker relo
     )
     .toBeGreaterThan(0);
   const beforeRestart = await readAdaptiveJob(serviceWorker, jobId);
-  const restart = await restartExtensionWorker(context, extensionId, popup, targetPage, jobId);
-  expect(restart.restartedTargetId).not.toBe(restart.previousTargetId);
+  const restart = await restartExtensionWorker(serviceWorker, popup, targetPage, jobId);
+  expect(restart).toEqual({ previousWorkerStopped: true, wakeResponseType: "JOB_RESPONSE" });
   const final = await waitForAdaptiveReadyFromPage(popup, jobId);
 
   expect(final.completedTiles).toBeGreaterThanOrEqual(beforeRestart.completedTiles);
