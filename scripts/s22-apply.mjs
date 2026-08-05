@@ -17,12 +17,15 @@ if (
 ) {
   throw new Error(`S22 payload integrity mismatch: ${encoded.length} bytes, ${checksum}`);
 }
-const staleEnglishAnchor = `  "selector.region.instructions":\n    "Drag to select · drag the frame to move · use arrow keys to fine-tune · Enter confirms · Esc cancels",\n  "selector.region.confirm": "Capture region",`;
-const baselineEnglishAnchor = `  "selector.region.instructions":\n    "Drag to select · drag the box to move · arrow keys to refine · Enter to confirm · Esc to cancel",\n  "selector.region.confirm": "Capture region",`;
-const runtimeSource = gunzipSync(Buffer.from(encoded, "base64"))
-  .toString("utf8")
-  .replace(staleEnglishAnchor, baselineEnglishAnchor);
-await writeFile(runtimePath, runtimeSource);
+const staleEnglishCopy =
+  "Drag to select · drag the frame to move · use arrow keys to fine-tune · Enter confirms · Esc cancels";
+const baselineEnglishCopy =
+  "Drag to select · drag the box to move · arrow keys to refine · Enter to confirm · Esc to cancel";
+const decoded = gunzipSync(Buffer.from(encoded, "base64")).toString("utf8");
+if (decoded.split(staleEnglishCopy).length !== 2) {
+  throw new Error("S22 English i18n anchor is not unique in the staged patch.");
+}
+await writeFile(runtimePath, decoded.replace(staleEnglishCopy, baselineEnglishCopy));
 try {
   await import(new URL(`../${runtimePath}?${Date.now()}`, import.meta.url));
 } finally {
