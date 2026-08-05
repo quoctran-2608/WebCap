@@ -1,0 +1,87 @@
+name: S24 Popup Apply
+
+on:
+  push:
+    branches:
+      - agent/s24-auto-output
+
+permissions:
+  contents: write
+
+concurrency:
+  group: s24-popup-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out S24 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/s24-auto-output
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate and format popup output flow
+        shell: bash
+        run: |
+          set +e
+          node scripts/generate-s24-popup-output.mjs
+          status=$?
+          set -e
+          if [ "$status" -ne 1 ]; then
+            echo "Unexpected generator exit status: $status" >&2
+            exit 1
+          fi
+
+      - name: Remove temporary generation machinery
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const path = "package.json";
+          const packageJson = JSON.parse(readFileSync(path, "utf8"));
+          packageJson.scripts["format:check"] = "prettier --check .";
+          writeFileSync(path, `${JSON.stringify(packageJson, null, 2)}\n`);
+          NODE
+          rm -rf artifacts/s24-popup
+          rm scripts/generate-s24-popup-output.mjs
+          rm .github/workflows/s24-popup-apply.yml
+          pnpm exec prettier --write package.json
+
+      - name: Validate popup candidate
+        shell: bash
+        run: |
+          pnpm format:check
+          pnpm lint
+          pnpm typecheck
+          pnpm exec vitest run tests/unit/persistent-job-router.test.ts tests/unit/capture-completion-policy.test.ts tests/unit/capture-completion-service.test.ts tests/unit/tiled-image-export-service.test.ts
+          git diff --check
+          test ! -e scripts/generate-s24-popup-output.mjs
+          test ! -e .github/workflows/s24-popup-apply.yml
+          grep -F '"format:check": "prettier --check ."' package.json
+
+      - name: Commit clean popup integration
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Add S24 mode-aware output results"
+          git push origin HEAD:agent/s24-auto-output
