@@ -193,7 +193,10 @@ describe("persistent job router", () => {
       deletedManifests: 0,
       clearedSessions: 1,
     };
-    const reset = vi.fn((_request: CaptureResetRequest) => Promise.resolve(report));
+    const reset = vi.fn((request: CaptureResetRequest) => {
+      void request;
+      return Promise.resolve(report);
+    });
     const message = createJobCreateMessage({
       requestId: "request-region-launch",
       sentAt: now.toISOString(),
