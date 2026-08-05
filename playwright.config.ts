@@ -17,6 +17,8 @@ export default defineConfig({
     /pdf-export\.spec\.ts/,
     /pdf-source\.spec\.ts/,
     /region-selection\.spec\.ts/,
+    /region-selector-accessibility\.spec\.ts/,
+    /scroll-area\.spec\.ts/,
   ],
   timeout: 60_000,
   expect: {
