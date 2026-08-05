@@ -287,6 +287,7 @@ async function restartExtensionWorker(
     )
     .toBe(true);
 
+  await targetPage.bringToFront();
   const wakeRequest = createJobGetMessage({
     requestId: crypto.randomUUID(),
     jobId,
