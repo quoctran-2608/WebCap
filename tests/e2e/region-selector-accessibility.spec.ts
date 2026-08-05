@@ -51,7 +51,7 @@ async function latestRegionJobId(serviceWorker: Worker): Promise<string> {
 async function waitForRegionState(
   serviceWorker: Worker,
   jobId: string,
-  expectedState: "ready" | "cancelled",
+  expectedState: "completed" | "cancelled",
 ): Promise<void> {
   await expect
     .poll(
@@ -187,7 +187,7 @@ test("@smoke creates, moves, resizes, and commits a region using only the keyboa
 
   await targetPage.keyboard.press("Enter");
   await expect(root).toHaveCount(0);
-  await waitForRegionState(serviceWorker, jobId, "ready");
+  await waitForRegionState(serviceWorker, jobId, "completed");
 });
 
 test("@smoke auto-scrolls horizontally and restores the page after cancellation", async ({
