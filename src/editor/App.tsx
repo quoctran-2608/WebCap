@@ -319,7 +319,7 @@ export function PdfEditorApp({ jobId }: PdfEditorAppProps) {
 
   const exporting = snapshot.job.state === "exporting";
   const completed = snapshot.job.state === "completed";
-  const canEdit = !exporting && !completed && !busy;
+  const canEdit = !exporting && !busy;
   const canExport = ["ready", "failed"].includes(snapshot.job.state) && !busy;
   const applySettings = () => {
     void mutate(

@@ -7,6 +7,7 @@ import {
   type PdfEditorUpdateAction,
 } from "@shared/contracts/pdf-editor";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
+import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
 import type { PdfEditManifestRepositoryPort } from "@storage/pdf-edit-manifest-repository";
 
 import type { PersistentJobCoordinatorPort } from "./job-coordinator";
@@ -14,6 +15,7 @@ import type { PersistentJobCoordinatorPort } from "./job-coordinator";
 export interface PdfEditorServiceOptions {
   jobs: PersistentJobCoordinatorPort;
   manifests: PdfEditManifestRepositoryPort;
+  artifacts?: Pick<ArtifactRepositoryPort, "delete">;
   now?: () => Date;
 }
 
@@ -94,12 +96,14 @@ function createPages(job: CaptureJob, settings: CaptureJob["settings"]["pdf"]): 
 export class PdfEditorService {
   private readonly jobs: PersistentJobCoordinatorPort;
   private readonly manifests: PdfEditManifestRepositoryPort;
+  private readonly artifacts: Pick<ArtifactRepositoryPort, "delete"> | undefined;
   private readonly now: () => Date;
   private readonly operations = new Map<string, Promise<PdfEditorSnapshot>>();
 
   constructor(options: PdfEditorServiceOptions) {
     this.jobs = options.jobs;
     this.manifests = options.manifests;
+    this.artifacts = options.artifacts;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -172,7 +176,25 @@ export class PdfEditorService {
           };
         }
         await this.manifests.save(next);
-        return this.snapshot(job, next);
+        let snapshotJob = job;
+        if (job.state === "completed") {
+          try {
+            snapshotJob = await this.jobs.transition(job.id, "ready", {
+              activeOutputFormat: undefined,
+              output: undefined,
+              outputArtifactId: undefined,
+              exportProgress: undefined,
+              error: undefined,
+            });
+          } catch (error) {
+            await this.manifests.save(current).catch(() => undefined);
+            throw error;
+          }
+          if (job.outputArtifactId !== undefined) {
+            await this.artifacts?.delete(job.outputArtifactId).catch(() => false);
+          }
+        }
+        return this.snapshot(snapshotJob, next);
       })
       .finally(() => {
         if (this.operations.get(jobId) === operation) this.operations.delete(jobId);

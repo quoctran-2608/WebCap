@@ -134,20 +134,20 @@ function defaultDependencies(): PdfEditorRouterDependencies {
     () => new Date(),
   );
   const offscreen = new OffscreenService();
+  const artifacts = new IndexedDbArtifactRepository();
   sharedDependencies = {
-    editor: new PdfEditorService({ jobs: coordinator, manifests }),
+    editor: new PdfEditorService({ jobs: coordinator, manifests, artifacts }),
     exporter: new PdfExportService({
       jobs: coordinator,
       tiles: new IndexedDbTileRepository(),
       offscreen,
       manifests,
+      artifacts,
     }),
     thumbnails: offscreen,
     now: () => new Date(),
   };
-  void new IndexedDbArtifactRepository()
-    .deleteExpired(new Date().toISOString())
-    .catch(() => undefined);
+  void artifacts.deleteExpired(new Date().toISOString()).catch(() => undefined);
   return sharedDependencies;
 }
 

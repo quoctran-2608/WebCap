@@ -136,6 +136,73 @@ describe("PdfEditorService", () => {
     expect(manifests.current()?.pages.map((page) => page.id)).toEqual(selected);
   });
 
+  it("reopens a completed auto-PDF on the first edit and removes the stale artifact", async () => {
+    const base = readyJob();
+    let current: CaptureJob = {
+      ...base,
+      state: "completed",
+      stateRevision: 6,
+      activeOutputFormat: "pdf",
+      outputArtifactId: "auto-pdf",
+      output: {
+        artifactId: "auto-pdf",
+        sourceArtifactId: base.id,
+        format: "pdf",
+        mimeType: "application/pdf",
+        filename: "auto.pdf",
+        byteLength: 4_096,
+        width: 595,
+        height: 842,
+        pageCount: 3,
+        createdAt: now.toISOString(),
+        expiresAt: base.expiresAt,
+      },
+      exportProgress: { completedPages: 3, totalPages: 3 },
+    };
+    const deleted: string[] = [];
+    const jobs = {
+      get: () => Promise.resolve(structuredClone(current)),
+      transition: (_jobId: string, state: CaptureJob["state"], patch = {}) => {
+        current = {
+          ...current,
+          ...patch,
+          state,
+          stateRevision: current.stateRevision + 1,
+          updatedAt: now.toISOString(),
+        };
+        return Promise.resolve(structuredClone(current));
+      },
+    } as unknown as PersistentJobCoordinatorPort;
+    const manifests = manifestRepository();
+    const service = new PdfEditorService({
+      jobs,
+      manifests,
+      artifacts: {
+        delete: (artifactId) => {
+          deleted.push(artifactId);
+          return Promise.resolve(true);
+        },
+      },
+      now: () => now,
+    });
+    const initial = await service.get(current.id);
+
+    const edited = await service.update(current.id, initial.manifest.revision, {
+      kind: "settings",
+      settings: { ...initial.manifest.settings, pageSize: "letter" },
+    });
+
+    expect(edited.job).toMatchObject({
+      state: "ready",
+      outputArtifactId: undefined,
+      output: undefined,
+      exportProgress: undefined,
+    });
+    expect(edited.manifest.revision).toBe(1);
+    expect(deleted).toEqual(["auto-pdf"]);
+    expect(current.tilePlan).toEqual(base.tilePlan);
+  });
+
   it("rejects stale revisions and page identifiers outside the current manifest", async () => {
     const job = readyJob();
     const manifests = manifestRepository();

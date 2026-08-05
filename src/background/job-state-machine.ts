@@ -11,7 +11,9 @@ const ALLOWED_TRANSITIONS: Readonly<Record<JobState, readonly JobState[]>> = Obj
   processing: ["ready", "failed", "cancelling"],
   ready: ["exporting", "cancelling"],
   exporting: ["completed", "ready", "failed", "cancelling"],
-  completed: [],
+  // Completed is quiescent by default, but a deliberate PDF-editor mutation may reopen
+  // the durable tile source so a replacement artifact can be exported without recapture.
+  completed: ["ready"],
   failed: ["preparing", "capturing", "exporting", "cancelled"],
   cancelling: ["cancelled"],
   cancelled: [],
