@@ -81,7 +81,7 @@ test("@smoke removes the job and tab lease when selector injection fails", async
 
   await popup.getByRole("button", { name: "Bắt đầu chọn vùng" }).click();
   await expect(popup.getByRole("alert")).toBeVisible({ timeout: 10_000 });
-  await expect(popup).not.toBeClosed();
+  expect(popup.isClosed()).toBe(false);
 
   await expect
     .poll(() =>
