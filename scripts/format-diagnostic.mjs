@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const files = [
@@ -17,11 +18,16 @@ const result = spawnSync("pnpm", ["exec", "prettier", "--write", ...files], {
 process.stdout.write(result.stdout ?? "");
 process.stderr.write(result.stderr ?? "");
 
+const manifest = [];
 for (const file of files) {
-  const encoded = readFileSync(file).toString("base64");
-  console.log(`WEBCAP_FORMAT_BEGIN ${file}`);
-  console.log(encoded);
-  console.log(`WEBCAP_FORMAT_END ${file}`);
+  const destination = `artifacts/formatted/${file}`;
+  mkdirSync(dirname(destination), { recursive: true });
+  copyFileSync(file, destination);
+  manifest.push({ source: file, artifactPath: destination });
 }
+writeFileSync(
+  "artifacts/formatted/manifest.json",
+  `${JSON.stringify({ prettier: "3.9.6", files: manifest }, null, 2)}\n`,
+);
 
 process.exit(result.status === 0 ? 1 : (result.status ?? 1));
