@@ -1,0 +1,794 @@
+from pathlib import Path
+
+
+def replace_once(path: str, old: str, new: str) -> None:
+    file = Path(path)
+    text = file.read_text()
+    count = text.count(old)
+    if count != 1:
+        raise SystemExit(f"Expected one anchor in {path}, found {count}: {old[:100]!r}")
+    file.write_text(text.replace(old, new))
+
+
+Path("src/offscreen/tiled-image-exporter.ts").write_text(
+    r'''import {
+  mimeTypeForFormat,
+  type ArtifactMetadata,
+  type ArtifactRecord,
+} from "@shared/contracts/artifact";
+import type { CaptureTile, ImageFormat, Rect } from "@shared/contracts/domain";
+import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
+import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
+import type { TileRepositoryPort } from "@storage/tile-repository";
+
+import { planPdfTileIntersections } from "./pdf-tile-intersections";
+
+export interface TiledImageExportPayload {
+  jobId: string;
+  outputArtifactId: string;
+  targetRect: Rect;
+  tiles: CaptureTile[];
+  format: ImageFormat;
+  quality: number;
+  filename: string;
+  createdAt: string;
+  expiresAt: string;
+  sourceTitle?: string;
+  sourceDomain?: string;
+}
+
+export interface DecodedTiledImage {
+  width: number;
+  height: number;
+  source: CanvasImageSource;
+  close(): void;
+}
+
+export interface TiledImageCanvasContextPort {
+  drawImage(
+    image: DecodedTiledImage,
+    sourceX: number,
+    sourceY: number,
+    sourceWidth: number,
+    sourceHeight: number,
+    destinationX: number,
+    destinationY: number,
+    destinationWidth: number,
+    destinationHeight: number,
+  ): void;
+}
+
+export interface TiledImageCanvasPort {
+  width: number;
+  height: number;
+  getContext(): TiledImageCanvasContextPort | null;
+  convertToBlob(options: { type: string; quality?: number }): Promise<Blob>;
+  release(): void;
+}
+
+export interface TiledImageExportEnvironment {
+  decode(blob: Blob): Promise<DecodedTiledImage>;
+  createCanvas(width: number, height: number): TiledImageCanvasPort;
+}
+
+export interface TiledImageExportGuards {
+  maxDimension: number;
+  maxPixelArea: number;
+  maxWorkingSetBytes: number;
+}
+
+export const DEFAULT_TILED_IMAGE_EXPORT_GUARDS: Readonly<TiledImageExportGuards> = Object.freeze({
+  maxDimension: 16_384,
+  maxPixelArea: 64_000_000,
+  maxWorkingSetBytes: 512 * 1024 * 1024,
+});
+
+export interface TiledImageExporterOptions {
+  tiles: TileRepositoryPort;
+  artifacts: ArtifactRepositoryPort;
+  environment?: TiledImageExportEnvironment;
+  guards?: Partial<TiledImageExportGuards>;
+}
+
+const defaultEnvironment: TiledImageExportEnvironment = {
+  async decode(blob) {
+    const bitmap = await createImageBitmap(blob);
+    return {
+      width: bitmap.width,
+      height: bitmap.height,
+      source: bitmap,
+      close: () => bitmap.close(),
+    };
+  },
+  createCanvas(width, height) {
+    const canvas = new OffscreenCanvas(width, height);
+    const context = canvas.getContext("2d");
+    return {
+      width,
+      height,
+      getContext: () =>
+        context === null
+          ? null
+          : {
+              drawImage(
+                image,
+                sourceX,
+                sourceY,
+                sourceWidth,
+                sourceHeight,
+                destinationX,
+                destinationY,
+                destinationWidth,
+                destinationHeight,
+              ) {
+                context.drawImage(
+                  image.source,
+                  sourceX,
+                  sourceY,
+                  sourceWidth,
+                  sourceHeight,
+                  destinationX,
+                  destinationY,
+                  destinationWidth,
+                  destinationHeight,
+                );
+              },
+            },
+      convertToBlob: (options) => canvas.convertToBlob(options),
+      release() {
+        canvas.width = 1;
+        canvas.height = 1;
+      },
+    };
+  },
+};
+
+function imageTooLargeError(
+  causeCode: string,
+  safeContext: Record<string, string | number | boolean>,
+): Error {
+  return createWebCapRuntimeError(
+    createWebCapError({
+      code: "E_IMAGE_OUTPUT_TOO_LARGE",
+      stage: "export",
+      message: "The tiled capture is too large for a safe browser image canvas.",
+      userMessageKey: "errors.imageOutputTooLarge",
+      retryable: true,
+      fallbackAllowed: true,
+      causeCode,
+      safeContext,
+    }),
+  );
+}
+
+function exportError(message: string, causeCode: string): Error {
+  return createWebCapRuntimeError(
+    createWebCapError({
+      code: "E_EXPORT_FAILED",
+      stage: "export",
+      message,
+      userMessageKey: "errors.exportFailed",
+      retryable: true,
+      fallbackAllowed: false,
+      causeCode,
+    }),
+  );
+}
+
+function storageReadError(jobId: string, tileIndex: number): Error {
+  return createWebCapRuntimeError(
+    createWebCapError({
+      code: "E_STORAGE_READ",
+      stage: "storage",
+      message: "A stored capture tile is unavailable for image export.",
+      userMessageKey: "errors.storageRead",
+      retryable: true,
+      fallbackAllowed: false,
+      causeCode: "TiledImageTileMissing",
+      safeContext: { jobId: jobId.slice(0, 24), tileIndex },
+    }),
+  );
+}
+
+function positiveScale(value: number, axis: "x" | "y"): number {
+  if (!Number.isFinite(value) || value <= 0 || value > 8) {
+    throw exportError(`The tiled image ${axis}-axis scale is invalid.`, "InvalidImageTileScale");
+  }
+  return value;
+}
+
+function roundRange(start: number, end: number, maximum: number): { start: number; length: number } {
+  const roundedStart = Math.max(0, Math.min(maximum, Math.round(start)));
+  const roundedEnd = Math.max(roundedStart, Math.min(maximum, Math.round(end)));
+  return { start: roundedStart, length: roundedEnd - roundedStart };
+}
+
+function validateGuards(
+  width: number,
+  height: number,
+  storedBytes: number,
+  largestTilePixelArea: number,
+  guards: TiledImageExportGuards,
+): void {
+  const pixelArea = width * height;
+  const estimatedWorkingSetBytes =
+    pixelArea * 4 + largestTilePixelArea * 4 + storedBytes + 32 * 1024 * 1024;
+  if (width > guards.maxDimension || height > guards.maxDimension) {
+    throw imageTooLargeError("ImageCanvasDimensionGuard", {
+      width,
+      height,
+      maxDimension: guards.maxDimension,
+    });
+  }
+  if (pixelArea > guards.maxPixelArea) {
+    throw imageTooLargeError("ImageCanvasPixelGuard", {
+      width,
+      height,
+      pixelArea,
+      maxPixelArea: guards.maxPixelArea,
+    });
+  }
+  if (estimatedWorkingSetBytes > guards.maxWorkingSetBytes) {
+    throw imageTooLargeError("ImageWorkingSetGuard", {
+      estimatedWorkingSetBytes,
+      maxWorkingSetBytes: guards.maxWorkingSetBytes,
+    });
+  }
+}
+
+export class TiledImageExporter {
+  private readonly tiles: TileRepositoryPort;
+  private readonly artifacts: ArtifactRepositoryPort;
+  private readonly environment: TiledImageExportEnvironment;
+  private readonly guards: TiledImageExportGuards;
+
+  constructor(options: TiledImageExporterOptions) {
+    this.tiles = options.tiles;
+    this.artifacts = options.artifacts;
+    this.environment = options.environment ?? defaultEnvironment;
+    this.guards = {
+      ...DEFAULT_TILED_IMAGE_EXPORT_GUARDS,
+      ...options.guards,
+    };
+  }
+
+  async export(payload: TiledImageExportPayload): Promise<ArtifactMetadata> {
+    const firstTile = payload.tiles[0];
+    if (firstTile === undefined || payload.targetRect.width <= 0 || payload.targetRect.height <= 0) {
+      throw exportError("Tiled image export requires a non-empty target and tile set.", "ImageTilesMissing");
+    }
+
+    const records = await this.tiles.listByJob(payload.jobId);
+    const recordByIndex = new Map(records.map((record) => [record.index, record]));
+    let storedBytes = 0;
+    for (const tile of payload.tiles) {
+      const record = recordByIndex.get(tile.index);
+      if (record?.blob === undefined || record.tile.status !== "stored") {
+        throw storageReadError(payload.jobId, tile.index);
+      }
+      storedBytes += record.blob.size;
+    }
+
+    const renderScaleX = positiveScale(
+      firstTile.expectedPixelWidth / firstTile.sourceRectCss.width,
+      "x",
+    );
+    const renderScaleY = positiveScale(
+      firstTile.expectedPixelHeight / firstTile.sourceRectCss.height,
+      "y",
+    );
+    const width = Math.max(1, Math.round(payload.targetRect.width * renderScaleX));
+    const height = Math.max(1, Math.round(payload.targetRect.height * renderScaleY));
+    const largestTilePixelArea = Math.max(
+      ...payload.tiles.map((tile) => tile.expectedPixelWidth * tile.expectedPixelHeight),
+    );
+    validateGuards(width, height, storedBytes, largestTilePixelArea, this.guards);
+
+    let intersections: ReturnType<typeof planPdfTileIntersections>;
+    try {
+      intersections = planPdfTileIntersections(payload.targetRect, payload.tiles);
+    } catch (error) {
+      throw exportError(
+        error instanceof Error ? error.message : "Tiled image seam validation failed.",
+        "TiledImageSeamInvalid",
+      );
+    }
+
+    const canvas = this.environment.createCanvas(width, height);
+    try {
+      const context = canvas.getContext();
+      if (context === null) {
+        throw exportError("WebCap could not create a tiled image canvas context.", "ImageCanvasUnavailable");
+      }
+
+      for (const intersection of intersections) {
+        const tile = payload.tiles.find((candidate) => candidate.index === intersection.tileIndex);
+        const record = recordByIndex.get(intersection.tileIndex);
+        if (tile === undefined || record?.blob === undefined) {
+          throw storageReadError(payload.jobId, intersection.tileIndex);
+        }
+        const decoded = await this.environment.decode(record.blob);
+        try {
+          const captureViewport = tile.captureViewportCss ?? tile.sourceRectCss;
+          const tileScaleX = positiveScale(decoded.width / captureViewport.width, "x");
+          const tileScaleY = positiveScale(decoded.height / captureViewport.height, "y");
+          const sourceX = roundRange(
+            intersection.sourceCropCss.x * tileScaleX,
+            (intersection.sourceCropCss.x + intersection.sourceCropCss.width) * tileScaleX,
+            decoded.width,
+          );
+          const sourceY = roundRange(
+            intersection.sourceCropCss.y * tileScaleY,
+            (intersection.sourceCropCss.y + intersection.sourceCropCss.height) * tileScaleY,
+            decoded.height,
+          );
+          const destinationX = roundRange(
+            intersection.pageDestinationCss.x * renderScaleX,
+            (intersection.pageDestinationCss.x + intersection.pageDestinationCss.width) *
+              renderScaleX,
+            width,
+          );
+          const destinationY = roundRange(
+            intersection.pageDestinationCss.y * renderScaleY,
+            (intersection.pageDestinationCss.y + intersection.pageDestinationCss.height) *
+              renderScaleY,
+            height,
+          );
+          if (
+            sourceX.length <= 0 ||
+            sourceY.length <= 0 ||
+            destinationX.length <= 0 ||
+            destinationY.length <= 0
+          ) {
+            throw exportError("A tiled image intersection rounded to an empty pixel range.", "ImagePixelRangeEmpty");
+          }
+          context.drawImage(
+            decoded,
+            sourceX.start,
+            sourceY.start,
+            sourceX.length,
+            sourceY.length,
+            destinationX.start,
+            destinationY.start,
+            destinationX.length,
+            destinationY.length,
+          );
+        } finally {
+          decoded.close();
+        }
+      }
+
+      const mimeType = mimeTypeForFormat(payload.format);
+      const blob = await canvas.convertToBlob({
+        type: mimeType,
+        ...(payload.format === "png" ? {} : { quality: payload.quality }),
+      });
+      if (blob.size <= 0) {
+        throw exportError("The encoded tiled image artifact is empty.", "ImageArtifactEmpty");
+      }
+      const record: ArtifactRecord = {
+        artifactId: payload.outputArtifactId,
+        sourceArtifactId: payload.jobId,
+        jobId: payload.jobId,
+        role: "output",
+        format: payload.format,
+        mimeType,
+        filename: payload.filename,
+        byteLength: blob.size,
+        width,
+        height,
+        createdAt: payload.createdAt,
+        expiresAt: payload.expiresAt,
+        blob,
+        ...(payload.sourceTitle === undefined ? {} : { sourceTitle: payload.sourceTitle }),
+        ...(payload.sourceDomain === undefined ? {} : { sourceDomain: payload.sourceDomain }),
+      };
+      await this.artifacts.put(record);
+      return {
+        artifactId: record.artifactId,
+        sourceArtifactId: record.sourceArtifactId,
+        format: record.format,
+        mimeType: record.mimeType,
+        filename: record.filename,
+        byteLength: record.byteLength,
+        width: record.width,
+        height: record.height,
+        createdAt: record.createdAt,
+        expiresAt: record.expiresAt,
+      };
+    } finally {
+      canvas.release();
+    }
+  }
+}
+'''
+)
+
+Path("tests/unit/tiled-image-exporter.test.ts").write_text(
+    r'''import { describe, expect, it, vi } from "vitest";
+
+import {
+  TiledImageExporter,
+  type DecodedTiledImage,
+  type TiledImageCanvasContextPort,
+} from "@offscreen/tiled-image-exporter";
+import type { ArtifactRecord } from "@shared/contracts/artifact";
+import type { CaptureTile } from "@shared/contracts/domain";
+import type { StoredTileRecord } from "@shared/contracts/job";
+import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
+import type { TileRepositoryPort } from "@storage/tile-repository";
+
+const NOW = "2026-08-05T08:00:00.000Z";
+
+function tiles(): CaptureTile[] {
+  return [
+    {
+      id: "job:0",
+      jobId: "job",
+      index: 0,
+      row: 0,
+      column: 0,
+      sourceRectCss: { x: 0, y: 0, width: 100, height: 100 },
+      outputRectCss: { x: 0, y: 0, width: 100, height: 100 },
+      expectedPixelWidth: 100,
+      expectedPixelHeight: 100,
+      overlapTopCss: 0,
+      overlapLeftCss: 0,
+      overlapRightCss: 0,
+      overlapBottomCss: 0,
+      status: "stored",
+      attempts: 1,
+    },
+    {
+      id: "job:1",
+      jobId: "job",
+      index: 1,
+      row: 1,
+      column: 0,
+      sourceRectCss: { x: 0, y: 80, width: 100, height: 100 },
+      outputRectCss: { x: 0, y: 100, width: 100, height: 80 },
+      expectedPixelWidth: 100,
+      expectedPixelHeight: 100,
+      overlapTopCss: 20,
+      overlapLeftCss: 0,
+      overlapRightCss: 0,
+      overlapBottomCss: 0,
+      status: "stored",
+      attempts: 1,
+    },
+  ];
+}
+
+function records(planned = tiles()): StoredTileRecord[] {
+  return planned.map((tile) => ({
+    schemaVersion: 1,
+    jobId: tile.jobId,
+    index: tile.index,
+    tile,
+    blob: new Blob([new Uint8Array([tile.index + 1])], { type: "image/png" }),
+    createdAt: NOW,
+    updatedAt: NOW,
+  }));
+}
+
+function tileRepository(values: StoredTileRecord[]): TileRepositoryPort {
+  return {
+    put: () => Promise.resolve(),
+    get: () => Promise.resolve(undefined),
+    listByJob: () => Promise.resolve(values),
+    deleteByJob: () => Promise.resolve(0),
+  };
+}
+
+function artifactRepository(put: (record: ArtifactRecord) => Promise<void>): ArtifactRepositoryPort {
+  return {
+    put,
+    get: () => Promise.resolve(undefined),
+    delete: () => Promise.resolve(false),
+    deleteExpired: () => Promise.resolve(0),
+  };
+}
+
+describe("TiledImageExporter", () => {
+  it("uses seam-aware crops, decodes sequentially, and stores one guarded image", async () => {
+    const drawCalls: number[][] = [];
+    const context: TiledImageCanvasContextPort = {
+      drawImage: (_image, ...coordinates) => drawCalls.push(coordinates),
+    };
+    let activeDecoded = 0;
+    let maxDecoded = 0;
+    const closes: Array<ReturnType<typeof vi.fn>> = [];
+    const release = vi.fn();
+    const put = vi.fn(async (_record: ArtifactRecord): Promise<void> => undefined);
+    const exporter = new TiledImageExporter({
+      tiles: tileRepository(records()),
+      artifacts: artifactRepository(put),
+      environment: {
+        async decode(): Promise<DecodedTiledImage> {
+          activeDecoded += 1;
+          maxDecoded = Math.max(maxDecoded, activeDecoded);
+          const close = vi.fn(() => {
+            activeDecoded -= 1;
+          });
+          closes.push(close);
+          return { width: 100, height: 100, source: {} as CanvasImageSource, close };
+        },
+        createCanvas(width, height) {
+          expect({ width, height }).toEqual({ width: 100, height: 180 });
+          return {
+            width,
+            height,
+            getContext: () => context,
+            convertToBlob: () =>
+              Promise.resolve(new Blob([new Uint8Array([1, 2, 3])], { type: "image/png" })),
+            release,
+          };
+        },
+      },
+    });
+
+    const artifact = await exporter.export({
+      jobId: "job",
+      outputArtifactId: "output",
+      targetRect: { x: 0, y: 0, width: 100, height: 180 },
+      tiles: tiles(),
+      format: "png",
+      quality: 0.9,
+      filename: "capture.png",
+      createdAt: NOW,
+      expiresAt: "2026-08-05T08:30:00.000Z",
+    });
+
+    expect(maxDecoded).toBe(1);
+    expect(closes).toHaveLength(2);
+    expect(closes.every((close) => close.mock.calls.length === 1)).toBe(true);
+    expect(drawCalls).toEqual([
+      [0, 0, 100, 100, 0, 0, 100, 100],
+      [0, 20, 100, 80, 0, 100, 100, 80],
+    ]);
+    expect(release).toHaveBeenCalledOnce();
+    expect(put).toHaveBeenCalledWith(
+      expect.objectContaining({
+        artifactId: "output",
+        jobId: "job",
+        role: "output",
+        format: "png",
+        width: 100,
+        height: 180,
+      }),
+    );
+    expect(artifact).toMatchObject({ artifactId: "output", mimeType: "image/png" });
+  });
+
+  it("rejects unsafe dimensions before allocating a canvas", async () => {
+    const planned = tiles().map((tile, index) => ({
+      ...tile,
+      sourceRectCss: { ...tile.sourceRectCss, width: 20_000 },
+      outputRectCss: {
+        x: 0,
+        y: index === 0 ? 0 : 100,
+        width: 20_000,
+        height: index === 0 ? 100 : 80,
+      },
+      expectedPixelWidth: 20_000,
+    }));
+    const createCanvas = vi.fn();
+    const exporter = new TiledImageExporter({
+      tiles: tileRepository(records(planned)),
+      artifacts: artifactRepository(() => Promise.resolve()),
+      environment: {
+        decode: () => Promise.reject(new Error("decode should not run")),
+        createCanvas,
+      },
+    });
+
+    await expect(
+      exporter.export({
+        jobId: "job",
+        outputArtifactId: "output",
+        targetRect: { x: 0, y: 0, width: 20_000, height: 180 },
+        tiles: planned,
+        format: "jpeg",
+        quality: 0.8,
+        filename: "capture.jpg",
+        createdAt: NOW,
+        expiresAt: "2026-08-05T08:30:00.000Z",
+      }),
+    ).rejects.toMatchObject({
+      name: "E_IMAGE_OUTPUT_TOO_LARGE",
+      data: { fallbackAllowed: true, causeCode: "ImageCanvasDimensionGuard" },
+    });
+    expect(createCanvas).not.toHaveBeenCalled();
+  });
+});
+'''
+)
+
+replace_once(
+    "src/shared/errors/error.ts",
+    '  "E_EXPORT_FAILED",\n  "E_DOWNLOAD_FAILED",',
+    '  "E_EXPORT_FAILED",\n  "E_IMAGE_OUTPUT_TOO_LARGE",\n  "E_DOWNLOAD_FAILED",',
+)
+
+replace_once(
+    "src/shared/i18n.ts",
+    '''    E_EXPORT_FAILED: {
+      message: "Không thể tạo file đầu ra.",
+      action: "Thử export lại; WebCap giữ source tiles khi có thể.",
+    },
+    E_DOWNLOAD_FAILED:''',
+    '''    E_EXPORT_FAILED: {
+      message: "Không thể tạo file đầu ra.",
+      action: "Thử export lại; WebCap giữ source tiles khi có thể.",
+    },
+    E_IMAGE_OUTPUT_TOO_LARGE: {
+      message: "Ảnh ghép vượt giới hạn canvas an toàn của trình duyệt.",
+      action: "Xuất PDF để giữ đầy đủ nội dung mà không cần chụp lại.",
+    },
+    E_DOWNLOAD_FAILED:''',
+)
+replace_once(
+    "src/shared/i18n.ts",
+    '''    E_EXPORT_FAILED: {
+      message: "The output file could not be created.",
+      action: "Retry export; WebCap retains source tiles when possible.",
+    },
+    E_DOWNLOAD_FAILED:''',
+    '''    E_EXPORT_FAILED: {
+      message: "The output file could not be created.",
+      action: "Retry export; WebCap retains source tiles when possible.",
+    },
+    E_IMAGE_OUTPUT_TOO_LARGE: {
+      message: "The stitched image exceeds the browser's safe canvas limits.",
+      action: "Export PDF to keep the complete capture without recapturing.",
+    },
+    E_DOWNLOAD_FAILED:''',
+)
+
+replace_once(
+    "src/shared/contracts/offscreen.ts",
+    "export const OffscreenImageProcessedMessageSchema = EnvelopeBaseSchema.extend({",
+    '''export const OffscreenExportTiledImageMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("background"),
+  target: z.literal("offscreen"),
+  type: z.literal("OFFSCREEN_EXPORT_TILED_IMAGE"),
+  payload: z
+    .object({
+      jobId: z.string().min(1).max(160),
+      outputArtifactId: z.string().min(1).max(160),
+      targetRect: RectSchema,
+      tiles: z.array(CaptureTileSchema).min(1),
+      format: ImageFormatSchema,
+      quality: z.number().finite().min(0).max(1),
+      filename: z.string().min(1).max(180),
+      createdAt: IsoDateTimeSchema,
+      expiresAt: IsoDateTimeSchema,
+      sourceTitle: z.string().max(300).optional(),
+      sourceDomain: z.string().max(300).optional(),
+    })
+    .strict(),
+}).strict();
+
+export const OffscreenImageProcessedMessageSchema = EnvelopeBaseSchema.extend({''',
+)
+replace_once(
+    "src/shared/contracts/offscreen.ts",
+    "  OffscreenProcessImageMessageSchema,\n  OffscreenExportPdfMessageSchema,",
+    "  OffscreenProcessImageMessageSchema,\n  OffscreenExportTiledImageMessageSchema,\n  OffscreenExportPdfMessageSchema,",
+)
+replace_once(
+    "src/shared/contracts/offscreen.ts",
+    "export type OffscreenImageProcessedMessage = z.infer<typeof OffscreenImageProcessedMessageSchema>;",
+    '''export type OffscreenExportTiledImageMessage = z.infer<
+  typeof OffscreenExportTiledImageMessageSchema
+>;
+export type OffscreenImageProcessedMessage = z.infer<typeof OffscreenImageProcessedMessageSchema>;''',
+)
+replace_once(
+    "src/shared/contracts/offscreen.ts",
+    "export function createOffscreenImageProcessedMessage(",
+    '''export function createOffscreenExportTiledImageMessage(
+  options: MessageOptions & OffscreenExportTiledImageMessage["payload"],
+): OffscreenExportTiledImageMessage {
+  return OffscreenExportTiledImageMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "offscreen",
+    type: "OFFSCREEN_EXPORT_TILED_IMAGE",
+    payload: {
+      jobId: options.jobId,
+      outputArtifactId: options.outputArtifactId,
+      targetRect: options.targetRect,
+      tiles: options.tiles,
+      format: options.format,
+      quality: options.quality,
+      filename: options.filename,
+      createdAt: options.createdAt,
+      expiresAt: options.expiresAt,
+      ...(options.sourceTitle === undefined ? {} : { sourceTitle: options.sourceTitle }),
+      ...(options.sourceDomain === undefined ? {} : { sourceDomain: options.sourceDomain }),
+    },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createOffscreenImageProcessedMessage(''',
+)
+
+replace_once(
+    "src/background/offscreen-service.ts",
+    "  createOffscreenExportPdfMessage,\n  createOffscreenPingMessage,",
+    "  createOffscreenExportPdfMessage,\n  createOffscreenExportTiledImageMessage,\n  createOffscreenPingMessage,",
+)
+replace_once(
+    "src/background/offscreen-service.ts",
+    '  type OffscreenExportPdfMessage,\n} from "@shared/contracts/offscreen";',
+    '  type OffscreenExportPdfMessage,\n  type OffscreenExportTiledImageMessage,\n} from "@shared/contracts/offscreen";',
+)
+replace_once(
+    "src/background/offscreen-service.ts",
+    'export type ExportPdfOptions = OffscreenExportPdfMessage["payload"] & {',
+    'export type ExportTiledImageOptions = OffscreenExportTiledImageMessage["payload"];\n\nexport type ExportPdfOptions = OffscreenExportPdfMessage["payload"] & {',
+)
+replace_once(
+    "src/background/offscreen-service.ts",
+    "  async exportPdf(options: ExportPdfOptions): Promise<ArtifactMetadata> {",
+    '''  async exportTiledImage(options: ExportTiledImageOptions): Promise<ArtifactMetadata> {
+    return this.withDocument(async () => {
+      const request = createOffscreenExportTiledImageMessage({
+        requestId: this.createRequestId(),
+        sentAt: this.now().toISOString(),
+        ...options,
+      });
+      const response = await this.runtime.sendMessage(request);
+      throwOffscreenError(response);
+      if (!isOffscreenImageProcessedMessage(response) || response.requestId !== request.requestId) {
+        throw unavailableError(
+          new TypeError("Offscreen processor returned an invalid tiled image response."),
+        );
+      }
+      return response.payload;
+    });
+  }
+
+  async exportPdf(options: ExportPdfOptions): Promise<ArtifactMetadata> {''',
+)
+
+replace_once(
+    "src/offscreen/entry.ts",
+    'import { PdfExporter, type PdfExportPayload, type PdfExportProgress } from "./pdf-exporter";',
+    'import { PdfExporter, type PdfExportPayload, type PdfExportProgress } from "./pdf-exporter";\nimport { TiledImageExporter } from "./tiled-image-exporter";',
+)
+replace_once(
+    "src/offscreen/entry.ts",
+    '  processor: ImageProcessor;\n  pdfExporter: Pick<PdfExporter, "export">;',
+    '  processor: ImageProcessor;\n  tiledImageExporter: Pick<TiledImageExporter, "export">;\n  pdfExporter: Pick<PdfExporter, "export">;',
+)
+replace_once(
+    "src/offscreen/entry.ts",
+    "  processor: new ImageProcessor({ artifacts }),\n  pdfExporter: new PdfExporter({ artifacts, tiles }),",
+    "  processor: new ImageProcessor({ artifacts }),\n  tiledImageExporter: new TiledImageExporter({ artifacts, tiles }),\n  pdfExporter: new PdfExporter({ artifacts, tiles }),",
+)
+replace_once(
+    "src/offscreen/entry.ts",
+    '          sentAt: dependencies.now().toISOString(),\n        });\n      case "OFFSCREEN_EXPORT_PDF":',
+    '''          sentAt: dependencies.now().toISOString(),
+        });
+      case "OFFSCREEN_EXPORT_TILED_IMAGE":
+        return createOffscreenImageProcessedMessage({
+          requestId: parsed.value.requestId,
+          artifact: await dependencies.tiledImageExporter.export(parsed.value.payload),
+          sentAt: dependencies.now().toISOString(),
+        });
+      case "OFFSCREEN_EXPORT_PDF":''',
+)
+replace_once(
+    "src/offscreen/entry.ts",
+    '        stage: parsed.value.type === "OFFSCREEN_EXPORT_PDF" ? "export" : "process",',
+    '''        stage:
+          parsed.value.type === "OFFSCREEN_EXPORT_PDF" ||
+          parsed.value.type === "OFFSCREEN_EXPORT_TILED_IMAGE"
+            ? "export"
+            : "process",''',
+)
