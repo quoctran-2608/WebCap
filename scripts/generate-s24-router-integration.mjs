@@ -10,14 +10,6 @@ function replaceOnce(source, needle, replacement, label) {
   return source.slice(0, first) + replacement + source.slice(first + needle.length);
 }
 
-function replaceCount(source, needle, replacement, expected, label) {
-  const parts = source.split(needle);
-  if (parts.length - 1 !== expected) {
-    throw new Error(`${label}: expected ${expected} matches, found ${parts.length - 1}`);
-  }
-  return parts.join(replacement);
-}
-
 function patchFile(path, patch) {
   const source = readFileSync(path, "utf8");
   writeFileSync(path, patch(source));
@@ -93,12 +85,17 @@ patchFile("src/background/persistent-job-router.ts", (source) => {
     "      await Promise.allSettled(\n        resumable.map((job) => runCaptureAndCompletion(job.id, captures, completion)),\n      );\n      await completion.recoverAll();\n    })",
     "router startup capture and output recovery",
   );
-  source = replaceCount(
+  source = replaceOnce(
     source,
     "        void dependencies.captures.start(job.id).catch(() => undefined);",
     "        startCaptureAndCompletion(job.id, dependencies.captures, dependencies.completion);",
-    2,
-    "router full-page and region auto completion",
+    "router full-page auto completion",
+  );
+  source = replaceOnce(
+    source,
+    "      void dependencies.captures.start(job.id).catch(() => undefined);",
+    "      startCaptureAndCompletion(job.id, dependencies.captures, dependencies.completion);",
+    "router region auto completion",
   );
   return replaceOnce(
     source,
