@@ -236,20 +236,44 @@ async function restartExtensionWorker(
   targetPage: Page,
   jobId: string,
 ): Promise<WorkerRestartEvidence> {
-  const extensionOrigin = new URL(popup.url()).origin;
-  const session = await popup.context().newCDPSession(targetPage);
-  const targets = (await session.send("Target.getTargets")) as {
-    targetInfos: Array<{ targetId: string; type: string; url: string }>;
-  };
-  const workerTarget = targets.targetInfos.find(
-    (candidate) =>
-      candidate.type === "service_worker" && candidate.url.startsWith(`${extensionOrigin}/`),
-  );
-  if (workerTarget === undefined) {
-    throw new Error("The extension service-worker target could not be resolved.");
+  const browser = popup.context().browser();
+  if (browser === null) {
+    throw new Error("The Chromium browser instance could not be resolved.");
   }
 
-  await session.send("Target.closeTarget", { targetId: workerTarget.targetId });
+  const workerUrl = worker.url();
+  const extensionOrigin = new URL(workerUrl).origin;
+  const session = await browser.newBrowserCDPSession();
+  try {
+    await session.send("Target.setDiscoverTargets", { discover: true });
+    const targets = (await session.send("Target.getTargets")) as {
+      targetInfos: Array<{ targetId: string; type: string; url: string }>;
+    };
+    const serviceWorkerTargets = targets.targetInfos.filter(
+      (candidate) =>
+        candidate.type === "service_worker" && candidate.url.startsWith(`${extensionOrigin}/`),
+    );
+    const workerTarget = serviceWorkerTargets.find((candidate) => candidate.url === workerUrl);
+    const alreadyStopped = await worker
+      .evaluate(() => true)
+      .then(
+        () => false,
+        () => true,
+      );
+
+    if (workerTarget !== undefined) {
+      await session.send("Target.closeTarget", { targetId: workerTarget.targetId });
+    } else if (!alreadyStopped) {
+      throw new Error(
+        `The live extension service-worker target could not be resolved; discovered types: ${[
+          ...new Set(targets.targetInfos.map((candidate) => candidate.type)),
+        ].join(", ")}`,
+      );
+    }
+  } finally {
+    await session.detach();
+  }
+
   await expect
     .poll(
       () =>
