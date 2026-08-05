@@ -148,8 +148,16 @@ for (const file of files) {
   mkdirSync(dirname(destination), { recursive: true });
   copyFileSync(file, destination);
 }
+const tree = spawnSync("git", ["rev-parse", "HEAD^{tree}"], {
+  encoding: "utf8",
+  stdio: ["ignore", "pipe", "pipe"],
+});
+if (tree.status !== 0) {
+  process.stderr.write(tree.stderr ?? "");
+  process.exit(tree.status ?? 1);
+}
 writeFileSync(
   "artifacts/s24-router/manifest.json",
-  `${JSON.stringify({ files }, null, 2)}\n`,
+  `${JSON.stringify({ baseTreeSha: tree.stdout.trim(), files }, null, 2)}\n`,
 );
 process.exit(1);
