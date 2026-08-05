@@ -82,7 +82,7 @@ test("captures deterministic Canvas 2D and WebGL pixels @smoke @dpr", async ({
   expectColor(webGlPixel ?? { r: 0, g: 0, b: 0 }, { r: 11, g: 110, b: 79 });
 });
 
-test("shows an explicit partial warning when full-page capture reaches a height guard @smoke", async ({
+test("shows an explicit partial warning when adaptive capture reaches a tile guard @smoke", async ({
   openPopup,
   serviceWorker,
   targetPage,
@@ -111,7 +111,7 @@ test("shows an explicit partial warning when full-page capture reaches a height 
         tabId,
         windowId,
         mode: "full-page",
-        preferredEngine: "cdp",
+        preferredEngine: "scroll",
         settings: {
           outputFormat: "png",
           imageQuality: 0.92,
@@ -120,7 +120,7 @@ test("shows an explicit partial warning when full-page capture reaches a height 
           limits: {
             maxCssHeight: 1_600,
             maxCssWidth: 20_000,
-            maxTiles: 256,
+            maxTiles: 3,
             maxEstimatedBytes: 536_870_912,
           },
           pdf: { pageSize: "a4", orientation: "portrait", marginMm: 8, jpegQuality: 0.9 },
@@ -156,9 +156,9 @@ test("shows an explicit partial warning when full-page capture reaches a height 
         }, jobId),
       { timeout: 45_000 },
     )
-    .toBe("ready:max-css-height");
+    .toBe("ready:max-tiles");
 
   popup = await openPopup();
-  await expect(popup.getByTestId("partial-capture-warning")).toContainText("giới hạn chiều cao");
+  await expect(popup.getByTestId("partial-capture-warning")).toContainText("giới hạn số tile");
   await expect(popup.getByRole("button", { name: "Mở trình biên tập PDF" })).toBeVisible();
 });

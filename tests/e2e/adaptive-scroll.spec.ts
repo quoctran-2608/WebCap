@@ -207,18 +207,31 @@ async function restartExtensionWorker(
   context: BrowserContext,
   extensionId: string,
   worker: Worker,
+  popup: Page,
+  targetPage: Page,
 ): Promise<Worker> {
+  const session = await context.newCDPSession(popup);
+  const targets = (await session.send("Target.getTargets")) as {
+    targetInfos: Array<{ targetId: string; type: string; url: string }>;
+  };
+  const serviceWorkerTarget = targets.targetInfos.find(
+    (target) =>
+      target.type === "service_worker" &&
+      target.url.startsWith(`chrome-extension://${extensionId}/`),
+  );
+  if (serviceWorkerTarget === undefined) {
+    throw new Error("The extension service-worker target could not be resolved.");
+  }
+
   const nextWorker = context.waitForEvent("serviceworker", {
     predicate: (candidate) =>
       candidate !== worker && candidate.url().startsWith(`chrome-extension://${extensionId}/`),
     timeout: 20_000,
   });
-  await worker.evaluate(() => chrome.runtime.reload()).catch(() => undefined);
-  const wakePage = await context.newPage();
-  await wakePage
-    .goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" })
-    .catch(() => undefined);
-  await wakePage.close().catch(() => undefined);
+  await session.send("Target.closeTarget", { targetId: serviceWorkerTarget.targetId });
+  await targetPage.bringToFront();
+  await popup.reload({ waitUntil: "domcontentloaded" });
+  await targetPage.bringToFront();
   return nextWorker;
 }
 
@@ -324,7 +337,13 @@ test("@smoke resumes the persisted prefix after an extension service-worker relo
     )
     .toBeGreaterThan(0);
   const beforeRestart = await readAdaptiveJob(serviceWorker, jobId);
-  const restartedWorker = await restartExtensionWorker(context, extensionId, serviceWorker);
+  const restartedWorker = await restartExtensionWorker(
+    context,
+    extensionId,
+    serviceWorker,
+    popup,
+    targetPage,
+  );
   const final = await waitForAdaptiveReady(restartedWorker, jobId);
 
   expect(final.completedTiles).toBeGreaterThanOrEqual(beforeRestart.completedTiles);

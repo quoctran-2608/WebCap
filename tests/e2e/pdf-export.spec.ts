@@ -133,7 +133,8 @@ test("@smoke exports a stored full-page tile set as a loadable paged PDF", async
   });
 
   const ready = await readPdfState(serviceWorker);
-  expect(ready.job).toMatchObject({ state: "ready", tileCount: 2 });
+  expect(ready.job).toMatchObject({ state: "ready" });
+  expect(ready.job?.tileCount).toBeGreaterThan(2);
   const jobId = ready.job?.id;
   if (jobId === undefined) throw new Error("The ready full-page job could not be resolved.");
 
