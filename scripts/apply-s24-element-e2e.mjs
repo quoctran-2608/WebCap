@@ -41,8 +41,8 @@ source = replaceOnce(
 
 source = replaceOnce(
   source,
-  `  expect(state.job?.targetRect).toMatchObject({`,
-  `  expect(state.job?.outputArtifactId).toBe(state.job?.output?.artifactId);\n  expect(state.job?.output?.byteLength).toBeGreaterThan(0);\n  expect(state.job?.targetRect).toMatchObject({`,
+  `  expect(state.job?.targetRect).toMatchObject({\n    x: childBox.x,`,
+  `  expect(state.job?.outputArtifactId).toBe(state.job?.output?.artifactId);\n  expect(state.job?.output?.byteLength).toBeGreaterThan(0);\n  expect(state.job?.targetRect).toMatchObject({\n    x: childBox.x,`,
   "normal element artifact invariants",
 );
 
