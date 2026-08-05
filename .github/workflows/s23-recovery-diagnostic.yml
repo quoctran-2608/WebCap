@@ -5,7 +5,7 @@ on:
     branches: [agent/s23-adaptive-scroll]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: s23-recovery-diagnostic
@@ -13,12 +13,15 @@ concurrency:
 
 jobs:
   diagnose:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-24.04
     steps:
       - name: Check out S23 branch
         uses: actions/checkout@v4
         with:
           ref: agent/s23-adaptive-scroll
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -79,4 +82,28 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Run restart diagnostic
-        run: pnpm exec playwright test tests/e2e/adaptive-scroll.spec.ts --project=visible-smoke --grep "service-worker restart"
+        shell: bash
+        run: |
+          set +e
+          pnpm exec playwright test tests/e2e/adaptive-scroll.spec.ts --project=visible-smoke --grep "service-worker restart" 2>&1 | tee /tmp/s23-recovery-diagnostic.log
+          status=${PIPESTATUS[0]}
+          set -e
+          git checkout -- tests/e2e/adaptive-scroll.spec.ts
+          {
+            echo '# S23 adaptive recovery diagnostic'
+            echo
+            echo "Exit status: ${status}"
+            echo
+            echo '```text'
+            tail -n 160 /tmp/s23-recovery-diagnostic.log
+            echo '```'
+          } > docs/sessions/s23-recovery-diagnostic.md
+          rm .github/workflows/s23-recovery-diagnostic.yml
+
+      - name: Commit diagnostic evidence
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add docs/sessions/s23-recovery-diagnostic.md .github/workflows/s23-recovery-diagnostic.yml
+          git commit -m "Record adaptive recovery failure"
+          git push origin HEAD:agent/s23-adaptive-scroll
