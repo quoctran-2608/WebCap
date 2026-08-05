@@ -13,6 +13,10 @@ export default defineConfig({
     /element-selection\.spec\.ts/,
     /full-page-capture\.spec\.ts/,
     /page-preparation\.spec\.ts/,
+    /pdf-editor\.spec\.ts/,
+    /pdf-export\.spec\.ts/,
+    /pdf-source\.spec\.ts/,
+    /region-selection\.spec\.ts/,
   ],
   timeout: 60_000,
   expect: {
