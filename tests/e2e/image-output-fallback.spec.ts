@@ -125,8 +125,7 @@ async function readFallbackState(serviceWorker: Worker): Promise<FallbackState> 
       }>
     )
       .filter(
-        (artifact) =>
-          job !== undefined && artifact.jobId === job.id && artifact.role === "output",
+        (artifact) => job !== undefined && artifact.jobId === job.id && artifact.role === "output",
       )
       .map((artifact) => ({
         artifactId: artifact.artifactId,
@@ -209,8 +208,7 @@ async function forceOversizedImageFailure(serviceWorker: Worker, jobId: string):
 
     const outputArtifactId =
       typeof job.outputArtifactId === "string" ? job.outputArtifactId : undefined;
-    const stateRevision =
-      typeof job.stateRevision === "number" ? job.stateRevision + 1 : 1;
+    const stateRevision = typeof job.stateRevision === "number" ? job.stateRevision + 1 : 1;
     const updatedAt = new Date().toISOString();
     const failedJob: Record<string, unknown> = {
       ...job,
