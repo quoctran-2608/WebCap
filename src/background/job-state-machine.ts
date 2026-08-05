@@ -35,6 +35,8 @@ export type JobTransitionPatch = Partial<
     | "cleanup"
     | "partialCapture"
     | "exportProgress"
+    | "activeOutputFormat"
+    | "output"
     | "outputArtifactId"
     | "error"
     | "expiresAt"
@@ -116,9 +118,7 @@ export function validateJobInvariants(
         stateError(
           "Only full-page jobs may persist an adaptive frontier.",
           "AdaptiveModeMismatch",
-          {
-            mode: job.mode,
-          },
+          { mode: job.mode },
         ),
       );
     }
@@ -152,6 +152,19 @@ export function validateJobInvariants(
       stateError("Completed PDF pages cannot exceed total pages.", "PdfProgressOverflow", {
         completedPages: job.exportProgress.completedPages,
         totalPages: job.exportProgress.totalPages,
+      }),
+    );
+  }
+
+  if (
+    job.output !== undefined &&
+    job.outputArtifactId !== undefined &&
+    job.output.artifactId !== job.outputArtifactId
+  ) {
+    return err(
+      stateError("Output metadata must match the persisted artifact ID.", "OutputArtifactMismatch", {
+        outputArtifactId: job.outputArtifactId,
+        metadataArtifactId: job.output.artifactId,
       }),
     );
   }
@@ -261,9 +274,7 @@ export function updateJob(
   context: JobInvariantContext = {},
 ): Result<CaptureJob, WebCapErrorData> {
   const candidate = buildMutation(job, updatedAt, patch, job.state);
-  if (!candidate.ok) {
-    return candidate;
-  }
+  if (!candidate.ok) return candidate;
   const invariant = validateJobInvariants(candidate.value, context);
   return invariant.ok ? candidate : invariant;
 }
@@ -285,9 +296,7 @@ export function transitionJob(
   }
 
   const candidate = buildMutation(job, updatedAt, patch, nextState);
-  if (!candidate.ok) {
-    return candidate;
-  }
+  if (!candidate.ok) return candidate;
   const invariant = validateJobInvariants(candidate.value, context);
   return invariant.ok ? candidate : invariant;
 }
