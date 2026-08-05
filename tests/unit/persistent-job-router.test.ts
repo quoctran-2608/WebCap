@@ -123,8 +123,15 @@ function dependencies(
   jobs: FakeCoordinator,
   dedupe: MemoryDedupe,
   captures?: PersistentJobRouterDependencies["captures"],
+  completion?: PersistentJobRouterDependencies["completion"],
 ): PersistentJobRouterDependencies {
-  return { jobs, dedupe, now: () => now, ...(captures === undefined ? {} : { captures }) };
+  return {
+    jobs,
+    dedupe,
+    now: () => now,
+    ...(captures === undefined ? {} : { captures }),
+    ...(completion === undefined ? {} : { completion }),
+  };
 }
 
 describe("persistent job router", () => {
@@ -172,6 +179,42 @@ describe("persistent job router", () => {
     expect(response).toMatchObject({ type: "JOB_RESPONSE", payload: { job: { id: "job-1" } } });
     expect(start).toHaveBeenCalledTimes(1);
     expect(start).toHaveBeenCalledWith("job-1");
+  });
+
+  it("starts automatic output only after full-page capture finishes", async () => {
+    const jobs = new FakeCoordinator();
+    const dedupe = new MemoryDedupe();
+    const order: string[] = [];
+    const start = vi.fn(async () => {
+      order.push("capture");
+    });
+    const cancel = vi.fn(() => Promise.resolve(job()));
+    const startAuto = vi.fn(async () => {
+      order.push("output");
+      return { ...job(), state: "exporting" as const, stateRevision: 5 };
+    });
+    const completion = {
+      startAuto,
+      recoverAll: vi.fn(() => Promise.resolve([])),
+      cancel: vi.fn(() => Promise.resolve(job())),
+      waitForIdle: vi.fn(() => Promise.resolve()),
+    };
+    const message = createJobCreateMessage({
+      requestId: "request-auto-output",
+      sentAt: now.toISOString(),
+      tabId: 7,
+      windowId: 2,
+      mode: "full-page",
+      settings: DEFAULT_CAPTURE_SETTINGS,
+    });
+
+    await routePersistentJobMessage(
+      message,
+      dependencies(jobs, dedupe, { start, cancel }, completion),
+    );
+    await vi.waitFor(() => expect(startAuto).toHaveBeenCalledWith("job-1"));
+
+    expect(order).toEqual(["capture", "output"]);
   });
 
   it("uses capture reset when a region selector does not become ready", async () => {

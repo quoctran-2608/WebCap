@@ -219,7 +219,17 @@ describe("PersistentJobCoordinator", () => {
       mode: "full-page",
       settings: DEFAULT_CAPTURE_SETTINGS,
     });
-    expect(created).toMatchObject({ id: "job-created", state: "created", stateRevision: 0 });
+    expect(created).toMatchObject({
+      id: "job-created",
+      state: "created",
+      stateRevision: 0,
+      completionPolicy: {
+        primaryOutput: "pdf",
+        autoExport: true,
+        openEditorAfterCapture: false,
+        allowGuardedImageFallback: false,
+      },
+    });
     expect(sessions.summaries.get(created.id)).toEqual(summarizeJob(created));
     expect(sessions.locks.get(7)).toMatchObject({ jobId: created.id });
     await expect(

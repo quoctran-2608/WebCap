@@ -15,6 +15,7 @@ import {
 import { normalizeError } from "@shared/errors/normalize-error";
 import type { JobArtifactCleanupPort } from "@storage/job-artifact-cleanup-repository";
 import type { CaptureOwnedDataCleanupPort } from "./capture-data-cleanup-service";
+import { createCaptureCompletionPolicy } from "./capture-completion-policy";
 import type { JobRepositoryPort } from "@storage/job-repository";
 import type { JobSessionRepositoryPort } from "@storage/job-session-repository";
 import type { TileRepositoryPort } from "@storage/tile-repository";
@@ -221,6 +222,7 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
       completedTiles: 0,
       totalTiles: 0,
       settings: options.settings,
+      completionPolicy: createCaptureCompletionPolicy(options.mode, options.settings),
       cleanup: { attempted: false, completed: false },
       createdAt: nowIso,
       updatedAt: nowIso,
