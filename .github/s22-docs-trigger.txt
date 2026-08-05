@@ -1,0 +1,1 @@
+Trigger the existing S22 documentation workflow after whitespace normalization.
