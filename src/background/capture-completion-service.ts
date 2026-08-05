@@ -97,11 +97,7 @@ export class CaptureCompletionService {
     job = await this.requireJob(jobId);
 
     const automatic = options.automatic ?? false;
-    if (
-      automatic &&
-      job.state === "failed" &&
-      job.error?.causeCode !== "ServiceWorkerRestart"
-    ) {
+    if (automatic && job.state === "failed" && job.error?.causeCode !== "ServiceWorkerRestart") {
       return job;
     }
     if (
@@ -140,9 +136,7 @@ export class CaptureCompletionService {
   async cancel(jobId: string): Promise<CaptureJob> {
     const job = await this.requireJob(jobId);
     const format = job.activeOutputFormat ?? completionPolicyForJob(job).primaryOutput;
-    return format === "pdf"
-      ? this.options.pdf.cancel(jobId)
-      : this.options.images.cancel(jobId);
+    return format === "pdf" ? this.options.pdf.cancel(jobId) : this.options.images.cancel(jobId);
   }
 
   async waitForIdle(jobId: string): Promise<void> {
