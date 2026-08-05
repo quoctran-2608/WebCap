@@ -43,7 +43,7 @@ jobs:
 
       - name: Remove staging and restore read-only CI
         run: |
-          rm scripts/s22-docs-sync.mjs
+          rm -f scripts/s22-docs-sync.mjs .github/s22-docs-trigger.txt
           git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
 
       - name: Format and validate documents
