@@ -56,13 +56,23 @@ interface PartialStop {
   limitValue?: number;
 }
 
+interface CapturedRowResult {
+  frontier: AdaptiveCaptureFrontier;
+  metrics: PageMetrics;
+  tiles: CaptureTile[];
+  captureScale: CapturePixelScale | undefined;
+  finalRow: boolean;
+  partial?: PartialStop;
+}
+
 function captureError(options: {
   code:
     | "E_PROTOCOL_MESSAGE"
     | "E_TAB_NOT_ACTIVE"
     | "E_LAYOUT_UNSTABLE"
     | "E_CAPTURE_EMPTY"
-    | "E_STORAGE_QUOTA";
+    | "E_STORAGE_QUOTA"
+    | "E_MEMORY_GUARD";
   message: string;
   userMessageKey: string;
   causeCode: string;
@@ -72,7 +82,12 @@ function captureError(options: {
   return createWebCapRuntimeError(
     createWebCapError({
       code: options.code,
-      stage: options.code === "E_STORAGE_QUOTA" ? "storage" : "capture",
+      stage:
+        options.code === "E_STORAGE_QUOTA"
+          ? "storage"
+          : options.code === "E_MEMORY_GUARD"
+            ? "process"
+            : "capture",
       message: options.message,
       userMessageKey: options.userMessageKey,
       retryable: options.retryable ?? true,
@@ -114,21 +129,21 @@ function validatePixelDimensions(
 ): CapturePixelScale {
   const scaleX = actual.width / page.viewportWidth;
   const scaleY = actual.height / page.viewportHeight;
-  const dimensionsArePlausible =
+  const plausible =
     Number.isFinite(scaleX) &&
     Number.isFinite(scaleY) &&
     scaleX >= 0.25 &&
     scaleX <= 8 &&
     scaleY >= 0.25 &&
     scaleY <= 8;
-  if (dimensionsArePlausible && expectedScale === undefined) {
+  if (plausible && expectedScale === undefined) {
     return { x: scaleX, y: scaleY };
   }
   const stableScale = expectedScale ?? { x: scaleX, y: scaleY };
   const expectedWidth = Math.max(1, Math.round(page.viewportWidth * stableScale.x));
   const expectedHeight = Math.max(1, Math.round(page.viewportHeight * stableScale.y));
   if (
-    dimensionsArePlausible &&
+    plausible &&
     Math.abs(actual.width - expectedWidth) <= 2 &&
     Math.abs(actual.height - expectedHeight) <= 2
   ) {
@@ -162,6 +177,10 @@ function rowBottom(tiles: CaptureTile[]): number | undefined {
   return bottoms.length === 0 ? undefined : Math.max(...bottoms);
 }
 
+function countStored(tiles: CaptureTile[]): number {
+  return tiles.filter((tile) => tile.status === "stored").length;
+}
+
 function storedBytes(tiles: CaptureTile[]): number {
   return tiles.reduce(
     (total, tile) => total + (tile.status === "stored" ? (tile.byteLength ?? 0) : 0),
@@ -187,18 +206,17 @@ function reconcileCommittedRows(
       break;
     }
     const bottom = rowBottom(row);
-    if (bottom === undefined || bottom <= capturedBottomCss) {
+    if (bottom === undefined || bottom <= capturedBottomCss + ADAPTIVE_BOTTOM_EPSILON_CSS / 100) {
       break;
     }
     capturedBottomCss = bottom;
     capturedRows += 1;
   }
-  const committedBottom = Math.max(frontier.capturedBottomCss, capturedBottomCss);
   return {
     ...frontier,
-    capturedRows: Math.max(frontier.capturedRows, capturedRows),
-    capturedBottomCss: committedBottom,
-    nextYCss: committedBottom,
+    capturedRows,
+    capturedBottomCss,
+    nextYCss: capturedBottomCss,
     storedBytes: storedBytes(tiles),
   };
 }
@@ -219,24 +237,23 @@ function deriveCaptureScale(
       };
 }
 
-function targetRect(frontier: AdaptiveCaptureFrontier, documentWidth: number, maxWidth: number): Rect {
+function targetRect(frontier: AdaptiveCaptureFrontier, maxWidth: number): Rect {
   return {
     x: 0,
     y: 0,
-    width: Math.min(documentWidth, maxWidth),
+    width: Math.min(frontier.documentWidthCss, maxWidth),
     height: frontier.capturedBottomCss,
   };
 }
 
 function partialCapture(
   frontier: AdaptiveCaptureFrontier,
-  documentWidth: number,
   maxWidth: number,
   stop: PartialStop,
 ): PartialCapture {
   return {
     reason: stop.reason,
-    capturedRect: targetRect(frontier, documentWidth, maxWidth),
+    capturedRect: targetRect(frontier, maxWidth),
     ...(stop.limitValue === undefined ? {} : { limitValue: stop.limitValue }),
   };
 }
@@ -246,7 +263,6 @@ function validateIdentity(
   page: ScrollCapturePageResult,
   tileIndex: number,
 ): void {
-  const widthChanged = Math.abs(page.documentWidth - frontier.viewportWidthCss) > 2;
   if (page.documentToken !== frontier.sourceDocumentToken) {
     throw captureError({
       code: "E_LAYOUT_UNSTABLE",
@@ -274,20 +290,7 @@ function validateIdentity(
       },
     });
   }
-  if (page.documentHeight + ADAPTIVE_BOTTOM_EPSILON_CSS < frontier.capturedBottomCss) {
-    throw captureError({
-      code: "E_LAYOUT_UNSTABLE",
-      message: "The document became shorter than the stored adaptive prefix.",
-      userMessageKey: "errors.layoutChanged",
-      causeCode: "AdaptiveDocumentShrank",
-      safeContext: {
-        tileIndex,
-        documentHeight: page.documentHeight,
-        capturedBottomCss: frontier.capturedBottomCss,
-      },
-    });
-  }
-  if (widthChanged) {
+  if (Math.abs(page.documentWidth - frontier.documentWidthCss) > 2) {
     throw captureError({
       code: "E_LAYOUT_UNSTABLE",
       message: "The document width changed during adaptive capture.",
@@ -296,10 +299,42 @@ function validateIdentity(
       safeContext: {
         tileIndex,
         documentWidth: page.documentWidth,
-        expectedWidth: frontier.viewportWidthCss,
+        expectedWidth: frontier.documentWidthCss,
       },
     });
   }
+  if (page.documentHeight + ADAPTIVE_BOTTOM_EPSILON_CSS < frontier.observedDocumentHeightCss) {
+    throw captureError({
+      code: "E_LAYOUT_UNSTABLE",
+      message: "The document became shorter during adaptive capture.",
+      userMessageKey: "errors.layoutChanged",
+      causeCode: "AdaptiveDocumentShrank",
+      safeContext: {
+        tileIndex,
+        documentHeight: page.documentHeight,
+        observedDocumentHeightCss: frontier.observedDocumentHeightCss,
+      },
+    });
+  }
+}
+
+function withObservedGrowth(
+  frontier: AdaptiveCaptureFrontier,
+  page: ScrollCapturePageResult,
+  observedAt: string,
+): { frontier: AdaptiveCaptureFrontier; grew: boolean } {
+  const grew = page.documentHeight > frontier.observedDocumentHeightCss + ADAPTIVE_BOTTOM_EPSILON_CSS;
+  return {
+    frontier: grew
+      ? {
+          ...frontier,
+          observedDocumentHeightCss: page.documentHeight,
+          stableBottomRounds: 0,
+          lastGrowthAt: observedAt,
+        }
+      : frontier,
+    grew,
+  };
 }
 
 function isStorageLimit(error: unknown): boolean {
@@ -369,7 +404,13 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
               frontier.observedDocumentHeightCss - frontier.viewportHeightCss,
             ),
           );
-    const initial = await this.probe(context, preparation.preparationId, initialProbeY, frontier);
+    const initial = await this.probe(
+      context,
+      preparation.preparationId,
+      initialProbeY,
+      frontier,
+      tiles,
+    );
     if (frontier === undefined) {
       const nowIso = this.now().toISOString();
       frontier = {
@@ -383,20 +424,14 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
         startedAt: nowIso,
         lastGrowthAt: nowIso,
         sourceDocumentToken: initial.documentToken,
+        documentWidthCss: initial.documentWidth,
         viewportWidthCss: initial.viewportWidth,
         viewportHeightCss: initial.viewportHeight,
         devicePixelRatio: initial.devicePixelRatio,
       };
     } else {
       validateIdentity(frontier, initial, tiles.length);
-      if (initial.documentHeight > frontier.observedDocumentHeightCss + ADAPTIVE_BOTTOM_EPSILON_CSS) {
-        frontier = {
-          ...frontier,
-          observedDocumentHeightCss: initial.documentHeight,
-          stableBottomRounds: 0,
-          lastGrowthAt: this.now().toISOString(),
-        };
-      }
+      frontier = withObservedGrowth(frontier, initial, this.now().toISOString()).frontier;
     }
     metrics = metricsFromPage(initial);
     frontier = reconcileCommittedRows(frontier, tiles);
@@ -405,6 +440,16 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
 
     while (true) {
       context.cancellation.throwIfCancelled("capture");
+      const guard = this.guard(
+        frontier,
+        tiles,
+        context.settings.limits.maxTiles,
+        context.settings.limits.maxEstimatedBytes,
+      );
+      if (guard !== undefined) {
+        return this.finishPartial(context, frontier, metrics, tiles, guard);
+      }
+
       const pendingRow = tiles
         .filter((tile) => tile.row === frontier.capturedRows)
         .sort((left, right) => left.column - right.column);
@@ -419,7 +464,7 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
             retryable: false,
           });
         }
-        const isFinalRow =
+        const expectedFinal =
           frontier.stableBottomRounds > ADAPTIVE_STABLE_BOTTOM_ROUNDS &&
           pendingBottom >= frontier.observedDocumentHeightCss - ADAPTIVE_BOTTOM_EPSILON_CSS;
         const result = await this.capturePlannedRow(
@@ -431,34 +476,31 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
           tiles,
           pendingRow,
           captureScale,
-          isFinalRow,
+          expectedFinal,
         );
         if (result.partial !== undefined) {
-          return this.finishPartial(context, result.frontier, result.metrics, result.tiles, result.partial);
+          return this.finishPartial(
+            context,
+            result.frontier,
+            result.metrics,
+            result.tiles,
+            result.partial,
+          );
         }
         frontier = reconcileCommittedRows(result.frontier, result.tiles);
+        if (!result.finalRow) {
+          frontier = { ...frontier, stableBottomRounds: 0 };
+        }
         tiles = result.tiles;
         metrics = result.metrics;
         captureScale = result.captureScale;
-        if (!isFinalRow) {
-          frontier = { ...frontier, stableBottomRounds: 0 };
-        }
         await context.checkpointFrontier(frontier);
-        if (isFinalRow) {
-          const finalTarget = targetRect(
-            frontier,
-            metrics.document.width,
-            context.settings.limits.maxCssWidth,
-          );
+        if (result.finalRow) {
+          const finalTarget = targetRect(frontier, context.settings.limits.maxCssWidth);
           await context.onPlan(metrics, finalTarget, tiles);
           return { metrics, targetRect: finalTarget, tiles };
         }
         continue;
-      }
-
-      const guard = this.guard(frontier, tiles, context.settings.limits.maxTiles, context.settings.limits.maxEstimatedBytes);
-      if (guard !== undefined) {
-        return this.finishPartial(context, frontier, metrics, tiles, guard);
       }
 
       const probeY = Math.max(
@@ -468,7 +510,13 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
           frontier.observedDocumentHeightCss - frontier.viewportHeightCss,
         ),
       );
-      const page = await this.probe(context, preparation.preparationId, probeY, frontier);
+      const page = await this.probe(
+        context,
+        preparation.preparationId,
+        probeY,
+        frontier,
+        tiles,
+      );
       validateIdentity(frontier, page, tiles.length);
       metrics = metricsFromPage(page);
       const observed = observeStableEnd(frontier, {
@@ -484,6 +532,14 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
       if (observed.atBottom && !observed.complete) {
         continue;
       }
+      if (
+        observed.complete &&
+        frontier.nextYCss >= page.documentHeight - ADAPTIVE_BOTTOM_EPSILON_CSS
+      ) {
+        const finalTarget = targetRect(frontier, context.settings.limits.maxCssWidth);
+        await context.onPlan(metrics, finalTarget, tiles);
+        return { metrics, targetRect: finalTarget, tiles };
+      }
 
       const rowPlan = planAdaptiveCaptureRow({
         jobId: context.jobId,
@@ -498,13 +554,16 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
         overlapCss: this.overlapCss,
         remainingTiles: context.settings.limits.maxTiles - tiles.length,
       });
-      if (rowPlan.limitedByMaxTiles || rowPlan.tiles.length === 0) {
+      if (rowPlan.limitedByMaxTiles) {
         return this.finishPartial(context, frontier, metrics, tiles, {
           reason: "max-tiles",
           limitValue: context.settings.limits.maxTiles,
         });
       }
-      const averageBytes = frontier.storedBytes / Math.max(1, tiles.filter((tile) => tile.status === "stored").length);
+      if (rowPlan.tiles.length === 0) {
+        continue;
+      }
+      const averageBytes = frontier.storedBytes / Math.max(1, countStored(tiles));
       if (
         averageBytes > 0 &&
         frontier.storedBytes + averageBytes * rowPlan.tiles.length >
@@ -524,7 +583,7 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
         height: rowPlan.outputBottomCss,
       };
       await context.onPlan(metrics, plannedTarget, tiles);
-      const rowResult = await this.capturePlannedRow(
+      const result = await this.capturePlannedRow(
         context,
         preparation.preparationId,
         windowId,
@@ -535,29 +594,25 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
         captureScale,
         observed.complete,
       );
-      if (rowResult.partial !== undefined) {
+      if (result.partial !== undefined) {
         return this.finishPartial(
           context,
-          rowResult.frontier,
-          rowResult.metrics,
-          rowResult.tiles,
-          rowResult.partial,
+          result.frontier,
+          result.metrics,
+          result.tiles,
+          result.partial,
         );
       }
-      tiles = rowResult.tiles;
-      metrics = rowResult.metrics;
-      captureScale = rowResult.captureScale;
-      frontier = reconcileCommittedRows(rowResult.frontier, tiles);
-      if (!observed.complete) {
+      frontier = reconcileCommittedRows(result.frontier, result.tiles);
+      if (!result.finalRow) {
         frontier = { ...frontier, stableBottomRounds: 0 };
       }
+      tiles = result.tiles;
+      metrics = result.metrics;
+      captureScale = result.captureScale;
       await context.checkpointFrontier(frontier);
-      if (observed.complete) {
-        const finalTarget = targetRect(
-          frontier,
-          metrics.document.width,
-          context.settings.limits.maxCssWidth,
-        );
+      if (result.finalRow) {
+        const finalTarget = targetRect(frontier, context.settings.limits.maxCssWidth);
         await context.onPlan(metrics, finalTarget, tiles);
         return { metrics, targetRect: finalTarget, tiles };
       }
@@ -622,10 +677,19 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
   ): Promise<CaptureEngineResult> {
     if (frontier.capturedBottomCss <= 0 || tiles.length === 0 || metrics === undefined) {
       throw captureError({
-        code: stop.reason === "storage-quota" ? "E_STORAGE_QUOTA" : "E_CAPTURE_EMPTY",
+        code:
+          stop.reason === "storage-quota"
+            ? "E_STORAGE_QUOTA"
+            : stop.reason === "max-estimated-bytes"
+              ? "E_MEMORY_GUARD"
+              : "E_CAPTURE_EMPTY",
         message: "Adaptive capture reached a resource guard before storing a complete row.",
         userMessageKey:
-          stop.reason === "storage-quota" ? "errors.storageQuota" : "errors.captureEmpty",
+          stop.reason === "storage-quota"
+            ? "errors.storageQuota"
+            : stop.reason === "max-estimated-bytes"
+              ? "errors.memoryGuard"
+              : "errors.captureEmpty",
         causeCode: "AdaptiveGuardBeforePrefix",
         safeContext: { reason: stop.reason },
       });
@@ -637,12 +701,7 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
         tile.outputRectCss.y + tile.outputRectCss.height <=
           frontier.capturedBottomCss + ADAPTIVE_BOTTOM_EPSILON_CSS,
     );
-    const partial = partialCapture(
-      frontier,
-      metrics.document.width,
-      context.settings.limits.maxCssWidth,
-      stop,
-    );
+    const partial = partialCapture(frontier, context.settings.limits.maxCssWidth, stop);
     await context.onPlan(metrics, partial.capturedRect, selectedTiles, partial);
     return {
       metrics,
@@ -657,25 +716,27 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
     preparationId: string,
     scrollY: number,
     frontier: AdaptiveCaptureFrontier | undefined,
+    tiles: CaptureTile[],
   ): Promise<ScrollCapturePageResult> {
     context.cancellation.throwIfCancelled("measure");
     await context.reportProgress({
       jobId: context.jobId,
       state: frontier === undefined ? "preparing" : "capturing",
       stage: "scrolling",
-      completed: context.resume?.tilePlan.filter((tile) => tile.status === "stored").length ?? 0,
-      total: context.resume?.tilePlan.length ?? 0,
+      completed: countStored(tiles),
+      total: tiles.length,
     });
     return this.pages.scrollAndSettle({
       tabId: context.tabId,
       preparationId,
       scrollX: 0,
       scrollY,
-      tileIndex: context.resume?.tilePlan.length ?? 0,
+      tileIndex: tiles.length,
       totalTiles: Math.max(1, context.settings.limits.maxTiles),
       fixedElementMode: "preserve",
       settleMs: context.settings.lazyLoad.settleMs,
-      expectedDocumentWidth: frontier?.viewportWidthCss ?? context.preparation?.documentWidth ?? 1,
+      expectedDocumentWidth:
+        frontier?.documentWidthCss ?? context.preparation?.documentWidth ?? 1,
       expectedDocumentHeight:
         frontier?.observedDocumentHeightCss ?? context.preparation?.documentHeight ?? 1,
     });
@@ -685,44 +746,55 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
     context: CaptureEngineContext,
     preparationId: string,
     windowId: number,
-    frontier: AdaptiveCaptureFrontier,
+    initialFrontier: AdaptiveCaptureFrontier,
     currentMetrics: PageMetrics | undefined,
     allTiles: CaptureTile[],
     rowTiles: CaptureTile[],
     initialScale: CapturePixelScale | undefined,
-    isFinalRow: boolean,
-  ): Promise<{
-    frontier: AdaptiveCaptureFrontier;
-    metrics: PageMetrics;
-    tiles: CaptureTile[];
-    captureScale: CapturePixelScale | undefined;
-    partial?: PartialStop;
-  }> {
+    expectedFinalRow: boolean,
+  ): Promise<CapturedRowResult> {
+    let frontier = initialFrontier;
     let tiles = allTiles;
     let captureScale = initialScale;
     let metrics = currentMetrics;
+    let finalRow = expectedFinalRow;
     const firstIndex = Math.min(...rowTiles.map((tile) => tile.index));
+
     for (const planned of rowTiles) {
       if (planned.status === "stored") {
         continue;
       }
       context.cancellation.throwIfCancelled("capture");
       await this.ensureActiveTab(context.tabId, windowId);
-      const page = await this.pages.scrollAndSettle({
+      const request = {
         tabId: context.tabId,
         preparationId,
         scrollX: planned.scrollXCss ?? planned.sourceRectCss.x,
         scrollY: planned.scrollYCss ?? planned.sourceRectCss.y,
         tileIndex: planned.index,
-        totalTiles: isFinalRow ? tiles.length : context.settings.limits.maxTiles,
+        totalTiles: finalRow ? tiles.length : context.settings.limits.maxTiles,
         fixedElementMode: context.settings.fixedElementMode,
         settleMs: context.settings.lazyLoad.settleMs,
-        expectedDocumentWidth: frontier.viewportWidthCss,
+        expectedDocumentWidth: frontier.documentWidthCss,
         expectedDocumentHeight: frontier.observedDocumentHeightCss,
         isFirstRow: planned.row === 0,
-        isFinalRow,
-      });
+        isFinalRow: finalRow,
+      };
+      let page = await this.pages.scrollAndSettle(request);
       validateIdentity(frontier, page, planned.index);
+      const growth = withObservedGrowth(frontier, page, this.now().toISOString());
+      frontier = growth.frontier;
+      if (growth.grew && finalRow) {
+        finalRow = false;
+        page = await this.pages.scrollAndSettle({
+          ...request,
+          totalTiles: context.settings.limits.maxTiles,
+          expectedDocumentHeight: frontier.observedDocumentHeightCss,
+          isFinalRow: false,
+        });
+        validateIdentity(frontier, page, planned.index);
+        frontier = withObservedGrowth(frontier, page, this.now().toISOString()).frontier;
+      }
       if (page.scrollSnapped) {
         throw captureError({
           code: "E_LAYOUT_UNSTABLE",
@@ -731,8 +803,8 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
           causeCode: "AdaptiveScrollPositionMismatch",
           safeContext: {
             tileIndex: planned.index,
-            requestedX: planned.scrollXCss ?? planned.sourceRectCss.x,
-            requestedY: planned.scrollYCss ?? planned.sourceRectCss.y,
+            requestedX: request.scrollX,
+            requestedY: request.scrollY,
             actualX: page.actualScrollX,
             actualY: page.actualScrollY,
           },
@@ -743,7 +815,7 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
         jobId: context.jobId,
         state: "capturing",
         stage: "capturing",
-        completed: tiles.filter((tile) => tile.status === "stored").length,
+        completed: countStored(tiles),
         total: tiles.length,
         tileIndex: planned.index,
       });
@@ -778,6 +850,34 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
           safeContext: { tileIndex: planned.index },
         });
       }
+      const projectedBytes = storedBytes(tiles) + blob.size;
+      if (projectedBytes > context.settings.limits.maxEstimatedBytes) {
+        if (frontier.capturedRows > 0 && context.discardTilesFromIndex !== undefined) {
+          await context.discardTilesFromIndex(firstIndex);
+          return {
+            frontier,
+            metrics,
+            tiles: tiles.filter((tile) => tile.index < firstIndex),
+            captureScale,
+            finalRow: false,
+            partial: {
+              reason: "max-estimated-bytes",
+              limitValue: context.settings.limits.maxEstimatedBytes,
+            },
+          };
+        }
+        throw captureError({
+          code: "E_MEMORY_GUARD",
+          message: "The first adaptive row exceeds the configured byte budget.",
+          userMessageKey: "errors.memoryGuard",
+          causeCode: "AdaptiveFirstRowByteBudget",
+          safeContext: {
+            projectedBytes,
+            maxEstimatedBytes: context.settings.limits.maxEstimatedBytes,
+          },
+        });
+      }
+
       const captured: CaptureTile = {
         ...planned,
         sourceRectCss: {
@@ -800,7 +900,7 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
         jobId: context.jobId,
         state: "capturing",
         stage: "storing",
-        completed: tiles.filter((tile) => tile.status === "stored").length,
+        completed: countStored(tiles),
         total: tiles.length,
         tileIndex: planned.index,
       });
@@ -818,6 +918,7 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
             metrics,
             tiles: tiles.filter((tile) => tile.index < firstIndex),
             captureScale,
+            finalRow: false,
             partial: { reason: "storage-quota" },
           };
         }
@@ -825,6 +926,7 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
       }
       tiles = replaceTile(tiles, captured);
     }
+
     if (metrics === undefined) {
       throw captureError({
         code: "E_PROTOCOL_MESSAGE",
@@ -834,8 +936,13 @@ export class AdaptiveScrollCaptureEngine implements CaptureEngine {
         retryable: false,
       });
     }
-    const nextFrontier = reconcileCommittedRows(frontier, tiles);
-    return { frontier: nextFrontier, metrics, tiles, captureScale };
+    return {
+      frontier: reconcileCommittedRows(frontier, tiles),
+      metrics,
+      tiles,
+      captureScale,
+      finalRow,
+    };
   }
 
   private async ensureActiveTab(tabId: number, windowId: number): Promise<void> {
