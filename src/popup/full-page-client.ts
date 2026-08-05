@@ -61,7 +61,8 @@ function startTiledCapture(options: {
       tabId: options.tabId,
       windowId: options.windowId,
       mode: options.mode,
-      preferredEngine: options.mode === "scroll-area" ? "scroll" : "cdp",
+      preferredEngine:
+        options.mode === "full-page" || options.mode === "scroll-area" ? "scroll" : "cdp",
       settings: {
         ...DEFAULT_CAPTURE_SETTINGS,
         outputFormat: options.outputFormat,
