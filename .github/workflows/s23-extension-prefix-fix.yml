@@ -1,0 +1,74 @@
+name: S23 Extension Prefix Fix
+
+on:
+  push:
+    branches: [agent/s23-adaptive-scroll]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: s23-extension-prefix-fix
+  cancel-in-progress: true
+
+jobs:
+  patch-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out S23 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/s23-adaptive-scroll
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply guarded extension-prefix fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/e2e/adaptive-scroll.spec.ts')
+          text = path.read_text()
+          old = '  const extensionOrigin = new URL(workerUrl).origin;'
+          new = '  const extensionOrigin = `chrome-extension://${new URL(workerUrl).host}`;'
+          if text.count(old) != 1:
+              raise SystemExit(f'Expected one extension-origin anchor, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+          PY
+          rm .github/workflows/s23-extension-prefix-fix.yml
+
+      - name: Validate static gates
+        run: |
+          pnpm format:check
+          pnpm lint
+          pnpm typecheck
+          pnpm build
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Verify service-worker restart case
+        run: pnpm exec playwright test tests/e2e/adaptive-scroll.spec.ts --project=visible-smoke --grep "service-worker restart"
+
+      - name: Commit clean targeted fix
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add tests/e2e/adaptive-scroll.spec.ts .github/workflows/s23-extension-prefix-fix.yml
+          git commit -m "Fix extension worker target prefix"
+          git push origin HEAD:agent/s23-adaptive-scroll
