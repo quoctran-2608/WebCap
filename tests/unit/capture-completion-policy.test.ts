@@ -33,7 +33,7 @@ describe("createCaptureCompletionPolicy", () => {
     });
   });
 
-  it("uses PNG instead of treating a region PDF preference as an image format", () => {
+  it("uses PNG instead of treating a targeted PDF preference as an image format", () => {
     const pdfSettings = { ...DEFAULT_CAPTURE_SETTINGS, outputFormat: "pdf" as const };
     expect(createCaptureCompletionPolicy("region", pdfSettings).primaryOutput).toBe("png");
     expect(createCaptureCompletionPolicy("element", pdfSettings).primaryOutput).toBe("png");
@@ -41,6 +41,16 @@ describe("createCaptureCompletionPolicy", () => {
 
   it("keeps visible capture on the existing non-automatic image flow", () => {
     expect(createCaptureCompletionPolicy("visible", DEFAULT_CAPTURE_SETTINGS)).toMatchObject({
+      primaryOutput: "png",
+      autoExport: false,
+      allowGuardedImageFallback: false,
+    });
+  });
+
+  it("normalizes a visible PDF preference to PNG without enabling automatic export", () => {
+    const pdfSettings = { ...DEFAULT_CAPTURE_SETTINGS, outputFormat: "pdf" as const };
+    expect(createCaptureCompletionPolicy("visible", pdfSettings)).toMatchObject({
+      primaryOutput: "png",
       autoExport: false,
       allowGuardedImageFallback: false,
     });
