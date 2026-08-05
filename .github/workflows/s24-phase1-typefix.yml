@@ -1,0 +1,115 @@
+name: Apply S24 Completion Services
+
+on:
+  push:
+    branches: [agent/s24-auto-output]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: s24-completion-services-approved-path
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/s24-auto-output
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply, validate, and publish
+        shell: bash
+        run: |
+          set +e
+          : > /tmp/s24.log
+          git show f4b9c3c40e95e6ed175f129ccf51f49ce9f4e219:scripts/s24-phase2a-apply.py > /tmp/apply.py
+          python /tmp/apply.py >> /tmp/s24.log 2>&1
+          status=$?
+
+          if [ "$status" -eq 0 ]; then
+            python - <<'PY' >> /tmp/s24.log 2>&1
+          from pathlib import Path
+
+          image_test = Path('tests/unit/tiled-image-export-service.test.ts')
+          text = image_test.read_text()
+          old = '''            ),
+      },
+      now: () => NOW,'''
+          new = '''            ),
+          ),
+      },
+      now: () => NOW,'''
+          if text.count(old) != 1:
+              raise SystemExit(f'Promise.reject anchor count: {text.count(old)}')
+          image_test.write_text(text.replace(old, new))
+
+          for name in [
+              'tests/unit/tiled-image-export-service.test.ts',
+              'tests/unit/capture-completion-service.test.ts',
+          ]:
+              path = Path(name)
+              value = path.read_text()
+              old = '      transition: (_id, state, patch = {}) => {\n        transitions.push(state);'
+              new = '      transition: (id, state, patch = {}) => {\n        void id;\n        transitions.push(state);'
+              if value.count(old) != 1:
+                  raise SystemExit(f'transition anchor count in {name}: {value.count(old)}')
+              path.write_text(value.replace(old, new))
+          PY
+            status=$?
+          fi
+
+          files=(
+            src/background/capture-completion-policy.ts
+            src/background/capture-output.ts
+            src/background/tiled-image-export-service.ts
+            src/background/capture-completion-service.ts
+            src/background/job-coordinator.ts
+            src/background/job-state-machine.ts
+            src/background/pdf-export-service.ts
+            src/shared/contracts/domain.ts
+            src/storage/artifact-repository.ts
+            tests/unit/capture-completion-policy.test.ts
+            tests/unit/tiled-image-export-service.test.ts
+            tests/unit/capture-completion-service.test.ts
+          )
+          if [ "$status" -eq 0 ]; then pnpm exec prettier --write "${files[@]}" >> /tmp/s24.log 2>&1; status=$?; fi
+          if [ "$status" -eq 0 ]; then pnpm lint >> /tmp/s24.log 2>&1; status=$?; fi
+          if [ "$status" -eq 0 ]; then pnpm typecheck >> /tmp/s24.log 2>&1; status=$?; fi
+          if [ "$status" -eq 0 ]; then pnpm test:unit >> /tmp/s24.log 2>&1; status=$?; fi
+          if [ "$status" -eq 0 ]; then pnpm build >> /tmp/s24.log 2>&1; status=$?; fi
+
+          git config user.name "OpenAI coding agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          workflow=.github/workflows/s24-phase1-typefix.yml
+
+          if [ "$status" -eq 0 ]; then
+            rm -f docs/sessions/s24-phase2a-diagnostic.md "$workflow"
+            git add "${files[@]}" docs/sessions/s24-phase2a-diagnostic.md "$workflow"
+            git commit -m "Add mode-aware completion services"
+          else
+            git reset --hard HEAD
+            {
+              echo '# S24 completion services diagnostic'
+              echo
+              echo "Exit status: $status"
+              echo
+              echo '```text'
+              tail -c 70000 /tmp/s24.log
+              echo
+              echo '```'
+            } > docs/sessions/s24-phase2a-diagnostic.md
+            rm "$workflow"
+            git add docs/sessions/s24-phase2a-diagnostic.md "$workflow"
+            git commit -m "Update S24 completion services diagnostic"
+          fi
+          git push origin HEAD:agent/s24-auto-output
