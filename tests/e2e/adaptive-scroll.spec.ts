@@ -235,6 +235,28 @@ function expectContinuousRows(state: AdaptiveJobState): void {
   expect(bottom).toBeCloseTo(state.targetRect?.height ?? 0, 0);
 }
 
+async function openReloadedExtensionPage(popup: Page, popupUrl: string): Promise<Page> {
+  const browserContext = popup.context();
+  const deadline = Date.now() + 20_000;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    const candidate = await browserContext.newPage();
+    try {
+      await candidate.goto(popupUrl, { waitUntil: "domcontentloaded" });
+      return candidate;
+    } catch (error) {
+      lastError = error;
+      await candidate.close().catch(() => undefined);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+
+  throw new Error(
+    `The extension page did not become available after runtime reload: ${String(lastError)}`,
+  );
+}
+
 async function restartExtensionWorker(
   worker: Worker,
   popup: Page,
@@ -242,7 +264,6 @@ async function restartExtensionWorker(
   jobId: string,
 ): Promise<WorkerRestartResult> {
   const popupUrl = popup.url();
-  const browserContext = popup.context();
 
   await worker.evaluate(() => chrome.runtime.reload()).catch(() => undefined);
   await expect
@@ -258,8 +279,7 @@ async function restartExtensionWorker(
     )
     .toBe(true);
 
-  const restartedPopup = await browserContext.newPage();
-  await restartedPopup.goto(popupUrl, { waitUntil: "domcontentloaded" });
+  const restartedPopup = await openReloadedExtensionPage(popup, popupUrl);
   await targetPage.bringToFront();
   const wakeRequest = createJobGetMessage({
     requestId: crypto.randomUUID(),
