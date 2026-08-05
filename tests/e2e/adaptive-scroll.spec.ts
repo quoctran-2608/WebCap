@@ -184,11 +184,11 @@ async function waitForAdaptiveReady(
     .poll(
       async () => {
         const state = await readAdaptiveJob(serviceWorker, jobId);
-        return state.state;
+        return ["ready", "exporting", "completed"].includes(state.state);
       },
       { timeout },
     )
-    .toBe("ready");
+    .toBe(true);
   return readAdaptiveJob(serviceWorker, jobId);
 }
 
@@ -201,11 +201,11 @@ async function waitForAdaptiveReadyFromPage(
     .poll(
       async () => {
         const state = await readAdaptiveJobFromPage(page, jobId);
-        return state.state;
+        return ["ready", "exporting", "completed"].includes(state.state);
       },
       { timeout },
     )
-    .toBe("ready");
+    .toBe(true);
   return readAdaptiveJobFromPage(page, jobId);
 }
 

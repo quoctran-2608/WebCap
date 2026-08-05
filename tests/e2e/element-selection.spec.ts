@@ -26,6 +26,14 @@ interface ElementState {
       captureKind: string;
     } | null;
     activeEngine?: string;
+    activeOutputFormat?: string;
+    outputArtifactId?: string;
+    output?: {
+      artifactId: string;
+      format: string;
+      mimeType: string;
+      byteLength: number;
+    };
     completedTiles: number;
     totalTiles: number;
     cleanupCompleted: boolean;
@@ -92,6 +100,14 @@ async function readElementState(serviceWorker: Worker): Promise<ElementState> {
         captureKind: string;
       };
       activeEngine?: string;
+      activeOutputFormat?: string;
+      outputArtifactId?: string;
+      output?: {
+        artifactId: string;
+        format: string;
+        mimeType: string;
+        byteLength: number;
+      };
       completedTiles: number;
       totalTiles: number;
       updatedAt: string;
@@ -142,6 +158,13 @@ async function readElementState(serviceWorker: Worker): Promise<ElementState> {
               targetRect: job.targetRect ?? null,
               descriptor: job.targetDescriptor ?? null,
               ...(job.activeEngine === undefined ? {} : { activeEngine: job.activeEngine }),
+              ...(job.activeOutputFormat === undefined
+                ? {}
+                : { activeOutputFormat: job.activeOutputFormat }),
+              ...(job.outputArtifactId === undefined
+                ? {}
+                : { outputArtifactId: job.outputArtifactId }),
+              ...(job.output === undefined ? {} : { output: job.output }),
               completedTiles: job.completedTiles,
               totalTiles: job.totalTiles,
               cleanupCompleted: job.cleanup.completed,
@@ -197,6 +220,7 @@ test("@smoke selects normal element bounds with parent-child keyboard navigation
 
   const root = targetPage.locator("[data-webcap-element-selector]");
   await expect(root).toHaveCount(1);
+  const tabId = await resolveTab(serviceWorker, targetPage);
   const child = targetPage.locator("#target-child");
   const childBox = await child.boundingBox();
   if (childBox === null) throw new Error("Target child is not visible.");
@@ -216,11 +240,19 @@ test("@smoke selects normal element bounds with parent-child keyboard navigation
   await targetPage.keyboard.press("Enter");
   await expect(root).toHaveCount(0);
 
-  const state = await waitForElementState(serviceWorker, "ready");
+  const state = await waitForElementState(serviceWorker, "completed");
   expect(state.job).toMatchObject({
-    state: "ready",
+    state: "completed",
     activeEngine: "cdp",
+    activeOutputFormat: "png",
     cleanupCompleted: true,
+    outputArtifactId: expect.any(String),
+    output: {
+      artifactId: expect.any(String),
+      format: "png",
+      mimeType: "image/png",
+      byteLength: expect.any(Number),
+    },
     descriptor: {
       tagName: "span",
       id: "target-child",
@@ -229,6 +261,17 @@ test("@smoke selects normal element bounds with parent-child keyboard navigation
       captureKind: "visible-bounds",
     },
   });
+  expect(state.job?.outputArtifactId).toBe(state.job?.output?.artifactId);
+  expect(state.job?.output?.byteLength).toBeGreaterThan(0);
+
+  await targetPage.bringToFront();
+  await serviceWorker.evaluate(async (id) => chrome.tabs.update(id, { active: true }), tabId);
+  const resultPopup = await openPopup();
+  const result = resultPopup.getByTestId("tiled-output-result");
+  await expect(result).toBeVisible({ timeout: 15_000 });
+  await expect(result).toHaveAttribute("data-format", "png");
+  await expect(result.getByRole("heading", { name: "Ảnh đã sẵn sàng" })).toBeVisible();
+
   expect(state.job?.targetRect).toMatchObject({
     x: childBox.x,
     y: childBox.y,
@@ -248,6 +291,7 @@ test("@smoke selects the deepest target inside an open shadow root", async ({
   openPopup,
 }) => {
   await targetPage.goto("http://127.0.0.1:4174/element-selection.html");
+  const tabId = await resolveTab(serviceWorker, targetPage);
   const shadowButton = targetPage.locator("open-shadow-card").locator("#shadow-action");
   await shadowButton.scrollIntoViewIfNeeded();
   const popup = await openPopup();
@@ -267,7 +311,27 @@ test("@smoke selects the deepest target inside an open shadow root", async ({
   await expect(root.locator("[data-label]")).toContainText("button#shadow-action.shadow-button");
   await targetPage.keyboard.press("Enter");
 
-  const state = await waitForElementState(serviceWorker, "ready");
+  const state = await waitForElementState(serviceWorker, "completed");
+  expect(state.job).toMatchObject({
+    state: "completed",
+    activeOutputFormat: "png",
+    outputArtifactId: expect.any(String),
+    output: {
+      artifactId: expect.any(String),
+      format: "png",
+      mimeType: "image/png",
+      byteLength: expect.any(Number),
+    },
+  });
+  expect(state.job?.outputArtifactId).toBe(state.job?.output?.artifactId);
+
+  await targetPage.bringToFront();
+  await serviceWorker.evaluate(async (id) => chrome.tabs.update(id, { active: true }), tabId);
+  const resultPopup = await openPopup();
+  const result = resultPopup.getByTestId("tiled-output-result");
+  await expect(result).toBeVisible({ timeout: 15_000 });
+  await expect(result).toHaveAttribute("data-format", "png");
+
   expect(state.job?.descriptor).toMatchObject({
     tagName: "button",
     id: "shadow-action",

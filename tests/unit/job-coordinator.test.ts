@@ -219,7 +219,17 @@ describe("PersistentJobCoordinator", () => {
       mode: "full-page",
       settings: DEFAULT_CAPTURE_SETTINGS,
     });
-    expect(created).toMatchObject({ id: "job-created", state: "created", stateRevision: 0 });
+    expect(created).toMatchObject({
+      id: "job-created",
+      state: "created",
+      stateRevision: 0,
+      completionPolicy: {
+        primaryOutput: "pdf",
+        autoExport: true,
+        openEditorAfterCapture: false,
+        allowGuardedImageFallback: false,
+      },
+    });
     expect(sessions.summaries.get(created.id)).toEqual(summarizeJob(created));
     expect(sessions.locks.get(7)).toMatchObject({ jobId: created.id });
     await expect(
@@ -230,6 +240,33 @@ describe("PersistentJobCoordinator", () => {
         settings: DEFAULT_CAPTURE_SETTINGS,
       }),
     ).rejects.toMatchObject({ code: "E_CAPTURE_RATE_LIMIT" });
+  });
+
+  it("prefers an active job and restores the latest durable terminal job for a tab", async () => {
+    const { coordinator, jobs, sessions } = setup();
+    const older = storedJob("completed", {
+      id: "job-completed-older",
+      updatedAt: "2026-08-02T16:00:30.000Z",
+    });
+    const latest = storedJob("completed", {
+      id: "job-completed-latest",
+      updatedAt: "2026-08-02T16:01:30.000Z",
+    });
+    const active = storedJob("created", {
+      id: "job-active",
+      updatedAt: "2026-08-02T16:01:00.000Z",
+      cleanup: { attempted: false, completed: false },
+    });
+    jobs.records.set(older.id, older);
+    jobs.records.set(latest.id, latest);
+    jobs.records.set(active.id, active);
+    sessions.summaries.set(older.id, summarizeJob(older));
+    sessions.summaries.set(latest.id, summarizeJob(latest));
+
+    await expect(coordinator.getActiveForTab(7)).resolves.toMatchObject({ id: active.id });
+
+    jobs.records.delete(active.id);
+    await expect(coordinator.getActiveForTab(7)).resolves.toMatchObject({ id: latest.id });
   });
 
   it("cancels a created job through legal transitions and releases the lock", async () => {

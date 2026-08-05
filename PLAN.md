@@ -2,7 +2,7 @@
 product: WebCap
 document: Active Implementation Plan
 version: 1.1
-date: 2026-08-04
+date: 2026-08-05
 status: Active
 repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
@@ -10,14 +10,14 @@ prd: ./PRD_WebCap_v1.1.md
 spec: ./docs/spec-0.2.0.md
 audit: ./docs/audits/0.1.0-gap-audit.md
 release_target: 0.2.0
-current_session: S24
+current_session: S25
 ---
 
 # WebCap — Implementation plan 0.2.0
 
 Roadmap `S00–S20` đã tạo release candidate 0.1.0. Roadmap mới `S21–S26` xử lý các khoảng trống thực tế: reset/chụp mới, region drawing có thể nhìn thấy và sử dụng được, adaptive auto-scroll, auto-PDF/output routing, settings/UI/progress và hardening release.
 
-S21–S23 đã hoàn tất reset lifecycle, region selector đáng tin cậy và adaptive auto-scroll có resumable frontier mà không thay manifest, package version hoặc artifact 0.1.0. S24 là session active tiếp theo.
+S21–S24 đã hoàn tất reset lifecycle, region selector đáng tin cậy, adaptive auto-scroll có resumable frontier và mode-aware output mà không thay manifest, package version hoặc artifact 0.1.0. S25 là session active tiếp theo.
 
 # 1. Nguồn sự thật
 
@@ -57,8 +57,8 @@ S21–S23 đã hoàn tất reset lifecycle, region selector đáng tin cậy và
 | S21 | Reset lifecycle và “Chụp mới” | DONE | S20 |
 | S22 | Region drawing launch, interaction và accessibility | DONE | S21 cleanup primitive |
 | S23 | Adaptive auto-scroll và resumable frontier | DONE | S21–S22 |
-| S24 | Auto-PDF và mode-aware image/PDF output | PLANNED | S23 |
-| S25 | Stored settings, event-driven progress và simplified popup | BLOCKED | S21–S24 stable contracts |
+| S24 | Auto-PDF và mode-aware image/PDF output | DONE | S23 |
+| S25 | Stored settings, event-driven progress và simplified popup | PLANNED | S21–S24 stable contracts |
 | S26 | Gap closure hardening, migration, docs và RC 0.2.0 | BLOCKED | S21–S25 |
 
 # 5. S21 — Reset lifecycle và “Chụp mới”
@@ -263,6 +263,26 @@ Mỗi capture mode kết thúc bằng output hợp lý mà không bắt người
 - AC-22–AC-24 và AC-36 pass.
 - Region/element có result ảnh trực tiếp trong safe cases.
 - Basic full-page completes without editor.
+
+
+## S24 implementation evidence
+
+- `CaptureCompletionPolicy` routes full-page and scroll-area jobs to automatic PDF export, region and element jobs to guarded image export, and leaves visible capture on its existing image flow.
+- Auto-export begins only from the durable `ready` checkpoint. Output format, artifact ID, MIME type, byte length and PDF page count persist on the job; worker recovery reconciles an existing output before starting work again.
+- `TiledImageExportService` validates dimensions, total pixel area and working-set budget before allocating an `OffscreenCanvas`, decodes tiles sequentially and emits PNG/JPEG/WebP without a full-page canvas.
+- `E_IMAGE_OUTPUT_TOO_LARGE` preserves every source tile and exposes the explicit “Chuyển sang PDF không chụp lại” action. Browser coverage proves the same job and exact stored tile Blobs produce the fallback PDF without reopening a selector or recapturing pixels.
+- Reopening the popup restores the most recent terminal output when no active job exists. Result cards expose the correct image/PDF metadata, download, supported edit and new-capture actions.
+- Editing an auto-generated PDF explicitly reopens `completed → ready`, removes only the old output artifact, keeps source tiles and edit manifest consistency, then produces a replacement PDF without recapture.
+- Partial capture is never auto-exported until the user explicitly keeps the contiguous prefix; cancellation/reset continue to discard capture-owned data.
+- Final clean gate on commit `6d23173f0bebf8bc6ffd23327dacd7fb58322d47`: formatting, ESLint, strict TypeScript, privacy/dependency/release/critical-security audits, 325/325 unit tests on 92 files, 4/4 PDF benchmarks, verified Manifest V3 build, reproducible 24-entry ZIP, 49/49 Playwright E2E and packaged install/update/uninstall lifecycle all PASS.
+
+## S24 exit disposition
+
+- AC-22: PASS — successful full-page capture starts PDF export without opening the editor.
+- AC-23: PASS — PDF remains page-at-a-time with decoded-tile concurrency bounded to one and no full-page canvas.
+- AC-24: PASS — export failure preserves source tiles; retry and image-to-PDF fallback reuse them without recapture.
+- AC-36: PASS — full-page/scroll-area default to PDF, region/element return direct guarded images and oversized images receive an explicit PDF fallback.
+- S25 is unblocked and becomes the active session; stored settings, event-driven progress and simplified popup remain out of S24 scope.
 
 # 9. S25 — Settings, events và simplified popup
 

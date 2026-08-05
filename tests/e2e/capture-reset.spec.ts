@@ -54,6 +54,7 @@ async function readTiledResetState(serviceWorker: Worker): Promise<{
   job: { id: string; state: string } | null;
   jobCount: number;
   tileCount: number;
+  artifactCount: number;
 }> {
   return serviceWorker.evaluate(async () => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -61,16 +62,17 @@ async function readTiledResetState(serviceWorker: Worker): Promise<{
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error ?? new Error("Unable to open test database."));
     });
-    const transaction = database.transaction(["jobs", "tiles"], "readonly");
+    const transaction = database.transaction(["jobs", "tiles", "artifacts"], "readonly");
     const readAll = <T>(store: string) =>
       new Promise<T[]>((resolve, reject) => {
         const request = transaction.objectStore(store).getAll();
         request.onsuccess = () => resolve(request.result as T[]);
         request.onerror = () => reject(request.error ?? new Error(`Unable to read ${store}.`));
       });
-    const [jobs, tiles] = await Promise.all([
+    const [jobs, tiles, artifacts] = await Promise.all([
       readAll<{ id: string; mode: string; state: string; updatedAt: string }>("jobs"),
       readAll<{ jobId: string }>("tiles"),
+      readAll<unknown>("artifacts"),
     ]);
     database.close();
     const latest = jobs
@@ -80,6 +82,7 @@ async function readTiledResetState(serviceWorker: Worker): Promise<{
       job: latest === undefined ? null : { id: latest.id, state: latest.state },
       jobCount: jobs.length,
       tileCount: tiles.length,
+      artifactCount: artifacts.length,
     };
   });
 }
@@ -130,19 +133,21 @@ test("@smoke resets terminal and active full-page jobs without stale local data"
   const popup = await openPopup();
   await selectFullPage(popup);
   await popup.getByRole("button", { name: "Bắt đầu chụp toàn trang" }).click();
-  await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({
-    timeout: 45_000,
-  });
+  const result = popup.getByTestId("tiled-output-result");
+  await expect(result).toBeVisible({ timeout: 45_000 });
+  await expect(result).toHaveAttribute("data-format", "pdf");
+  await expect(result.getByRole("heading", { name: "PDF đã sẵn sàng" })).toBeVisible();
 
   const first = await readTiledResetState(serviceWorker);
-  expect(first.job).toMatchObject({ state: "ready" });
+  expect(first.job).toMatchObject({ state: "completed" });
+  expect(first.artifactCount).toBe(1);
   const firstJobId = first.job?.id;
   expect(firstJobId).toBeTruthy();
 
   await popup.getByRole("button", { name: "Chụp mới" }).click();
   await expect
     .poll(() => readTiledResetState(serviceWorker), { timeout: 10_000 })
-    .toEqual({ job: null, jobCount: 0, tileCount: 0 });
+    .toEqual({ job: null, jobCount: 0, tileCount: 0, artifactCount: 0 });
   await expect(popup.getByRole("button", { name: "Bắt đầu chụp toàn trang" })).toBeEnabled();
 
   await targetPage.goto("http://127.0.0.1:4174/lazy-images.html");
@@ -166,7 +171,7 @@ test("@smoke resets terminal and active full-page jobs without stale local data"
 
   await expect
     .poll(() => readTiledResetState(serviceWorker), { timeout: 30_000 })
-    .toEqual({ job: null, jobCount: 0, tileCount: 0 });
+    .toEqual({ job: null, jobCount: 0, tileCount: 0, artifactCount: 0 });
   await expect.poll(() => snapshotPage(targetPage), { timeout: 10_000 }).toEqual(beforeActiveReset);
   await expect(popup.getByRole("button", { name: "Bắt đầu chụp toàn trang" })).toBeEnabled();
 });

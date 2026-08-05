@@ -1,4 +1,5 @@
 import { AdaptiveCaptureCoordinator } from "@background/adaptive-capture-coordinator";
+import { CaptureCompletionService } from "@background/capture-completion-service";
 import { createChromeDebuggerAdapter } from "@background/chrome-debugger-adapter";
 import {
   ElementSelectionService,
@@ -28,6 +29,7 @@ import { AdaptiveScrollCaptureEngine } from "@capture/adaptive-scroll-capture-en
 import { CdpCaptureEngine } from "@capture/cdp-capture-engine";
 import { ScrollAreaCaptureEngine } from "@capture/scroll-area-capture-engine";
 import { ScrollCaptureEngine } from "@capture/scroll-capture-engine";
+import { TiledImageExportService } from "@background/tiled-image-export-service";
 import { DEDUPE_RECORD_SCHEMA_VERSION, DEDUPE_TTL_MS } from "@shared/constants";
 import {
   CaptureResetResponseSchema,
@@ -113,6 +115,13 @@ export interface PdfExportPort {
   }): Promise<CaptureJob | undefined>;
 }
 
+export interface CaptureCompletionPort {
+  startAuto(jobId: string): Promise<CaptureJob>;
+  recoverAll(): Promise<CaptureJob[]>;
+  cancel(jobId: string): Promise<CaptureJob>;
+  waitForIdle(jobId: string): Promise<void>;
+}
+
 export interface PersistentJobRouterDependencies {
   jobs: PersistentJobCoordinatorPort;
   dedupe: DedupeRepositoryPort;
@@ -122,6 +131,7 @@ export interface PersistentJobRouterDependencies {
   regions?: RegionSelectionPort;
   elements?: ElementSelectionPort & ElementTargetValidationPort;
   pdfExports?: PdfExportPort;
+  completion?: CaptureCompletionPort;
   reset?: Pick<CaptureResetService, "reset">;
 }
 
@@ -129,6 +139,23 @@ let sharedDependencies: PersistentJobRouterDependencies | undefined;
 
 function addMilliseconds(date: Date, milliseconds: number): string {
   return new Date(date.getTime() + milliseconds).toISOString();
+}
+
+async function runCaptureAndCompletion(
+  jobId: string,
+  captures: FullPageCapturePort,
+  completion?: CaptureCompletionPort,
+): Promise<void> {
+  await captures.start(jobId);
+  await completion?.startAuto(jobId);
+}
+
+function startCaptureAndCompletion(
+  jobId: string,
+  captures: FullPageCapturePort,
+  completion?: CaptureCompletionPort,
+): void {
+  void runCaptureAndCompletion(jobId, captures, completion).catch(() => undefined);
 }
 
 export function getPersistentJobRouterDependencies(): PersistentJobRouterDependencies {
@@ -219,11 +246,23 @@ export function getPersistentJobRouterDependencies(): PersistentJobRouterDepende
   });
   const regions = new RegionSelectionService(createChromeRegionSelectionBrowserAdapter());
   const artifacts = new IndexedDbArtifactRepository();
+  const offscreen = new OffscreenService();
   const pdfExports = new PdfExportService({
     jobs,
     tiles,
-    offscreen: new OffscreenService(),
+    offscreen,
     manifests,
+    artifacts,
+  });
+  const imageExports = new TiledImageExportService({
+    jobs,
+    offscreen,
+    artifacts,
+  });
+  const completion = new CaptureCompletionService({
+    jobs,
+    pdf: pdfExports,
+    images: imageExports,
     artifacts,
   });
   const visible = getMessageRouterDependencies();
@@ -239,7 +278,7 @@ export function getPersistentJobRouterDependencies(): PersistentJobRouterDepende
     cleanup: ownedDataCleanup,
     captures,
     scrollAreaCaptures,
-    pdfExports,
+    pdfExports: completion,
     regionSelections: regions,
     elementSelections: elements,
     visibleSessions: visible.visibleSessions,
@@ -256,6 +295,7 @@ export function getPersistentJobRouterDependencies(): PersistentJobRouterDepende
     regions,
     elements,
     pdfExports,
+    completion,
     reset,
     dedupe,
     now: () => new Date(),
@@ -272,7 +312,10 @@ export function getPersistentJobRouterDependencies(): PersistentJobRouterDepende
           (job.state === "preparing" ||
             (job.state === "capturing" && job.adaptiveFrontier !== undefined)),
       );
-      await Promise.allSettled(resumable.map((job) => captures.start(job.id)));
+      await Promise.allSettled(
+        resumable.map((job) => runCaptureAndCompletion(job.id, captures, completion)),
+      );
+      await completion.recoverAll();
     })
     .catch(() => undefined);
   void dedupe.deleteExpired(nowIso).catch(() => undefined);
@@ -408,7 +451,7 @@ async function executeJobRequest(
             }),
       });
       if (job.mode === "full-page" && dependencies.captures !== undefined) {
-        void dependencies.captures.start(job.id).catch(() => undefined);
+        startCaptureAndCompletion(job.id, dependencies.captures, dependencies.completion);
       } else if (job.mode === "region" && dependencies.regions !== undefined) {
         try {
           await dependencies.regions.start(job.tabId, job.id);
@@ -502,6 +545,9 @@ async function executeJobRequest(
       const job = await dependencies.jobs.get(request.payload.jobId);
       if (job === undefined) {
         throw jobNotFound(request.payload.jobId);
+      }
+      if (job.state === "exporting" && dependencies.completion !== undefined) {
+        return { kind: "job", job: await dependencies.completion.cancel(job.id) };
       }
       if (job.mode === "scroll-area" && dependencies.scrollAreaCaptures !== undefined) {
         return {
@@ -699,7 +745,7 @@ export async function routeRegionSelectionMessage(
           }),
         );
       }
-      void dependencies.captures.start(job.id).catch(() => undefined);
+      startCaptureAndCompletion(job.id, dependencies.captures, dependencies.completion);
     }
 
     return createRegionSelectionEventAckMessage({
@@ -814,7 +860,7 @@ export async function routeElementSelectionMessage(
           }),
         );
       }
-      void coordinator.start(job.id).catch(() => undefined);
+      startCaptureAndCompletion(job.id, coordinator, dependencies.completion);
     }
 
     return createElementSelectionEventAckMessage({

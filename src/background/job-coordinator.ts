@@ -15,6 +15,7 @@ import {
 import { normalizeError } from "@shared/errors/normalize-error";
 import type { JobArtifactCleanupPort } from "@storage/job-artifact-cleanup-repository";
 import type { CaptureOwnedDataCleanupPort } from "./capture-data-cleanup-service";
+import { createCaptureCompletionPolicy } from "./capture-completion-policy";
 import type { JobRepositoryPort } from "@storage/job-repository";
 import type { JobSessionRepositoryPort } from "@storage/job-session-repository";
 import type { TileRepositoryPort } from "@storage/tile-repository";
@@ -221,6 +222,7 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
       completedTiles: 0,
       totalTiles: 0,
       settings: options.settings,
+      completionPolicy: createCaptureCompletionPolicy(options.mode, options.settings),
       cleanup: { attempted: false, completed: false },
       createdAt: nowIso,
       updatedAt: nowIso,
@@ -252,10 +254,26 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
 
   async getActiveForTab(tabId: number): Promise<CaptureJob | undefined> {
     await this.initialize();
-    const active = await this.jobs.listActive();
-    return active
+    const active = (await this.jobs.listActive())
       .filter((job) => job.tabId === tabId)
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+    if (active !== undefined) {
+      return active;
+    }
+
+    // The popup uses this lookup to restore its current capture surface. Once output reaches
+    // completed, it is no longer active, but the durable result must remain discoverable across
+    // popup close/reopen cycles until reset or expiry removes the job and its summary.
+    const summaries = (await this.sessions.listSummaries())
+      .filter((summary) => summary.tabId === tabId)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+    for (const summary of summaries) {
+      const job = await this.jobs.get(summary.jobId);
+      if (job !== undefined) {
+        return job;
+      }
+    }
+    return undefined;
   }
 
   async update(

@@ -11,7 +11,9 @@ const ALLOWED_TRANSITIONS: Readonly<Record<JobState, readonly JobState[]>> = Obj
   processing: ["ready", "failed", "cancelling"],
   ready: ["exporting", "cancelling"],
   exporting: ["completed", "ready", "failed", "cancelling"],
-  completed: [],
+  // Completed is quiescent by default, but a deliberate PDF-editor mutation may reopen
+  // the durable tile source so a replacement artifact can be exported without recapture.
+  completed: ["ready"],
   failed: ["preparing", "capturing", "exporting", "cancelled"],
   cancelling: ["cancelled"],
   cancelled: [],
@@ -35,6 +37,8 @@ export type JobTransitionPatch = Partial<
     | "cleanup"
     | "partialCapture"
     | "exportProgress"
+    | "activeOutputFormat"
+    | "output"
     | "outputArtifactId"
     | "error"
     | "expiresAt"
@@ -116,9 +120,7 @@ export function validateJobInvariants(
         stateError(
           "Only full-page jobs may persist an adaptive frontier.",
           "AdaptiveModeMismatch",
-          {
-            mode: job.mode,
-          },
+          { mode: job.mode },
         ),
       );
     }
@@ -153,6 +155,23 @@ export function validateJobInvariants(
         completedPages: job.exportProgress.completedPages,
         totalPages: job.exportProgress.totalPages,
       }),
+    );
+  }
+
+  if (
+    job.output !== undefined &&
+    job.outputArtifactId !== undefined &&
+    job.output.artifactId !== job.outputArtifactId
+  ) {
+    return err(
+      stateError(
+        "Output metadata must match the persisted artifact ID.",
+        "OutputArtifactMismatch",
+        {
+          outputArtifactId: job.outputArtifactId,
+          metadataArtifactId: job.output.artifactId,
+        },
+      ),
     );
   }
 
@@ -261,9 +280,7 @@ export function updateJob(
   context: JobInvariantContext = {},
 ): Result<CaptureJob, WebCapErrorData> {
   const candidate = buildMutation(job, updatedAt, patch, job.state);
-  if (!candidate.ok) {
-    return candidate;
-  }
+  if (!candidate.ok) return candidate;
   const invariant = validateJobInvariants(candidate.value, context);
   return invariant.ok ? candidate : invariant;
 }
@@ -285,9 +302,7 @@ export function transitionJob(
   }
 
   const candidate = buildMutation(job, updatedAt, patch, nextState);
-  if (!candidate.ok) {
-    return candidate;
-  }
+  if (!candidate.ok) return candidate;
   const invariant = validateJobInvariants(candidate.value, context);
   return invariant.ok ? candidate : invariant;
 }

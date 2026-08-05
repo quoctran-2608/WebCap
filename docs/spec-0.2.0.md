@@ -2,7 +2,7 @@
 product: WebCap
 document: Engineering Specification Addendum
 version: 0.2.0
-date: 2026-08-04
+date: 2026-08-05
 status: Active implementation specification
 repository: quoctran-2608/WebCap
 extends: ../SPEC.md
@@ -267,6 +267,18 @@ Thêm `TiledImageExportService` cho region/element và scroll-area nhỏ:
 - nếu vượt guard, trả typed recommendation `E_IMAGE_OUTPUT_TOO_LARGE` với CTA “Xuất PDF”.
 
 Không cố ghép long image vượt browser canvas limit.
+
+## 5.4 Locked S24 implementation semantics
+
+- Completion routing is deterministic by mode: full-page and scroll-area automatically request PDF; region and element automatically request the validated image format; visible capture keeps its existing artifact flow.
+- `ready` is the durable handoff from capture to output. Completion recovery first reconciles `outputArtifactId` and the persisted artifact, so service-worker restart cannot create a second output for the same completed attempt.
+- Terminal lookup prefers an active job, otherwise the newest durable terminal summary for the tab. Closing and reopening the popup therefore restores completed PNG/PDF result metadata without loading tile Blobs into session storage.
+- Tiled image composition is allowed only after dimension, pixel-area and estimated working-set guards. Tiles decode and close sequentially; unsafe canvas allocation returns typed `E_IMAGE_OUTPUT_TOO_LARGE` with `fallbackAllowed: true`.
+- The oversized-image fallback is user initiated. It invokes PDF export on the same failed job and stored tiles, does not reopen a selector and does not recapture pixels.
+- Auto-generated PDF output remains editable. The first explicit editor mutation reopens `completed → ready`, deletes only the old PDF artifact/output link, keeps source tiles, and rolls the manifest back if reopening fails.
+- Output metadata includes artifact ID, format, MIME type, byte length and PDF page count. Download, supported Edit and New capture actions derive from this durable contract.
+- Guard-limited partial capture requires explicit keep confirmation before output starts.
+- S24 acceptance evidence: 325 unit tests, four bounded PDF benchmarks, 49 actual-browser E2E cases including image-too-large PDF fallback without recapture, reproducible packaging and packaged lifecycle smoke.
 
 # 6. Reset domain command
 

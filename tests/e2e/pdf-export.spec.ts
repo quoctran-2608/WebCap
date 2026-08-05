@@ -119,7 +119,7 @@ async function readPdfState(serviceWorker: Worker): Promise<PdfState> {
   });
 }
 
-test("@smoke exports a stored full-page tile set as a loadable paged PDF", async ({
+test("@smoke auto-exports a stored full-page tile set as a loadable paged PDF", async ({
   serviceWorker,
   targetPage,
   openPopup,
@@ -128,46 +128,11 @@ test("@smoke exports a stored full-page tile set as a loadable paged PDF", async
   const popup = await openPopup();
   await selectFullPage(popup);
   await popup.getByRole("button", { name: "Bắt đầu chụp toàn trang" }).click();
-  await expect(popup.getByText("Tile set toàn trang đã sẵn sàng.")).toBeVisible({
-    timeout: 45_000,
-  });
 
-  const ready = await readPdfState(serviceWorker);
-  expect(ready.job).toMatchObject({ state: "ready" });
-  expect(ready.job?.tileCount).toBeGreaterThan(2);
-  const jobId = ready.job?.id;
-  if (jobId === undefined) throw new Error("The ready full-page job could not be resolved.");
-
-  const response = await popup.evaluate(async (id): Promise<unknown> => {
-    const value: unknown = await chrome.runtime.sendMessage({
-      protocolVersion: 1,
-      requestId: crypto.randomUUID(),
-      source: "popup",
-      target: "background",
-      type: "PDF_EXPORT_START",
-      payload: {
-        jobId: id,
-        settings: {
-          pageSize: "a4",
-          orientation: "portrait",
-          marginMm: 8,
-          jpegQuality: 0.82,
-        },
-      },
-      sentAt: new Date().toISOString(),
-    });
-    return value;
-  }, jobId);
-  expect(response).toMatchObject({
-    type: "JOB_RESPONSE",
-    payload: {
-      job: {
-        id: jobId,
-        state: "exporting",
-        exportProgress: { completedPages: 0 },
-      },
-    },
-  });
+  const result = popup.getByTestId("tiled-output-result");
+  await expect(result).toBeVisible({ timeout: 45_000 });
+  await expect(result).toHaveAttribute("data-format", "pdf");
+  await expect(result.getByRole("heading", { name: "PDF đã sẵn sàng" })).toBeVisible();
 
   await expect
     .poll(
@@ -189,7 +154,7 @@ test("@smoke exports a stored full-page tile set as a loadable paged PDF", async
 
   const completed = await readPdfState(serviceWorker);
   expect(completed.job).toMatchObject({ state: "completed" });
-  expect(completed.job?.tileCount).toBe(ready.job?.tileCount);
+  expect(completed.job?.tileCount ?? 0).toBeGreaterThan(2);
   expect(completed.job?.totalPages ?? 0).toBeGreaterThan(1);
   expect(completed.job?.completedPages).toBe(completed.job?.totalPages);
   expect(completed.artifact).toMatchObject({

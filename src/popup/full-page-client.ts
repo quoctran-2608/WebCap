@@ -5,12 +5,13 @@ import {
   isCaptureResetResponse,
   type CaptureResetReport,
 } from "@shared/contracts/capture-reset";
-import type { CaptureJob, ImageFormat } from "@shared/contracts/domain";
+import type { CaptureJob, CaptureSettings, ImageFormat } from "@shared/contracts/domain";
 import {
   createJobCancelMessage,
   createJobCreateMessage,
   createJobGetActiveMessage,
   createJobGetMessage,
+  createPdfExportStartMessage,
   isJobActiveResponseMessage,
   isJobResponseMessage,
 } from "@shared/contracts/job-messages";
@@ -108,6 +109,20 @@ export function getCaptureJob(jobId: string): Promise<CaptureJob> {
     createJobGetMessage({
       requestId: crypto.randomUUID(),
       jobId,
+      sentAt: new Date().toISOString(),
+    }),
+  );
+}
+
+export function startPdfExport(
+  jobId: string,
+  settings?: CaptureSettings["pdf"],
+): Promise<CaptureJob> {
+  return sendJobRequest(
+    createPdfExportStartMessage({
+      requestId: crypto.randomUUID(),
+      jobId,
+      ...(settings === undefined ? {} : { settings }),
       sentAt: new Date().toISOString(),
     }),
   );

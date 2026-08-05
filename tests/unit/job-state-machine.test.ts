@@ -173,10 +173,11 @@ describe("job state machine", () => {
     });
   });
 
-  it("marks completed and cancelled as terminal", () => {
+  it("keeps completed quiescent while allowing an explicit editor reopen", () => {
     expect(isTerminalJobState("completed")).toBe(true);
     expect(isTerminalJobState("cancelled")).toBe(true);
     expect(isTerminalJobState("failed")).toBe(false);
+    expect(canTransitionJob("completed", "ready")).toBe(true);
     expect(canTransitionJob("completed", "exporting")).toBe(false);
   });
 });

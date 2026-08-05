@@ -10,6 +10,7 @@ import {
 import {
   createOffscreenCreateObjectUrlMessage,
   createOffscreenExportPdfMessage,
+  createOffscreenExportTiledImageMessage,
   createOffscreenPingMessage,
   createOffscreenProcessImageMessage,
   createOffscreenRevokeObjectUrlMessage,
@@ -20,6 +21,7 @@ import {
   isOffscreenObjectUrlRevokedMessage,
   isOffscreenReadyMessage,
   type OffscreenExportPdfMessage,
+  type OffscreenExportTiledImageMessage,
 } from "@shared/contracts/offscreen";
 import {
   createWebCapError,
@@ -68,6 +70,8 @@ export interface ProcessImageOptions {
   createdAt: string;
   expiresAt: string;
 }
+
+export type ExportTiledImageOptions = OffscreenExportTiledImageMessage["payload"];
 
 export type ExportPdfOptions = OffscreenExportPdfMessage["payload"] & {
   pages?: PdfEditorPage[];
@@ -196,6 +200,24 @@ export class OffscreenService {
       if (!isOffscreenImageProcessedMessage(response) || response.requestId !== request.requestId) {
         throw unavailableError(
           new TypeError("Offscreen processor returned an invalid image response."),
+        );
+      }
+      return response.payload;
+    });
+  }
+
+  async exportTiledImage(options: ExportTiledImageOptions): Promise<ArtifactMetadata> {
+    return this.withDocument(async () => {
+      const request = createOffscreenExportTiledImageMessage({
+        requestId: this.createRequestId(),
+        sentAt: this.now().toISOString(),
+        ...options,
+      });
+      const response = await this.runtime.sendMessage(request);
+      throwOffscreenError(response);
+      if (!isOffscreenImageProcessedMessage(response) || response.requestId !== request.requestId) {
+        throw unavailableError(
+          new TypeError("Offscreen processor returned an invalid tiled image response."),
         );
       }
       return response.payload;

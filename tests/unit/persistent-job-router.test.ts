@@ -12,6 +12,7 @@ import type { StoredDedupeRecord } from "@shared/contracts/job";
 import {
   createJobCancelMessage,
   createJobCreateMessage,
+  createJobGetActiveMessage,
   createJobGetMessage,
 } from "@shared/contracts/job-messages";
 import { createOffscreenPdfExportProgressMessage } from "@shared/contracts/offscreen";
@@ -62,6 +63,7 @@ class MemoryDedupe implements DedupeRepositoryPort {
 class FakeCoordinator implements PersistentJobCoordinatorPort {
   createCalls = 0;
   getCalls = 0;
+  getActiveCalls = 0;
   cancelCalls = 0;
   createdMode: CaptureJob["mode"] = "full-page";
   current: CaptureJob | undefined = job();
@@ -77,6 +79,11 @@ class FakeCoordinator implements PersistentJobCoordinatorPort {
 
   get(): Promise<CaptureJob | undefined> {
     this.getCalls += 1;
+    return Promise.resolve(this.current);
+  }
+
+  getActiveForTab(): Promise<CaptureJob | undefined> {
+    this.getActiveCalls += 1;
     return Promise.resolve(this.current);
   }
 
@@ -123,8 +130,15 @@ function dependencies(
   jobs: FakeCoordinator,
   dedupe: MemoryDedupe,
   captures?: PersistentJobRouterDependencies["captures"],
+  completion?: PersistentJobRouterDependencies["completion"],
 ): PersistentJobRouterDependencies {
-  return { jobs, dedupe, now: () => now, ...(captures === undefined ? {} : { captures }) };
+  return {
+    jobs,
+    dedupe,
+    now: () => now,
+    ...(captures === undefined ? {} : { captures }),
+    ...(completion === undefined ? {} : { completion }),
+  };
 }
 
 describe("persistent job router", () => {
@@ -147,6 +161,52 @@ describe("persistent job router", () => {
     expect(first).toEqual(second);
     expect(jobs.createCalls).toBe(1);
     expect(dedupe.records.get("request-1")).toMatchObject({ requestType: "JOB_CREATE" });
+  });
+
+  it("returns a durable completed output from JOB_GET_ACTIVE", async () => {
+    const jobs = new FakeCoordinator();
+    const dedupe = new MemoryDedupe();
+    jobs.current = {
+      ...job("job-completed"),
+      state: "completed",
+      stateRevision: 6,
+      activeOutputFormat: "png",
+      outputArtifactId: "artifact-output",
+      output: {
+        artifactId: "artifact-output",
+        sourceArtifactId: "artifact-source",
+        format: "png",
+        mimeType: "image/png",
+        filename: "capture.png",
+        byteLength: 128,
+        width: 640,
+        height: 480,
+        createdAt: now.toISOString(),
+        expiresAt: "2026-08-02T16:30:00.000Z",
+      },
+      cleanup: { attempted: true, completed: true },
+    };
+    const message = createJobGetActiveMessage({
+      requestId: "request-active-output",
+      sentAt: now.toISOString(),
+      tabId: 7,
+    });
+
+    const response = await routePersistentJobMessage(message, dependencies(jobs, dedupe));
+
+    expect(response).toMatchObject({
+      type: "JOB_ACTIVE_RESPONSE",
+      payload: {
+        job: {
+          id: "job-completed",
+          state: "completed",
+          activeOutputFormat: "png",
+          outputArtifactId: "artifact-output",
+          output: { artifactId: "artifact-output", format: "png" },
+        },
+      },
+    });
+    expect(jobs.getActiveCalls).toBe(1);
   });
 
   it("starts a full-page execution once after creating its persistent job", async () => {
@@ -172,6 +232,43 @@ describe("persistent job router", () => {
     expect(response).toMatchObject({ type: "JOB_RESPONSE", payload: { job: { id: "job-1" } } });
     expect(start).toHaveBeenCalledTimes(1);
     expect(start).toHaveBeenCalledWith("job-1");
+  });
+
+  it("starts automatic output only after full-page capture finishes", async () => {
+    const jobs = new FakeCoordinator();
+    const dedupe = new MemoryDedupe();
+    const order: string[] = [];
+    const start = vi.fn(() => {
+      order.push("capture");
+      return Promise.resolve();
+    });
+    const cancel = vi.fn(() => Promise.resolve(job()));
+    const startAuto = vi.fn(() => {
+      order.push("output");
+      return Promise.resolve({ ...job(), state: "exporting" as const, stateRevision: 5 });
+    });
+    const completion = {
+      startAuto,
+      recoverAll: vi.fn(() => Promise.resolve([])),
+      cancel: vi.fn(() => Promise.resolve(job())),
+      waitForIdle: vi.fn(() => Promise.resolve()),
+    };
+    const message = createJobCreateMessage({
+      requestId: "request-auto-output",
+      sentAt: now.toISOString(),
+      tabId: 7,
+      windowId: 2,
+      mode: "full-page",
+      settings: DEFAULT_CAPTURE_SETTINGS,
+    });
+
+    await routePersistentJobMessage(
+      message,
+      dependencies(jobs, dedupe, { start, cancel }, completion),
+    );
+    await vi.waitFor(() => expect(startAuto).toHaveBeenCalledWith("job-1"));
+
+    expect(order).toEqual(["capture", "output"]);
   });
 
   it("uses capture reset when a region selector does not become ready", async () => {
@@ -252,6 +349,52 @@ describe("persistent job router", () => {
     expect(response).toMatchObject({
       type: "JOB_RESPONSE",
       payload: { job: { state: "capturing" } },
+    });
+  });
+
+  it("routes export cancellation through the completion service", async () => {
+    const jobs = new FakeCoordinator();
+    const dedupe = new MemoryDedupe();
+    const exporting = {
+      ...job(),
+      state: "exporting" as const,
+      stateRevision: 4,
+      activeOutputFormat: "pdf" as const,
+      exportProgress: { completedPages: 1, totalPages: 3 },
+    };
+    jobs.current = exporting;
+    const captureCancel = vi.fn(() => Promise.resolve(exporting));
+    const completionCancel = vi.fn(() =>
+      Promise.resolve({ ...exporting, state: "ready" as const, stateRevision: 5 }),
+    );
+    const completion = {
+      startAuto: vi.fn(() => Promise.resolve(exporting)),
+      recoverAll: vi.fn(() => Promise.resolve([])),
+      cancel: completionCancel,
+      waitForIdle: vi.fn(() => Promise.resolve()),
+    };
+    const message = createJobCancelMessage({
+      requestId: "request-cancel-export",
+      sentAt: now.toISOString(),
+      jobId: exporting.id,
+      reason: "stop export",
+    });
+
+    const response = await routePersistentJobMessage(
+      message,
+      dependencies(
+        jobs,
+        dedupe,
+        { start: () => Promise.resolve(), cancel: captureCancel },
+        completion,
+      ),
+    );
+
+    expect(completionCancel).toHaveBeenCalledWith(exporting.id);
+    expect(captureCancel).not.toHaveBeenCalled();
+    expect(response).toMatchObject({
+      type: "JOB_RESPONSE",
+      payload: { job: { state: "ready" } },
     });
   });
 
