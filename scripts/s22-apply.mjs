@@ -59,6 +59,12 @@ try {
     `    { id: tabId, job: jobId },\n  )) as RegionOpenResponse[];\n\n  expect(responses[0])`,
     "typed response end",
   );
+  e2e = replaceUnique(
+    e2e,
+    `  expect(responses[0].payload.selectorInstanceId).toBe(responses[1].payload.selectorInstanceId);`,
+    `  const firstResponse = responses[0];\n  const secondResponse = responses[1];\n  expect(firstResponse).toBeDefined();\n  expect(secondResponse).toBeDefined();\n  if (firstResponse === undefined || secondResponse === undefined) {\n    throw new Error("Duplicate region-open responses were missing.");\n  }\n  expect(firstResponse.payload.selectorInstanceId).toBe(\n    secondResponse.payload.selectorInstanceId,\n  );`,
+    "duplicate selector response guard",
+  );
   await writeFile(e2ePath, e2e, "utf8");
 
   const serviceTestPath = "tests/unit/region-selection-service.test.ts";
