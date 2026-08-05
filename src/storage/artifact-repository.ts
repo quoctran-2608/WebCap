@@ -10,6 +10,10 @@ export interface ArtifactRepositoryPort {
   deleteExpired(nowIso: string): Promise<number>;
 }
 
+export interface JobArtifactLookupPort {
+  listByJob(jobId: string): Promise<ArtifactRecord[]>;
+}
+
 export interface IndexedDbArtifactRepositoryOptions {
   openDatabase?: () => Promise<IDBDatabase>;
 }
@@ -54,7 +58,9 @@ function requestResult(request: IDBRequest): Promise<unknown> {
   });
 }
 
-export class IndexedDbArtifactRepository implements ArtifactRepositoryPort {
+export class IndexedDbArtifactRepository
+  implements ArtifactRepositoryPort, JobArtifactLookupPort
+{
   private readonly openDatabase: () => Promise<IDBDatabase>;
 
   constructor(options: IndexedDbArtifactRepositoryOptions = {}) {
@@ -85,12 +91,23 @@ export class IndexedDbArtifactRepository implements ArtifactRepositoryPort {
     }
   }
 
+  async listByJob(jobId: string): Promise<ArtifactRecord[]> {
+    try {
+      const database = await this.openDatabase();
+      const transaction = database.transaction(WEBCAP_STORES.artifacts, "readonly");
+      const records = (await requestResult(
+        transaction.objectStore(WEBCAP_STORES.artifacts).index("byJobId").getAll(jobId),
+      )) as ArtifactRecord[];
+      return records.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+    } catch (error) {
+      throw storageError("read", error);
+    }
+  }
+
   async delete(artifactId: string): Promise<boolean> {
     try {
       const existing = await this.get(artifactId);
-      if (existing === undefined) {
-        return false;
-      }
+      if (existing === undefined) return false;
 
       const database = await this.openDatabase();
       const transaction = database.transaction(WEBCAP_STORES.artifacts, "readwrite");
