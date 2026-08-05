@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PersistentJobCoordinator } from "@background/job-coordinator";
 import type { CaptureJob } from "@shared/contracts/domain";
-import type { JobSummary, StoredTileRecord, TabJobLock } from "@shared/contracts/job";
+import type { JobSummary, TabJobLock } from "@shared/contracts/job";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 import type { JobRepositoryPort } from "@storage/job-repository";
 import type { JobSessionRepositoryPort } from "@storage/job-session-repository";
@@ -135,7 +135,7 @@ describe("adaptive capture recovery", () => {
       clearExpiredLocks: () => Promise.resolve(0),
     };
     const tiles: TileRepositoryPort = {
-      put: (_record: StoredTileRecord) => Promise.resolve(),
+      put: () => Promise.resolve(),
       get: () => Promise.resolve(undefined),
       listByJob: () => Promise.resolve([]),
       deleteByJob: () => Promise.resolve(0),
