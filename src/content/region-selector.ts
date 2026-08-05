@@ -175,6 +175,7 @@ export function openRegionSelector(options: OpenRegionSelectorOptions): RegionSe
       }
       .toolbar {
         position: fixed;
+        z-index: 4;
         top: 14px;
         left: 50%;
         transform: translateX(-50%);
@@ -212,6 +213,7 @@ export function openRegionSelector(options: OpenRegionSelectorOptions): RegionSe
       button:disabled { opacity: .45; cursor: not-allowed; }
       .selection {
         position: fixed;
+        z-index: 2;
         display: none;
         border: 2px solid #facc15;
         border-radius: 3px;

@@ -189,3 +189,76 @@ test("@smoke creates, moves, resizes, and commits a region using only the keyboa
   await expect(root).toHaveCount(0);
   await waitForRegionState(serviceWorker, jobId, "ready");
 });
+
+test("@smoke auto-scrolls horizontally and restores the page after cancellation", async ({
+  serviceWorker,
+  targetPage,
+  openPopup,
+}) => {
+  await targetPage.goto("http://127.0.0.1:4174/region-selection.html");
+  await targetPage.evaluate(() => {
+    document.documentElement.style.minWidth = "2400px";
+    document.body.style.minWidth = "2400px";
+  });
+  const before = await targetPage.evaluate(() => ({ x: window.scrollX, y: window.scrollY }));
+  const root = await launchRegionSelector(await openPopup(), targetPage);
+  const jobId = await latestRegionJobId(serviceWorker);
+  const viewport = targetPage.viewportSize();
+  if (viewport === null) throw new Error("Region fixture viewport is unavailable.");
+
+  await targetPage.mouse.move(180, 260);
+  await targetPage.mouse.down();
+  await targetPage.mouse.move(viewport.width - 2, 360, { steps: 16 });
+  await expect.poll(() => targetPage.evaluate(() => window.scrollX)).toBeGreaterThan(100);
+  await targetPage.mouse.up();
+  await targetPage.keyboard.press("Escape");
+
+  await expect(root).toHaveCount(0);
+  await waitForRegionState(serviceWorker, jobId, "cancelled");
+  await expect
+    .poll(() => targetPage.evaluate(() => ({ x: window.scrollX, y: window.scrollY })))
+    .toEqual(before);
+});
+
+test("@smoke removes the job and tab lease when selector injection fails", async ({
+  serviceWorker,
+  targetPage,
+  openPopup,
+}) => {
+  await targetPage.goto("http://127.0.0.1:4174/region-selection.html");
+  const popup = await openPopup();
+  await popup.getByRole("button", { name: /^Vùng tự chọn/ }).click();
+  await expect(popup.getByRole("heading", { name: "Chụp vùng tự chọn" })).toBeVisible();
+  await targetPage.close();
+
+  await popup.getByRole("button", { name: "Bắt đầu chọn vùng" }).click();
+  await expect(popup.getByRole("alert")).toBeVisible({ timeout: 10_000 });
+  expect(popup.isClosed()).toBe(false);
+
+  await expect
+    .poll(() =>
+      serviceWorker.evaluate(async () => {
+        const database = await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open("webcap-db", 1);
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error ?? new Error("Unable to open database."));
+        });
+        const jobs = await new Promise<Array<{ mode?: string }>>((resolve, reject) => {
+          const transaction = database.transaction("jobs", "readonly");
+          const request = transaction.objectStore("jobs").getAll();
+          request.onsuccess = () => resolve(request.result as Array<{ mode?: string }>);
+          request.onerror = () => reject(request.error ?? new Error("Unable to read jobs."));
+        });
+        database.close();
+        const stored = await chrome.storage.session.get("webcap.jobs.session");
+        const state = stored["webcap.jobs.session"] as
+          { summaries?: unknown[]; locks?: unknown[] } | undefined;
+        return {
+          regionJobs: jobs.filter((job) => job.mode === "region").length,
+          summaries: state?.summaries?.length ?? 0,
+          locks: state?.locks?.length ?? 0,
+        };
+      }),
+    )
+    .toEqual({ regionJobs: 0, summaries: 0, locks: 0 });
+});

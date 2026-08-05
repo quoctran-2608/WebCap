@@ -293,6 +293,8 @@ test("@dpr keeps the confirmed document rectangle stable at DPR 2 and 125% zoom"
     expect(state.tiles[0]?.sourceRect).toMatchObject(state.job?.targetRect ?? {});
     await expect(targetPage.locator("[data-webcap-region-selector]")).toHaveCount(0);
   } finally {
-    await serviceWorker.evaluate(async (id) => chrome.tabs.setZoom(id, 1), tabId);
+    await serviceWorker
+      .evaluate(async (id) => chrome.tabs.setZoom(id, 1), tabId)
+      .catch(() => undefined);
   }
 });
