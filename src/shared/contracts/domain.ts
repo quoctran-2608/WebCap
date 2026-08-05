@@ -43,6 +43,10 @@ export const PartialCaptureReasonSchema = z.enum([
   "max-css-height",
   "max-duration",
   "max-tiles",
+  "max-estimated-bytes",
+  "storage-quota",
+  "memory-budget",
+  "unstable-growth",
   "user-stop",
 ]);
 
@@ -104,6 +108,24 @@ export const CaptureTileSchema = z
     byteLength: NonNegativeIntegerSchema.optional(),
     mimeType: z.string().min(1).optional(),
     checksum: z.string().min(1).optional(),
+  })
+  .strict();
+
+export const AdaptiveCaptureFrontierSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    nextYCss: NonNegativeFiniteNumberSchema,
+    capturedBottomCss: NonNegativeFiniteNumberSchema,
+    observedDocumentHeightCss: PositiveFiniteNumberSchema,
+    stableBottomRounds: NonNegativeIntegerSchema,
+    capturedRows: NonNegativeIntegerSchema,
+    storedBytes: NonNegativeIntegerSchema,
+    startedAt: IsoDateTimeSchema,
+    lastGrowthAt: IsoDateTimeSchema,
+    sourceDocumentToken: z.string().min(1).max(240),
+    viewportWidthCss: PositiveFiniteNumberSchema,
+    viewportHeightCss: PositiveFiniteNumberSchema,
+    devicePixelRatio: PositiveFiniteNumberSchema,
   })
   .strict();
 
@@ -179,6 +201,7 @@ export const CaptureJobSchema = z
     tilePlan: z.array(CaptureTileSchema),
     completedTiles: NonNegativeIntegerSchema,
     totalTiles: NonNegativeIntegerSchema,
+    adaptiveFrontier: AdaptiveCaptureFrontierSchema.optional(),
     settings: CaptureSettingsSchema,
     cleanup: CleanupStateSchema,
     partialCapture: PartialCaptureSchema.optional(),
@@ -202,6 +225,7 @@ export type Rect = z.infer<typeof RectSchema>;
 export type ElementTargetDescriptor = z.infer<typeof ElementTargetDescriptorSchema>;
 export type PageMetrics = z.infer<typeof PageMetricsSchema>;
 export type CaptureTile = z.infer<typeof CaptureTileSchema>;
+export type AdaptiveCaptureFrontier = z.infer<typeof AdaptiveCaptureFrontierSchema>;
 export type CaptureSettings = z.infer<typeof CaptureSettingsSchema>;
 export type CleanupState = z.infer<typeof CleanupStateSchema>;
 export type PartialCaptureReason = z.infer<typeof PartialCaptureReasonSchema>;
