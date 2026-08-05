@@ -1,0 +1,66 @@
+name: S24 Adaptive E2E Apply
+
+on:
+  push:
+    branches:
+      - agent/s24-auto-output
+
+permissions:
+  contents: write
+
+concurrency:
+  group: s24-adaptive-e2e-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out S24 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/s24-auto-output
+          fetch-depth: 0
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply adaptive capture-completion expectations
+        run: |
+          node scripts/apply-s24-adaptive-e2e.mjs
+          pnpm exec prettier --write tests/e2e/adaptive-scroll.spec.ts
+
+      - name: Remove one-shot files
+        run: |
+          rm scripts/apply-s24-adaptive-e2e.mjs
+          rm .github/workflows/s24-adaptive-e2e-apply.yml
+
+      - name: Validate clean patch
+        run: |
+          pnpm format:check
+          pnpm lint
+          pnpm typecheck
+          git diff --check
+          test ! -e scripts/apply-s24-adaptive-e2e.mjs
+          test ! -e .github/workflows/s24-adaptive-e2e-apply.yml
+
+      - name: Commit clean adaptive E2E update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Update adaptive E2E for S24 output states"
+          git push origin HEAD:agent/s24-auto-output
