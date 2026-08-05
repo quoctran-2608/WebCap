@@ -19,6 +19,7 @@ export default defineConfig({
     /region-selection\.spec\.ts/,
     /region-selector-accessibility\.spec\.ts/,
     /scroll-area\.spec\.ts/,
+    /scroll-fallback-long\.spec\.ts/,
   ],
   timeout: 60_000,
   expect: {
