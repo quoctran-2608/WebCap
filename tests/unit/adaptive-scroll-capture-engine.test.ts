@@ -53,9 +53,7 @@ function setup(options: {
   const captureVisibleTab = vi.fn(() => Promise.resolve(HUNDRED_PIXEL_PNG));
   const pages: ScrollCapturePageAdapter = {
     scrollAndSettle: vi.fn((request: ScrollCapturePageRequest) =>
-      Promise.resolve(
-        pageResult(request, options.documentWidth ?? 100, options.documentHeight()),
-      ),
+      Promise.resolve(pageResult(request, options.documentWidth ?? 100, options.documentHeight())),
     ),
     cleanup: vi.fn(() =>
       Promise.resolve({

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  ADAPTIVE_STABLE_BOTTOM_ROUNDS,
-  observeStableEnd,
-} from "@capture/stable-end-detector";
+import { ADAPTIVE_STABLE_BOTTOM_ROUNDS, observeStableEnd } from "@capture/stable-end-detector";
 import type { AdaptiveCaptureFrontier } from "@shared/contracts/domain";
 
 function frontier(patch: Partial<AdaptiveCaptureFrontier> = {}): AdaptiveCaptureFrontier {
@@ -48,17 +45,14 @@ describe("observeStableEnd", () => {
   });
 
   it("resets stable rounds and records finite lazy growth", () => {
-    const result = observeStableEnd(
-      frontier({ stableBottomRounds: 3 }),
-      {
-        actualScrollY: 900,
-        viewportHeight: 100,
-        documentHeight: 1_240,
-        stableSamples: 1,
-        mutationCount: 4,
-        observedAt: "2026-08-05T00:00:10.000Z",
-      },
-    );
+    const result = observeStableEnd(frontier({ stableBottomRounds: 3 }), {
+      actualScrollY: 900,
+      viewportHeight: 100,
+      documentHeight: 1_240,
+      stableSamples: 1,
+      mutationCount: 4,
+      observedAt: "2026-08-05T00:00:10.000Z",
+    });
 
     expect(result.grew).toBe(true);
     expect(result.atBottom).toBe(false);
