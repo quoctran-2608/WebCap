@@ -17,9 +17,7 @@ describe("UI localization", () => {
   });
 
   it("describes mode-aware tiled outputs in both locales", () => {
-    expect(t("vi", "popup.output.detail", { format: "PNG", bytes: "1,2 MB" })).toBe(
-      "PNG · 1,2 MB",
-    );
+    expect(t("vi", "popup.output.detail", { format: "PNG", bytes: "1,2 MB" })).toBe("PNG · 1,2 MB");
     expect(t("en", "popup.output.detail", { format: "PDF", bytes: "2 MB" })).toBe("PDF · 2 MB");
     expect(t("vi", "popup.exportPdfFallback")).toContain("không chụp lại");
     expect(t("en", "popup.exportPdfFallback")).toContain("without recapturing");
