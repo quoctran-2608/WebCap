@@ -24,11 +24,13 @@ import { IndexedDbTileRepository } from "@storage/tile-repository";
 import { ImageProcessor } from "./image-processor";
 import { ObjectUrlRegistry } from "./object-url-registry";
 import { PdfExporter, type PdfExportPayload, type PdfExportProgress } from "./pdf-exporter";
+import { TiledImageExporter } from "./tiled-image-exporter";
 
 export type OffscreenRouterResponse = OffscreenResponse | OffscreenPdfThumbnailCreatedMessage;
 
 export interface OffscreenRouterDependencies {
   processor: ImageProcessor;
+  tiledImageExporter: Pick<TiledImageExporter, "export">;
   pdfExporter: Pick<PdfExporter, "export">;
   reportPdfProgress: (progress: PdfExportProgress) => Promise<boolean>;
   objectUrls: ObjectUrlRegistry;
@@ -39,6 +41,7 @@ const artifacts = new IndexedDbArtifactRepository();
 const tiles = new IndexedDbTileRepository();
 const defaultDependencies: OffscreenRouterDependencies = {
   processor: new ImageProcessor({ artifacts }),
+  tiledImageExporter: new TiledImageExporter({ artifacts, tiles }),
   pdfExporter: new PdfExporter({ artifacts, tiles }),
   reportPdfProgress: async (progress) => {
     const request = createOffscreenPdfExportProgressMessage({
@@ -160,6 +163,12 @@ export async function routeOffscreenMessage(
           artifact: await dependencies.processor.process(parsed.value.payload),
           sentAt: dependencies.now().toISOString(),
         });
+      case "OFFSCREEN_EXPORT_TILED_IMAGE":
+        return createOffscreenImageProcessedMessage({
+          requestId: parsed.value.requestId,
+          artifact: await dependencies.tiledImageExporter.export(parsed.value.payload),
+          sentAt: dependencies.now().toISOString(),
+        });
       case "OFFSCREEN_EXPORT_PDF":
         return exportPdf(parsed.value.requestId, parsed.value.payload, dependencies);
       case "OFFSCREEN_CREATE_OBJECT_URL":
@@ -180,7 +189,11 @@ export async function routeOffscreenMessage(
       requestId: parsed.value.requestId,
       error: normalizeError(error, {
         code: "E_EXPORT_FAILED",
-        stage: parsed.value.type === "OFFSCREEN_EXPORT_PDF" ? "export" : "process",
+        stage:
+          parsed.value.type === "OFFSCREEN_EXPORT_PDF" ||
+          parsed.value.type === "OFFSCREEN_EXPORT_TILED_IMAGE"
+            ? "export"
+            : "process",
         userMessageKey: "errors.exportFailed",
         retryable: true,
         fallbackAllowed: false,

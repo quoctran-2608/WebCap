@@ -19,6 +19,7 @@ export const WebCapErrorCodeSchema = z.enum([
   "E_MEMORY_GUARD",
   "E_OFFSCREEN_UNAVAILABLE",
   "E_EXPORT_FAILED",
+  "E_IMAGE_OUTPUT_TOO_LARGE",
   "E_DOWNLOAD_FAILED",
   "E_CANCELLED",
   "E_CLEANUP_PARTIAL",

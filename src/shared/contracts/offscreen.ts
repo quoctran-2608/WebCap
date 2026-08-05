@@ -50,6 +50,27 @@ export const OffscreenProcessImageMessageSchema = EnvelopeBaseSchema.extend({
     .strict(),
 }).strict();
 
+export const OffscreenExportTiledImageMessageSchema = EnvelopeBaseSchema.extend({
+  source: z.literal("background"),
+  target: z.literal("offscreen"),
+  type: z.literal("OFFSCREEN_EXPORT_TILED_IMAGE"),
+  payload: z
+    .object({
+      jobId: z.string().min(1).max(160),
+      outputArtifactId: z.string().min(1).max(160),
+      targetRect: RectSchema,
+      tiles: z.array(CaptureTileSchema).min(1),
+      format: ImageFormatSchema,
+      quality: z.number().finite().min(0).max(1),
+      filename: z.string().min(1).max(180),
+      createdAt: IsoDateTimeSchema,
+      expiresAt: IsoDateTimeSchema,
+      sourceTitle: z.string().max(300).optional(),
+      sourceDomain: z.string().max(300).optional(),
+    })
+    .strict(),
+}).strict();
+
 export const OffscreenImageProcessedMessageSchema = EnvelopeBaseSchema.extend({
   source: z.literal("offscreen"),
   target: z.literal("background"),
@@ -147,6 +168,7 @@ export const OffscreenErrorMessageSchema = EnvelopeBaseSchema.extend({
 export const OffscreenRequestSchema = z.discriminatedUnion("type", [
   OffscreenPingMessageSchema,
   OffscreenProcessImageMessageSchema,
+  OffscreenExportTiledImageMessageSchema,
   OffscreenExportPdfMessageSchema,
   OffscreenCreateObjectUrlMessageSchema,
   OffscreenRevokeObjectUrlMessageSchema,
@@ -165,6 +187,9 @@ export const OffscreenResponseSchema = z.discriminatedUnion("type", [
 export type OffscreenPingMessage = z.infer<typeof OffscreenPingMessageSchema>;
 export type OffscreenReadyMessage = z.infer<typeof OffscreenReadyMessageSchema>;
 export type OffscreenProcessImageMessage = z.infer<typeof OffscreenProcessImageMessageSchema>;
+export type OffscreenExportTiledImageMessage = z.infer<
+  typeof OffscreenExportTiledImageMessageSchema
+>;
 export type OffscreenImageProcessedMessage = z.infer<typeof OffscreenImageProcessedMessageSchema>;
 export type OffscreenExportPdfMessage = z.infer<typeof OffscreenExportPdfMessageSchema>;
 export type OffscreenPdfExportedMessage = z.infer<typeof OffscreenPdfExportedMessageSchema>;
@@ -232,6 +257,32 @@ export function createOffscreenProcessImageMessage(
       filename: options.filename,
       createdAt: options.createdAt,
       expiresAt: options.expiresAt,
+    },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createOffscreenExportTiledImageMessage(
+  options: MessageOptions & OffscreenExportTiledImageMessage["payload"],
+): OffscreenExportTiledImageMessage {
+  return OffscreenExportTiledImageMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "offscreen",
+    type: "OFFSCREEN_EXPORT_TILED_IMAGE",
+    payload: {
+      jobId: options.jobId,
+      outputArtifactId: options.outputArtifactId,
+      targetRect: options.targetRect,
+      tiles: options.tiles,
+      format: options.format,
+      quality: options.quality,
+      filename: options.filename,
+      createdAt: options.createdAt,
+      expiresAt: options.expiresAt,
+      ...(options.sourceTitle === undefined ? {} : { sourceTitle: options.sourceTitle }),
+      ...(options.sourceDomain === undefined ? {} : { sourceDomain: options.sourceDomain }),
     },
     sentAt: options.sentAt,
   });

@@ -611,6 +611,10 @@ const ERROR_COPY: Record<
       message: "Không thể tạo file đầu ra.",
       action: "Thử export lại; WebCap giữ source tiles khi có thể.",
     },
+    E_IMAGE_OUTPUT_TOO_LARGE: {
+      message: "Ảnh ghép vượt giới hạn canvas an toàn của trình duyệt.",
+      action: "Xuất PDF để giữ đầy đủ nội dung mà không cần chụp lại.",
+    },
     E_DOWNLOAD_FAILED: {
       message: "Chrome không bắt đầu được lượt tải xuống.",
       action: "Kiểm tra cài đặt Downloads của Chrome rồi thử lại.",
@@ -706,6 +710,10 @@ const ERROR_COPY: Record<
     E_EXPORT_FAILED: {
       message: "The output file could not be created.",
       action: "Retry export; WebCap retains source tiles when possible.",
+    },
+    E_IMAGE_OUTPUT_TOO_LARGE: {
+      message: "The stitched image exceeds the browser's safe canvas limits.",
+      action: "Export PDF to keep the complete capture without recapturing.",
     },
     E_DOWNLOAD_FAILED: {
       message: "Chrome could not start the download.",
