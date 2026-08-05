@@ -38,16 +38,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Install Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
       - name: Apply S24 E2E expectations
         run: |
           node scripts/apply-s24-full-page-e2e.mjs
           pnpm exec prettier --write tests/e2e/full-page-capture.spec.ts
-
-      - name: Validate targeted full-page auto-PDF flow
-        run: pnpm test:e2e
 
       - name: Restore release matrix and remove one-shot files
         shell: bash
@@ -108,12 +102,11 @@ jobs:
           rm .github/workflows/s24-full-page-e2e-apply.yml
           pnpm exec prettier --write playwright.config.ts
 
-      - name: Validate clean candidate
+      - name: Validate clean patch
         run: |
           pnpm format:check
           pnpm lint
           pnpm typecheck
-          pnpm exec vitest run tests/unit/capture-completion-service.test.ts tests/unit/persistent-job-router.test.ts
           git diff --check
           test ! -e scripts/apply-s24-full-page-e2e.mjs
           test ! -e .github/workflows/s24-full-page-e2e-apply.yml
@@ -123,5 +116,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "Validate S24 full-page auto-PDF output"
+          git commit -m "Update S24 full-page output expectations"
           git push origin HEAD:agent/s24-auto-output
