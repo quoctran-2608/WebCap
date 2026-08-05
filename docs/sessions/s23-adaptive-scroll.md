@@ -16,6 +16,7 @@ Target release: WebCap 0.2.0
 - Mode-aware coordination: full-page jobs use adaptive scroll while region and element jobs retain the deterministic coordinator.
 - Row-aware fixed/sticky handling and two-axis capture coverage.
 - Startup recovery for eligible persisted adaptive jobs after service-worker restart.
+- Idempotent page-preparation responses are re-enveloped with the current request ID so a restarted worker can safely reuse an existing prepared page.
 
 ## Safety invariants
 
@@ -25,14 +26,17 @@ Target release: WebCap 0.2.0
 - Navigation, width, viewport or DPR drift cannot join tiles from different page identities.
 - Infinite or device-exhausting pages end with an explicit partial reason; they are not silently truncated.
 - Cleanup restores the source page and releases the exact job lifecycle ownership.
+- Cached content-script responses never reuse a stale transport request ID.
 
 ## Evidence in progress
 
 - Formatting, ESLint, strict TypeScript, privacy/dependency/release/critical-security audits: PASS.
-- Unit suite: 305 tests, including adaptive planner, stable-end, finite growth, partial-row resume, navigation guard and persisted recovery.
+- Unit suite baseline: 305 tests, including adaptive planner, stable-end, finite growth, partial-row resume, navigation guard and persisted recovery.
+- Added unit coverage for re-enveloping cached page-preparation responses without mutating their payload.
 - PDF benchmarks: 4/4; production build and reproducible ZIP: PASS.
 - Actual-browser cases cover a page beyond 100k CSS pixels, finite lazy growth, infinite max-tile partial and service-worker restart recovery.
-- Earlier browser failures were test-harness assumptions after successful runtime behavior. The final restart case now proves `chrome.runtime.reload()` invalidates the old worker execution handle, a fresh runtime answers `JOB_GET`, and frontier progress continues from the popup extension origin.
+- The restart diagnostic identified `E_PROTOCOL_MESSAGE / RequestIdMismatch`: the content script returned a cached ready response with the previous worker's request ID. The protocol fix reuses the ready payload but binds it to the current request envelope.
+- Focused unit gates and the actual-browser service-worker restart recovery case: PASS after the protocol fix.
 - Full 48-case Playwright regression and packaged lifecycle are running as the final core gate.
 
 ## Deferred by scope
