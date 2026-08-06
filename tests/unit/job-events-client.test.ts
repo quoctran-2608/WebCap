@@ -71,6 +71,7 @@ describe("job summary event client", () => {
     expect(events.listener).toBeDefined();
 
     unsubscribe();
+    unsubscribe();
     expect(events.listener).toBeUndefined();
   });
 });
