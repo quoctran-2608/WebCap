@@ -45,8 +45,12 @@ describe("job summary event client", () => {
     expect(
       shouldRefreshJobFromSummary({ ...summary, stateRevision: 2 }, current),
     ).toBe(false);
-    expect(shouldRefreshJobFromSummary({ ...summary, jobId: "other" }, current)).toBe(false);
-    expect(shouldRefreshJobFromSummary({ ...summary, tabId: 8 }, current)).toBe(false);
+    expect(
+      shouldRefreshJobFromSummary({ ...summary, jobId: "other" }, current),
+    ).toBe(false);
+    expect(
+      shouldRefreshJobFromSummary({ ...summary, tabId: 8 }, current),
+    ).toBe(false);
   });
 
   it("forwards only validated job summary events", () => {
