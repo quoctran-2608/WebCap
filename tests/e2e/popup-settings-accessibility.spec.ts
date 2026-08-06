@@ -33,6 +33,7 @@ test("@smoke exposes localized keyboard-operable advanced settings and atomic fe
   await expect(status).toHaveText("Options saved for new captures.");
   await expect(status).toHaveAttribute("aria-live", "polite");
   await expect(status).toHaveAttribute("aria-atomic", "true");
+  await expect(save).toBeEnabled();
 
   const reset = popup.getByRole("button", { name: "Reset options" });
   await reset.focus();
@@ -40,5 +41,6 @@ test("@smoke exposes localized keyboard-operable advanced settings and atomic fe
   await expect(status).toHaveText(
     "Default options restored. Current capture data was not changed.",
   );
+  await expect(reset).toBeEnabled();
   await expect(imageQuality).toHaveValue("90");
 });
