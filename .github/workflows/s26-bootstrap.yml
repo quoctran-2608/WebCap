@@ -46,9 +46,21 @@ jobs:
       - name: Apply, validate, and publish observable S26 state
         shell: bash
         run: |
+          set +e
           set -o pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("scripts/s26-bootstrap.mjs")
+          content = path.read_text()
+          old = 'await page.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });'
+          new = 'await page.goto("chrome-extension://" + extensionId + "/popup.html", { waitUntil: "domcontentloaded" });'
+          if old not in content:
+              raise SystemExit("S26 nested popup URL template target is missing")
+          path.write_text(content.replace(old, new, 1))
+          PY
 
           fail_stage() {
             stage="$1"
