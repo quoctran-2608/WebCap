@@ -8,7 +8,7 @@ export interface AdvancedSettingsPanelProps {
   settings: CaptureSettings;
   busy: boolean;
   saving: boolean;
-  notice?: string;
+  notice: string | undefined;
   onSave: (settings: CaptureSettings) => Promise<void>;
   onReset: () => Promise<void>;
 }
