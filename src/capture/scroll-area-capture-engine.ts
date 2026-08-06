@@ -26,6 +26,8 @@ interface CapturePixelScale {
   y: number;
 }
 
+const SCROLL_AREA_GEOMETRY_ATTEMPTS = 3;
+
 function captureError(options: {
   code:
     | "E_PROTOCOL_MESSAGE"
@@ -241,23 +243,43 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
         total: plan.tiles.length,
         tileIndex: planned.index,
       });
-      const page = await this.pages.scrollAndSettle({
-        tabId: context.tabId,
-        jobId: context.jobId,
-        descriptor,
-        scrollLeft: planned.scrollXCss ?? planned.sourceRectCss.x,
-        scrollTop: planned.scrollYCss ?? planned.sourceRectCss.y,
-        row: planned.row,
-        column: planned.column,
-        rows: plan.rows,
-        columns: plan.columns,
-        fixedElementMode: context.settings.fixedElementMode,
-        settleMs: context.settings.lazyLoad.settleMs,
-        expectedScrollWidth: initial.scrollWidth,
-        expectedScrollHeight: initial.scrollHeight,
-        expectedClientWidth: initial.clientWidth,
-        expectedClientHeight: initial.clientHeight,
-      });
+      const requestedScrollLeft = planned.scrollXCss ?? planned.sourceRectCss.x;
+      const requestedScrollTop = planned.scrollYCss ?? planned.sourceRectCss.y;
+      let page;
+      for (let attempt = 0; attempt < SCROLL_AREA_GEOMETRY_ATTEMPTS; attempt += 1) {
+        page = await this.pages.scrollAndSettle({
+          tabId: context.tabId,
+          jobId: context.jobId,
+          descriptor,
+          scrollLeft: requestedScrollLeft,
+          scrollTop: requestedScrollTop,
+          row: planned.row,
+          column: planned.column,
+          rows: plan.rows,
+          columns: plan.columns,
+          fixedElementMode: context.settings.fixedElementMode,
+          settleMs: Math.min(
+            5_000,
+            context.settings.lazyLoad.settleMs * Math.max(1, attempt + 1),
+          ),
+          expectedScrollWidth: initial.scrollWidth,
+          // Long PDF viewers commonly replace lazy placeholders while scrolling. Their
+          // scrollHeight can drift even though the viewport geometry and requested
+          // scroll position remain valid, so height alone is not an identity guard.
+          expectedClientWidth: initial.clientWidth,
+          expectedClientHeight: initial.clientHeight,
+        });
+        if (!page.scrollSnapped && !page.layoutChanged) break;
+      }
+      if (page === undefined) {
+        throw captureError({
+          code: "E_LAYOUT_UNSTABLE",
+          message: "The selected container could not be measured for capture.",
+          userMessageKey: "errors.layoutChanged",
+          causeCode: "ScrollAreaMeasurementUnavailable",
+          safeContext: { tileIndex: planned.index },
+        });
+      }
       if (page.scrollSnapped) {
         throw captureError({
           code: "E_LAYOUT_UNSTABLE",
@@ -266,23 +288,29 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
           causeCode: "ScrollAreaPositionMismatch",
           safeContext: {
             tileIndex: planned.index,
-            requestedX: planned.scrollXCss ?? planned.sourceRectCss.x,
-            requestedY: planned.scrollYCss ?? planned.sourceRectCss.y,
+            requestedX: requestedScrollLeft,
+            requestedY: requestedScrollTop,
             actualX: page.actualScrollLeft,
             actualY: page.actualScrollTop,
+            scrollHeight: page.scrollHeight,
           },
         });
       }
       if (page.layoutChanged) {
         throw captureError({
           code: "E_LAYOUT_UNSTABLE",
-          message: "The selected container dimensions changed during capture.",
+          message: "The selected container viewport geometry changed during capture.",
           userMessageKey: "errors.layoutChanged",
-          causeCode: "ScrollAreaLayoutChanged",
+          causeCode: "ScrollAreaViewportGeometryChanged",
           safeContext: {
             tileIndex: planned.index,
             scrollWidth: page.scrollWidth,
             scrollHeight: page.scrollHeight,
+            clientWidth: page.clientWidth,
+            clientHeight: page.clientHeight,
+            expectedScrollWidth: initial.scrollWidth,
+            expectedClientWidth: initial.clientWidth,
+            expectedClientHeight: initial.clientHeight,
           },
         });
       }
