@@ -9,8 +9,8 @@ export interface AdvancedSettingsPanelProps {
   busy: boolean;
   saving: boolean;
   notice?: string;
-  onSave(settings: CaptureSettings): Promise<void>;
-  onReset(): Promise<void>;
+  onSave: (settings: CaptureSettings) => Promise<void>;
+  onReset: () => Promise<void>;
 }
 
 function percentage(value: number): number {
