@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { loadCaptureSettingsForNewJob, type CaptureSettingsLoader } from "@popup/capture-settings";
 import { createWebCapError } from "@shared/errors/error";
@@ -26,14 +26,14 @@ describe("loadCaptureSettingsForNewJob", () => {
         jpegQuality: 0.81,
       },
     };
-    const loader: CaptureSettingsLoader = {
-      load: () => Promise.resolve({ ok: true, value: stored }),
-    };
+    const load = vi.fn(() => Promise.resolve({ ok: true as const, value: stored }));
+    const loader: CaptureSettingsLoader = { load };
 
     await expect(loadCaptureSettingsForNewJob("webp", loader)).resolves.toEqual({
       ...stored,
       outputFormat: "webp",
     });
+    expect(load).toHaveBeenCalledTimes(1);
   });
 
   it("surfaces a typed storage error instead of silently using defaults", async () => {
