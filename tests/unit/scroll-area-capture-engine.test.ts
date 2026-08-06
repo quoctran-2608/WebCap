@@ -156,7 +156,10 @@ describe("ScrollAreaCaptureEngine", () => {
     expect(harness.onPlan).toHaveBeenCalledWith(
       expect.any(Object),
       { x: 0, y: 0, width: 100, height: 180 },
-      expect.arrayContaining([expect.objectContaining({ index: 0 }), expect.objectContaining({ index: 1 })]),
+      expect.arrayContaining([
+        expect.objectContaining({ index: 0 }),
+        expect.objectContaining({ index: 1 }),
+      ]),
       result.partialCapture,
     );
   });
