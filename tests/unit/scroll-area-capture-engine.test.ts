@@ -170,6 +170,7 @@ describe("ScrollAreaCaptureEngine", () => {
       ...harness.context.settings,
       limits: { ...harness.context.settings.limits, maxTiles: 2 },
     };
+    // Chrome's PDF viewer can virtualize pages and revise only total scrollHeight mid-capture.
     harness.scrollAndSettle.mockImplementation((request: ScrollAreaPageRequest) =>
       Promise.resolve({
         ...pageResult(request),
