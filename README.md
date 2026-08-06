@@ -8,7 +8,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 **0.1.0 release candidate remains complete and unchanged.** It has a deterministic, verified 24-entry Chrome Web Store ZIP (`webcap-0.1.0.zip`, 1,097,035 bytes, SHA-256 `630c44c07e72da0d5edc1c82c013ecf6caf995e0542ee19679380081e7b0cb7a`). The final gate passed formatting, ESLint, strict TypeScript, privacy/license/release/critical-security audits, 279 unit tests across 79 files, four PDF benchmarks, a verified Manifest V3 build, and 38 Playwright E2E cases including DPR 1/1.5/2 at 80/100/125/150% zoom. No tag, GitHub Release, Chrome Web Store upload, review submission, or publication has been performed.
 
-**WebCap 0.2.0 release-candidate implementation is complete and under final read-only validation.** S21–S25 delivered reset, reliable selectors, adaptive capture, automatic mode-aware output, stored settings and event-driven popup progress. S26 bumps the package to 0.2.0, validates upgrade from 0.1.0, adds previous-stable Chrome coverage, closes the gap audit and prepares a reproducible local-first release candidate without publishing it.
+**WebCap 0.2.0 release candidate is complete and ready for review.** S21–S25 delivered reset, reliable selectors, adaptive capture, automatic mode-aware output, stored settings and event-driven popup progress. S26 bumps the package to 0.2.0, validates upgrade from 0.1.0, adds previous-stable Chrome coverage, closes the gap audit and prepares a reproducible local-first release candidate without publishing it.
 
 ## 0.2.0 outcomes and remaining work
 
@@ -123,4 +123,4 @@ scripts/                Build, audit, packaging, browser-install and repository 
 
 <!-- S26_PACKAGE_EVIDENCE -->
 
-The S26 implementation gate produced {{S26_PACKAGE_EVIDENCE}}. Final publication remains an explicit release-owner action.
+The final read-only CI run 31072090616 and Release Candidate run 31072090612 verified webcap-0.2.0.zip (25 entries, 1,195,785 bytes, SHA-256 a5e8a55d2e1038284199d702b27d57af8f351080b0c3d85c4019bc3a723a3e6d), Linux/Windows/macOS lifecycle, and Chrome 116.0.5845.96, previous stable 150.0.7871.124 and current stable 151.0.7922.76. Final publication remains an explicit release-owner action.
