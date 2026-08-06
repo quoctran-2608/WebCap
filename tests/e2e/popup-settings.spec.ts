@@ -3,21 +3,25 @@ import type { Page, Worker } from "@playwright/test";
 import { expect, test } from "./extension.fixture";
 
 interface StoredSettingsState {
-  capture?: {
-    settings?: {
-      imageQuality?: number;
-      fixedElementMode?: string;
-      pdf?: {
-        pageSize?: string;
-        orientation?: string;
-        marginMm?: number;
-        jpegQuality?: number;
-      };
-    };
-  };
-  popup?: {
-    outputByMode?: Record<string, string>;
-  };
+  capture:
+    | {
+        settings?: {
+          imageQuality?: number;
+          fixedElementMode?: string;
+          pdf?: {
+            pageSize?: string;
+            orientation?: string;
+            marginMm?: number;
+            jpegQuality?: number;
+          };
+        };
+      }
+    | undefined;
+  popup:
+    | {
+        outputByMode?: Record<string, string>;
+      }
+    | undefined;
 }
 
 interface StoredJobState {
