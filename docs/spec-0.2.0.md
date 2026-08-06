@@ -2,7 +2,7 @@
 product: WebCap
 document: Engineering Specification Addendum
 version: 0.2.0
-date: 2026-08-05
+date: 2026-08-06
 status: Active implementation specification
 repository: quoctran-2608/WebCap
 extends: ../SPEC.md
@@ -358,6 +358,16 @@ Help & diagnostics
 ```
 
 Ẩn khỏi main flow: worker/version, engine, raw tile count, checksum, milestones, full permissions, diagnostics. PDF source inspection không block main UI và không render checking card trên non-PDF tab.
+
+## 8.3 Locked S25 implementation semantics
+
+- Capture settings are loaded and migrated before capture controls become actionable. Repository read failure is typed and does not silently create a job from defaults.
+- Per-mode output preferences are durable for visible, full-page, region, element and scroll-area modes. Reset options restores only preferences and preserves capture-owned data, locale and downloaded files.
+- Background publishes validated `JOB_SUMMARY_CHANGED` events. Popup accepts only a newer revision for the current tab/job and performs an authoritative fetch; a 7.5-second busy reconciliation timer covers missed events or reconnect.
+- Every coordinator session synchronization publishes at most one event for a revision. Interrupted worker recovery defers synchronization to the outer recovery pass, preventing duplicate failed events.
+- Default popup information hierarchy is goal/mode → output hint → primary action → progress/result. Advanced settings follow the CTA and render only while idle; help, privacy, diagnostics and worker/version/tab status use progressive disclosure.
+- Milestone labels, engine identifiers, checksum and raw tile counts are not rendered in the default main flow. Restricted-page and optional-permission guidance remain explicit when relevant.
+- S25 acceptance evidence is 344 unit tests across 99 files, four bounded PDF benchmarks, 51 actual-browser E2E cases, a reproducible 25-entry package and packaged lifecycle smoke.
 
 # 9. Test strategy
 

@@ -8,6 +8,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
+- Durable stored capture settings and per-mode output preferences for visible, full-page, region, element and scroll-area jobs, including image quality, PDF page layout/quality and fixed/sticky handling.
+- Separate options reset that restores preference defaults without deleting capture jobs, tiles, artifacts, locale or downloaded files.
+- Validated `JOB_SUMMARY_CHANGED` runtime updates with revision filtering, exact listener cleanup and a 7.5-second authoritative reconciliation fallback instead of continuous 350 ms polling.
+- Exactly-once recovery event synchronization across update, cancellation and interrupted worker recovery revisions.
+- Simplified popup hierarchy with technical status in disclosure, no milestone/raw-tile copy in the default flow, primary capture actions before idle-only advanced settings, and keyboard/localization/atomic-feedback browser coverage.
+- S25 clean validation with 344 unit tests across 99 files, four bounded PDF benchmarks, 51 Playwright E2E cases, reproducible 25-entry packaging and packaged lifecycle smoke.
 - Mode-aware completion routing that automatically creates PDF for full-page and scroll-area captures, returns guarded PNG/JPEG/WebP for region and element captures, and preserves the existing visible-image flow.
 - Durable output metadata and terminal-job restoration across popup reopen and Manifest V3 service-worker restart, with existing artifact reconciliation preventing duplicate output creation.
 - Guarded sequential tiled-image composition with canvas dimension, total pixel-area and estimated working-set limits before allocation.

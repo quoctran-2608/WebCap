@@ -6,10 +6,25 @@ test("@smoke exposes localized keyboard-operable advanced settings and atomic fe
   const popup = await openPopup();
   await popup.getByTestId("locale-select").selectOption("en");
 
+  const extensionStatus = popup.getByTestId("extension-status-details");
+  await expect(extensionStatus).not.toHaveAttribute("open", "");
+  await expect(popup.getByText("Version", { exact: true })).not.toBeVisible();
+  await expect(popup.getByText(/^(M1|S14|S16|S17)$/u)).toHaveCount(0);
+
   const details = popup.getByTestId("advanced-settings");
   const summary = details.locator("summary");
   await expect(summary).toHaveText("Advanced options");
   await expect(details).not.toHaveAttribute("open", "");
+
+  const captureAction = popup.locator(".capture-panel > button.primary-action");
+  await expect(captureAction).toBeVisible();
+  const captureBox = await captureAction.boundingBox();
+  const settingsBox = await details.boundingBox();
+  expect(captureBox).not.toBeNull();
+  expect(settingsBox).not.toBeNull();
+  expect(captureBox?.y ?? Number.POSITIVE_INFINITY).toBeLessThan(
+    settingsBox?.y ?? Number.NEGATIVE_INFINITY,
+  );
 
   await summary.focus();
   await popup.keyboard.press("Enter");
@@ -43,4 +58,10 @@ test("@smoke exposes localized keyboard-operable advanced settings and atomic fe
   );
   await expect(reset).toBeEnabled();
   await expect(imageQuality).toHaveValue("90");
+
+  const privacy = popup.locator(".trust-details");
+  const privacySummary = privacy.locator("summary");
+  await privacySummary.focus();
+  await popup.keyboard.press("Enter");
+  await expect(privacy).toHaveAttribute("open", "");
 });

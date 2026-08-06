@@ -374,6 +374,10 @@ export function App(): React.JSX.Element {
     tabCapability.status === "supported" &&
     selectedModeEnabled &&
     !busy;
+  const showAdvancedSettings =
+    settingsReady &&
+    !busy &&
+    (tiledMode ? fullPageJob === undefined : status === "idle" && session?.artifact === undefined);
 
   useEffect(() => {
     if (!visibleBusy || selectedMode !== "visible") {
@@ -1020,33 +1024,36 @@ export function App(): React.JSX.Element {
         </div>
       </header>
 
-      <section className="status-card" aria-label={t(locale, "popup.extensionStatus")}>
-        <div className="status-row">
-          <span>{t(locale, "popup.workerLabel")}</span>
-          <strong
-            className={`status status--${workerStatus}`}
-            data-testid="worker-status"
-            data-status={workerStatus}
-          >
-            <span className="status__dot" aria-hidden="true" />
-            {workerStatusCopy(locale, workerStatus)}
-          </strong>
-        </div>
-        <div className="status-row">
-          <span>{t(locale, "popup.version")}</span>
-          <strong>{workerVersion ?? chrome.runtime.getManifest().version}</strong>
-        </div>
-        <div className="status-row">
-          <span>{t(locale, "popup.currentTab")}</span>
-          <strong
-            className={`status status--${tabCapability.status === "supported" ? "connected" : "pending"}`}
-            data-testid="tab-status"
-            data-status={tabCapability.status}
-          >
-            {tabStatusCopy(locale, tabCapability.status)}
-          </strong>
-        </div>
-      </section>
+      <details className="status-details" data-testid="extension-status-details">
+        <summary>{t(locale, "popup.extensionStatus")}</summary>
+        <section className="status-card" aria-label={t(locale, "popup.extensionStatus")}>
+          <div className="status-row">
+            <span>{t(locale, "popup.workerLabel")}</span>
+            <strong
+              className={`status status--${workerStatus}`}
+              data-testid="worker-status"
+              data-status={workerStatus}
+            >
+              <span className="status__dot" aria-hidden="true" />
+              {workerStatusCopy(locale, workerStatus)}
+            </strong>
+          </div>
+          <div className="status-row">
+            <span>{t(locale, "popup.version")}</span>
+            <strong>{workerVersion ?? chrome.runtime.getManifest().version}</strong>
+          </div>
+          <div className="status-row">
+            <span>{t(locale, "popup.currentTab")}</span>
+            <strong
+              className={`status status--${tabCapability.status === "supported" ? "connected" : "pending"}`}
+              data-testid="tab-status"
+              data-status={tabCapability.status}
+            >
+              {tabStatusCopy(locale, tabCapability.status)}
+            </strong>
+          </div>
+        </section>
+      </details>
 
       {tabCapability.status === "unsupported" && (
         <p className="restricted-page-notice" role="status" data-testid="restricted-page-copy">
@@ -1074,7 +1081,6 @@ export function App(): React.JSX.Element {
                     : pdfCapabilityCopy(locale, pdfCapability).title}
               </h2>
             </div>
-            <span className="planned-badge">S17</span>
           </div>
 
           {pdfCapability !== undefined && (
@@ -1152,9 +1158,6 @@ export function App(): React.JSX.Element {
             <p className="section-heading__eyebrow">{t(locale, "popup.captureModeEyebrow")}</p>
             <h2 id="capture-title">{t(locale, `popup.title.${selectedMode}` as MessageKey)}</h2>
           </div>
-          <span className="planned-badge">
-            {selectedMode === "visible" ? "M1" : selectedMode === "scroll-area" ? "S16" : "S14"}
-          </span>
         </div>
 
         <div className="mode-grid" aria-label={t(locale, "popup.captureModes")}>
@@ -1201,16 +1204,6 @@ export function App(): React.JSX.Element {
         ) : (
           <p className="field-label">{tiledOutputHint}</p>
         )}
-
-        <AdvancedSettingsPanel
-          locale={locale}
-          settings={captureSettings}
-          busy={busy}
-          saving={settingsSaving}
-          notice={settingsNotice}
-          onSave={handleSaveCaptureSettings}
-          onReset={handleResetOptions}
-        />
 
         {busy ? (
           <div className="capture-actions">
@@ -1259,10 +1252,7 @@ export function App(): React.JSX.Element {
             {fullPageBusy && <span className="progress-card__spinner" aria-hidden="true" />}
             <div>
               <strong>{tiledStatusCopy(locale, fullPageJob)}</strong>
-              <small>
-                {fullPageJob.completedTiles}/{fullPageJob.totalTiles || "?"} tile ·{" "}
-                {fullPageProgress}%
-              </small>
+              <small>{fullPageProgress}%</small>
               <progress
                 value={fullPageJob.completedTiles}
                 max={Math.max(1, fullPageJob.totalTiles)}
@@ -1599,6 +1589,18 @@ export function App(): React.JSX.Element {
           <p className="feedback feedback--success" role="status" data-testid="reset-success">
             {resetNotice}
           </p>
+        )}
+
+        {showAdvancedSettings && (
+          <AdvancedSettingsPanel
+            locale={locale}
+            settings={captureSettings}
+            busy={busy}
+            saving={settingsSaving}
+            notice={settingsNotice}
+            onSave={handleSaveCaptureSettings}
+            onReset={handleResetOptions}
+          />
         )}
       </section>
 
