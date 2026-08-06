@@ -30,7 +30,9 @@ class MemoryRuntimeEvents implements RuntimeMessageEventPort {
   }
 
   removeListener(listener: RuntimeMessageListener): void {
-    if (this.listener === listener) this.listener = undefined;
+    if (this.listener === listener) {
+      this.listener = undefined;
+    }
   }
 }
 
