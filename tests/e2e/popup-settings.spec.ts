@@ -49,10 +49,7 @@ async function openAdvancedSettings(popup: Page): Promise<void> {
 
 async function readStoredSettings(serviceWorker: Worker): Promise<StoredSettingsState> {
   return serviceWorker.evaluate(async () => {
-    const stored = await chrome.storage.local.get([
-      "webcap.settings",
-      "webcap.popup-preferences",
-    ]);
+    const stored = await chrome.storage.local.get(["webcap.settings", "webcap.popup-preferences"]);
     return {
       capture: stored["webcap.settings"] as StoredSettingsState["capture"],
       popup: stored["webcap.popup-preferences"] as StoredSettingsState["popup"],
@@ -91,9 +88,7 @@ async function readLatestFullPageJob(serviceWorker: Worker): Promise<StoredJobSt
       : {
           id: job.id,
           state: job.state,
-          ...(job.outputArtifactId === undefined
-            ? {}
-            : { outputArtifactId: job.outputArtifactId }),
+          ...(job.outputArtifactId === undefined ? {} : { outputArtifactId: job.outputArtifactId }),
           settings: job.settings,
         };
   });
