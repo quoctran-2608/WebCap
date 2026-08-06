@@ -208,7 +208,7 @@ describe("PersistentJobCoordinator event coverage", () => {
     ]);
   });
 
-  it("publishes the retryable failed revision produced during worker recovery", async () => {
+  it("publishes exactly one retryable failed revision during worker recovery", async () => {
     const { coordinator, jobs, sessions, published } = setup();
     const interrupted = interruptedJob();
     jobs.records.set(interrupted.id, interrupted);
