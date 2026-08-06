@@ -49,88 +49,84 @@ function pageResult(request: ScrollAreaPageRequest, scrollHeight: number): Scrol
 }
 
 describe("ScrollAreaCaptureEngine long PDF regression", () => {
-  it(
-    "finishes 256 tiles when lazy PDF height drifts after tile 115",
-    async () => {
-      let calls = 0;
-      const scrollAndSettle = vi.fn((request: ScrollAreaPageRequest) => {
-        calls += 1;
-        const scrollHeight = calls > 116 ? 20_524 : 20_500;
-        return Promise.resolve(pageResult(request, scrollHeight));
-      });
-      const pages: ScrollAreaPageAdapter = {
-        scrollAndSettle,
-        cleanup: () =>
-          Promise.resolve({
-            restoredElements: 0,
-            skippedElements: 0,
-            scrollRestored: true,
-            documentScrollRestored: true,
-          }),
-      };
-      const tabs: TabsCaptureAdapter = {
-        queryActiveTab: () => Promise.resolve({ id: 7, windowId: 3, active: true }),
-        captureVisibleTab: () => Promise.resolve(HUNDRED_PIXEL_PNG),
-      };
-      const engine = new ScrollAreaCaptureEngine({
-        pages,
-        tabs,
-        overlapCss: 20,
-        limiter: new CaptureRateLimiter({
-          minimumIntervalMs: 0,
-          now: () => 1,
-          sleep: () => Promise.resolve(),
+  it("finishes 256 tiles when lazy PDF height drifts after tile 115", async () => {
+    let calls = 0;
+    const scrollAndSettle = vi.fn((request: ScrollAreaPageRequest) => {
+      calls += 1;
+      const scrollHeight = calls > 116 ? 20_524 : 20_500;
+      return Promise.resolve(pageResult(request, scrollHeight));
+    });
+    const pages: ScrollAreaPageAdapter = {
+      scrollAndSettle,
+      cleanup: () =>
+        Promise.resolve({
+          restoredElements: 0,
+          skippedElements: 0,
+          scrollRestored: true,
+          documentScrollRestored: true,
         }),
-      });
-      const stored: CaptureTile[] = [];
-      const onPlan = vi.fn(() => Promise.resolve());
-      const context: CaptureEngineContext = {
-        jobId: "job-long-pdf",
-        tabId: 7,
-        windowId: 3,
-        settings: {
-          ...DEFAULT_CAPTURE_SETTINGS,
-          lazyLoad: { ...DEFAULT_CAPTURE_SETTINGS.lazyLoad, settleMs: 0 },
-          limits: { ...DEFAULT_CAPTURE_SETTINGS.limits, maxTiles: 256 },
-        },
-        targetRect: { x: 0, y: 0, width: 100, height: 20_500 },
-        targetDescriptor: descriptor,
-        cancellation: {
-          cancelled: false,
-          keepPartial: false,
-          throwIfCancelled: () => undefined,
-        },
-        onPlan,
-        storeTile(tile) {
-          stored.push(tile);
-          return Promise.resolve();
-        },
-        reportProgress: () => undefined,
-      };
+    };
+    const tabs: TabsCaptureAdapter = {
+      queryActiveTab: () => Promise.resolve({ id: 7, windowId: 3, active: true }),
+      captureVisibleTab: () => Promise.resolve(HUNDRED_PIXEL_PNG),
+    };
+    const engine = new ScrollAreaCaptureEngine({
+      pages,
+      tabs,
+      overlapCss: 20,
+      limiter: new CaptureRateLimiter({
+        minimumIntervalMs: 0,
+        now: () => 1,
+        sleep: () => Promise.resolve(),
+      }),
+    });
+    const stored: CaptureTile[] = [];
+    const onPlan = vi.fn(() => Promise.resolve());
+    const context: CaptureEngineContext = {
+      jobId: "job-long-pdf",
+      tabId: 7,
+      windowId: 3,
+      settings: {
+        ...DEFAULT_CAPTURE_SETTINGS,
+        lazyLoad: { ...DEFAULT_CAPTURE_SETTINGS.lazyLoad, settleMs: 0 },
+        limits: { ...DEFAULT_CAPTURE_SETTINGS.limits, maxTiles: 256 },
+      },
+      targetRect: { x: 0, y: 0, width: 100, height: 20_500 },
+      targetDescriptor: descriptor,
+      cancellation: {
+        cancelled: false,
+        keepPartial: false,
+        throwIfCancelled: () => undefined,
+      },
+      onPlan,
+      storeTile(tile) {
+        stored.push(tile);
+        return Promise.resolve();
+      },
+      reportProgress: () => undefined,
+    };
 
-      const result = await engine.capture(context);
+    const result = await engine.capture(context);
 
-      expect(result.tiles).toHaveLength(256);
-      expect(stored).toHaveLength(256);
-      expect(result.partialCapture).toBeUndefined();
-      expect(stored[114]?.index).toBe(114);
-      expect(stored[115]?.index).toBe(115);
-      expect(stored.at(-1)?.index).toBe(255);
-      expect(onPlan).toHaveBeenCalledWith(
-        expect.any(Object),
-        { x: 0, y: 0, width: 100, height: 20_500 },
-        expect.arrayContaining([
-          expect.objectContaining({ index: 0 }),
-          expect.objectContaining({ index: 255 }),
-        ]),
-        undefined,
-      );
-      expect(
-        scrollAndSettle.mock.calls
-          .slice(1)
-          .every(([request]) => request.expectedScrollHeight === undefined),
-      ).toBe(true);
-    },
-    30_000,
-  );
+    expect(result.tiles).toHaveLength(256);
+    expect(stored).toHaveLength(256);
+    expect(result.partialCapture).toBeUndefined();
+    expect(stored[114]?.index).toBe(114);
+    expect(stored[115]?.index).toBe(115);
+    expect(stored.at(-1)?.index).toBe(255);
+    expect(onPlan).toHaveBeenCalledWith(
+      expect.any(Object),
+      { x: 0, y: 0, width: 100, height: 20_500 },
+      expect.arrayContaining([
+        expect.objectContaining({ index: 0 }),
+        expect.objectContaining({ index: 255 }),
+      ]),
+      undefined,
+    );
+    expect(
+      scrollAndSettle.mock.calls
+        .slice(1)
+        .every(([request]) => request.expectedScrollHeight === undefined),
+    ).toBe(true);
+  }, 30_000);
 });
