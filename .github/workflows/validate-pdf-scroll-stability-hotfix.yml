@@ -1,8 +1,9 @@
 name: Validate PDF scroll stability hotfix
 
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches:
+      - agent/0.2.2-pdf-scroll-stability-hotfix
 
 permissions:
   contents: read
@@ -10,7 +11,6 @@ permissions:
 # Temporary read-only gate for PR #34; removed before merge.
 jobs:
   validate:
-    if: github.event.pull_request.head.ref == 'agent/0.2.2-pdf-scroll-stability-hotfix'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
