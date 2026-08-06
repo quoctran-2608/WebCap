@@ -377,7 +377,7 @@ export function App(): React.JSX.Element {
   const showAdvancedSettings =
     settingsReady &&
     !busy &&
-    (tiledMode ? fullPageJob === undefined : status === "idle" && session?.artifact === undefined);
+    (tiledMode ? fullPageJob === undefined || terminal : status === "idle" || terminal);
 
   useEffect(() => {
     if (!visibleBusy || selectedMode !== "visible") {

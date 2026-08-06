@@ -18,7 +18,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 - Delivered in S24: region/element default to guarded image output, full-page/scroll-area default to PDF, and oversized images receive an explicit no-recapture PDF fallback.
 - Delivered in S25: durable per-mode output plus image/PDF/fixed-sticky preferences are loaded before capture, snapshotted into each new job and reset independently from capture data.
 - Delivered in S25: validated runtime job-summary events replace continuous 350 ms polling; a 7.5-second authoritative reconciliation remains for missed events and reconnect.
-- Delivered in S25: the primary capture action precedes idle-only advanced settings, while version, milestones, raw tile counts, privacy help and diagnostics no longer compete in the default main flow.
+- Delivered in S25: the primary capture action precedes advanced settings, which remain available at idle/result and disappear while capture is busy, while version, milestones, raw tile counts, privacy help and diagnostics no longer compete in the default main flow.
 - Remaining in S26: acceptance gap closure, 0.1.0 → 0.2.0 migration, compatibility/release documentation, version bump and reproducible RC verification.
 - No backend, telemetry, remote executable code, new required permission or default host permission.
 

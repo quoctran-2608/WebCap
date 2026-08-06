@@ -339,7 +339,7 @@ Move out of main flow: worker/version, engine, raw tiles, checksum, milestones, 
 - “Đặt lại tùy chọn” chỉ reset capture preferences, không xóa job, tile, artifact, locale hoặc downloaded files.
 - Popup nhận `JOB_SUMMARY_CHANGED` theo tab/job/revision và chỉ authoritative-fetch revision mới; polling 350 ms được thay bằng reconciliation 7,5 giây khi busy.
 - Coordinator phát đúng một summary event cho mỗi revision qua update, cancellation và worker recovery; interrupted recovery không còn duplicate failed event.
-- Main flow mặc định không hiển thị version, milestone, engine, checksum hoặc raw tile count. Technical status nằm trong disclosure; CTA đứng trước Advanced options và settings chỉ xuất hiện ở idle.
+- Main flow mặc định không hiển thị version, milestone, engine, checksum hoặc raw tile count. Technical status nằm trong disclosure; CTA đứng trước Advanced options và settings chỉ xuất hiện khi idle hoặc terminal, không xuất hiện khi busy.
 - Keyboard/browser coverage khóa English localization, range controls, save/reset feedback atomic, disclosure order, privacy help và action recovery.
 - Final clean gate: formatting, ESLint, strict TypeScript, privacy/dependency/release/critical-security audits, 344/344 unit tests trên 99 files, 4/4 PDF benchmarks, verified Manifest V3 build, reproducible 25-entry package, 51/51 Playwright E2E và packaged lifecycle smoke đều PASS.
 

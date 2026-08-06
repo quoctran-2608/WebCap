@@ -14,56 +14,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  finalize-s25:
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.head_ref == 'agent/s25-settings-events-popup' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Check out S25 branch
-        uses: actions/checkout@v4
-        with:
-          ref: agent/s25-settings-events-popup
-          fetch-depth: 0
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 11.15.1
-          run_install: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.22.0
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Apply and format final S25 fix
-        run: |
-          python .github/scripts/finalize_s25_settings_visibility.py
-          pnpm exec prettier --write src/popup/App.tsx PLAN.md docs/spec-0.2.0.md README.md CHANGELOG.md
-
-      - name: Restore read-only CI and remove staging script
-        run: |
-          git show origin/main:.github/workflows/ci.yml > .github/workflows/ci.yml
-          rm .github/scripts/finalize_s25_settings_visibility.py
-
-      - name: Commit final S25 fix
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "Keep advanced settings available after results"
-          git push origin HEAD:agent/s25-settings-events-popup
-
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 30
