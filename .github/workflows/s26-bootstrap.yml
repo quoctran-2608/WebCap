@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: s26-bootstrap-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   implement-and-validate:
@@ -38,64 +38,73 @@ jobs:
           node-version: 22.22.0
           cache: pnpm
 
-      - name: Apply S26 changes
-        run: node scripts/s26-bootstrap.mjs
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Format S26 changes
-        run: pnpm format
-
-      - name: Check formatting
-        run: pnpm format:check
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Privacy, dependency, release, and critical-security audits
-        run: pnpm run audit && pnpm audit:security
-
-      - name: Unit tests
-        run: pnpm test:unit
-
-      - name: PDF performance benchmarks
-        run: pnpm benchmark:pdf
-
-      - name: Build extension
-        run: pnpm build
-
-      - name: Reproduce and verify release package
-        run: node scripts/verify-reproducible-package.mjs
-
-      - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Full extension E2E
-        run: pnpm test:e2e
-
-      - name: Packaged 0.1.0 to 0.2.0 lifecycle
-        run: pnpm test:release
-
-      - name: Record S26 implementation evidence
-        run: node scripts/s26-bootstrap.mjs --record-evidence
-
-      - name: Final formatting and diff checks
+      - name: Apply, validate, and publish observable S26 state
+        shell: bash
         run: |
-          pnpm format
-          pnpm format:check
-          git diff --check
-
-      - name: Remove temporary bootstrap files
-        run: rm .github/workflows/s26-bootstrap.yml scripts/s26-bootstrap.mjs
-
-      - name: Commit validated S26 implementation
-        run: |
+          set -o pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          fail_stage() {
+            stage="$1"
+            log_file="$2"
+            {
+              echo "# S26 bootstrap failure"
+              echo
+              echo "Stage: ${stage}"
+              echo "Run: ${GITHUB_RUN_ID}"
+              echo "Head: ${GITHUB_SHA}"
+              echo
+              echo '```text'
+              tail -n 240 "${log_file}" || true
+              echo '```'
+            } > docs/s26-bootstrap-failure.md
+            git add docs/s26-bootstrap-failure.md
+            git commit -m "Record S26 bootstrap failure at ${stage}" || true
+            git push origin HEAD:agent/s26-hardening-rc
+            exit 1
+          }
+
+          run_stage() {
+            stage="$1"
+            shift
+            log_file="/tmp/s26-${stage//[^a-zA-Z0-9]/-}.log"
+            echo "::group::${stage}"
+            "$@" 2>&1 | tee "${log_file}"
+            status=${PIPESTATUS[0]}
+            echo "::endgroup::"
+            if [ "${status}" -ne 0 ]; then
+              fail_stage "${stage}" "${log_file}"
+            fi
+          }
+
+          run_stage apply node scripts/s26-bootstrap.mjs
+          run_stage install pnpm install --frozen-lockfile
+          run_stage format pnpm format
+          run_stage format-check pnpm format:check
+
+          rm -f docs/s26-bootstrap-failure.md
+          git add -A
+          git commit -m "Stage WebCap 0.2.0 release-candidate implementation"
+          git push origin HEAD:agent/s26-hardening-rc
+
+          run_stage lint pnpm lint
+          run_stage typecheck pnpm typecheck
+          run_stage audits bash -lc "pnpm run audit && pnpm audit:security"
+          run_stage unit-tests pnpm test:unit
+          run_stage pdf-benchmarks pnpm benchmark:pdf
+          run_stage build pnpm build
+          run_stage reproducible-package node scripts/verify-reproducible-package.mjs
+          run_stage playwright-install pnpm exec playwright install --with-deps chromium
+          run_stage extension-e2e pnpm test:e2e
+          run_stage packaged-migration pnpm test:release
+          run_stage record-evidence node scripts/s26-bootstrap.mjs --record-evidence
+          run_stage final-format pnpm format
+          run_stage final-format-check pnpm format:check
+          run_stage diff-check git diff --check
+
+          rm -f docs/s26-bootstrap-failure.md
+          rm .github/workflows/s26-bootstrap.yml scripts/s26-bootstrap.mjs
           git add -A
           git commit -m "Prepare WebCap 0.2.0 release candidate"
           git push origin HEAD:agent/s26-hardening-rc
