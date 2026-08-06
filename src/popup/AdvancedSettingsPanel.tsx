@@ -194,7 +194,7 @@ export function AdvancedSettingsPanel({
           </button>
         </div>
         {notice !== undefined && (
-          <p className="settings-notice" role="status" aria-live="polite">
+          <p className="settings-notice" role="status" aria-live="polite" aria-atomic="true">
             {notice}
           </p>
         )}
