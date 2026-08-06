@@ -47,14 +47,13 @@ jobs:
           from pathlib import Path
           path = Path("tests/release/packaged-lifecycle.mjs")
           content = path.read_text()
-          old = '''    if (JSON.stringify(migration.settings) !== JSON.stringify(legacySettings)) {
-              throw new Error("WebCap 0.1.0 capture settings were not preserved during update.");
-            }'''
-          if old not in content:
-              old = '''    if (JSON.stringify(migration.settings) !== JSON.stringify(legacySettings)) {
-            throw new Error("WebCap 0.1.0 capture settings were not preserved during update.");
-          }'''
-          new = '''    const migratedSettings = migration.settings;
+          start_marker = "    if (JSON.stringify(migration.settings) !== JSON.stringify(legacySettings)) {"
+          end_marker = "    if (migration.locale?.schemaVersion !== 1 || migration.locale?.locale !== \"en\") {"
+          start = content.find(start_marker)
+          end = content.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit("Migration assertion boundaries were not found")
+          replacement = '''    const migratedSettings = migration.settings;
             if (
               migratedSettings?.schemaVersion !== 1 ||
               migratedSettings.settings?.outputFormat !== "webp" ||
@@ -76,10 +75,9 @@ jobs:
               throw new Error(
                 `WebCap 0.1.0 capture settings were not preserved during update: ${JSON.stringify(migratedSettings)}.`,
               );
-            }'''
-          if old not in content:
-              raise SystemExit("Order-sensitive migration assertion was not found")
-          path.write_text(content.replace(old, new, 1))
+            }
+            '''
+          path.write_text(content[:start] + replacement + content[end:])
           PY
 
       - name: Install dependencies
