@@ -12,23 +12,33 @@ if old_import not in text:
     raise SystemExit("Missing job event client import")
 text = text.replace(old_import, new_import, 1)
 
-old_condition = '''      if (
+old_condition = '''    let latestRevision = fullPageJob.stateRevision;
+    return subscribeToJobSummaryChanges((summary) => {
+      if (
         summary.tabId !== tabCapability.tabId ||
         summary.jobId !== fullPageJob.id ||
         summary.stateRevision <= latestRevision
       ) {
         return;
       }
+      latestRevision = summary.stateRevision;
+      void syncFullPageJob(summary.jobId).catch((error: unknown) => {
 '''
-new_condition = '''      if (
+new_condition = '''    const tabId = tabCapability.tabId;
+    const jobId = fullPageJob.id;
+    let latestRevision = fullPageJob.stateRevision;
+    return subscribeToJobSummaryChanges((summary) => {
+      if (
         !shouldRefreshJobFromSummary(summary, {
-          tabId: tabCapability.tabId,
-          jobId: fullPageJob.id,
+          tabId,
+          jobId,
           stateRevision: latestRevision,
         })
       ) {
         return;
       }
+      latestRevision = summary.stateRevision;
+      void syncFullPageJob(jobId).catch((error: unknown) => {
 '''
 if old_condition not in text:
     raise SystemExit("Missing inline job event revision filter")
