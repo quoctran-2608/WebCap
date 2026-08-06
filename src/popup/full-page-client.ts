@@ -16,7 +16,8 @@ import {
   isJobResponseMessage,
 } from "@shared/contracts/job-messages";
 import { isErrorResponseMessage } from "@shared/contracts/messages";
-import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
+
+import { loadCaptureSettingsForNewJob } from "./capture-settings";
 
 function rejectAfter(timeoutMs: number): Promise<never> {
   return new Promise((_, reject) => {
@@ -49,12 +50,13 @@ async function sendJobRequest(
   return response.payload.job;
 }
 
-function startTiledCapture(options: {
+async function startTiledCapture(options: {
   tabId: number;
   windowId: number;
   outputFormat: ImageFormat;
   mode: "full-page" | "region" | "element" | "scroll-area";
 }): Promise<CaptureJob> {
+  const settings = await loadCaptureSettingsForNewJob(options.outputFormat);
   return sendJobRequest(
     createJobCreateMessage({
       requestId: crypto.randomUUID(),
@@ -64,10 +66,7 @@ function startTiledCapture(options: {
       mode: options.mode,
       preferredEngine:
         options.mode === "full-page" || options.mode === "scroll-area" ? "scroll" : "cdp",
-      settings: {
-        ...DEFAULT_CAPTURE_SETTINGS,
-        outputFormat: options.outputFormat,
-      },
+      settings,
     }),
   );
 }
