@@ -142,6 +142,64 @@ async function readLifecycleMarker(worker) {
   });
 }
 
+const legacySettings = {
+  schemaVersion: 1,
+  settings: {
+    outputFormat: "webp",
+    imageQuality: 0.82,
+    fixedElementMode: "remove",
+    lazyLoad: { enabled: true, stepRatio: 0.8, settleMs: 250, maxDurationMs: 15_000 },
+    limits: {
+      maxCssHeight: 100_000,
+      maxCssWidth: 32_768,
+      maxTiles: 256,
+      maxEstimatedBytes: 512 * 1024 * 1024,
+    },
+    pdf: { pageSize: "letter", orientation: "landscape", marginMm: 12, jpegQuality: 0.78 },
+  },
+};
+
+async function seedLegacyState(worker) {
+  await worker.evaluate(async (settings) => {
+    await globalThis.chrome.storage.local.set({
+      "webcap.settings": settings,
+      "webcap.ui-locale": { schemaVersion: 1, locale: "en" },
+      "webcap.release.unrelated": { keep: true },
+    });
+    await globalThis.chrome.storage.local.remove("webcap.popup-preferences");
+  }, legacySettings);
+}
+
+async function openPopup(context, extensionId) {
+  const page = await context.newPage();
+  try {
+    await page.goto("chrome-extension://" + extensionId + "/popup.html", {
+      waitUntil: "domcontentloaded",
+    });
+    await page.locator("body").waitFor({ state: "visible" });
+    await page.waitForTimeout(750);
+  } finally {
+    await page.close();
+  }
+}
+
+async function readMigrationState(worker) {
+  return worker.evaluate(async () => {
+    const stored = await globalThis.chrome.storage.local.get([
+      "webcap.settings",
+      "webcap.ui-locale",
+      "webcap.popup-preferences",
+      "webcap.release.unrelated",
+    ]);
+    return {
+      settings: stored["webcap.settings"] ?? null,
+      locale: stored["webcap.ui-locale"] ?? null,
+      popupPreferences: stored["webcap.popup-preferences"] ?? null,
+      unrelated: stored["webcap.release.unrelated"] ?? null,
+    };
+  });
+}
+
 async function uninstallSelf(worker) {
   const closed = new Promise((resolvePromise) => worker.once("close", resolvePromise));
   const uninstall = worker
@@ -225,7 +283,7 @@ try {
   await extractArchive(archivePath, updateExtensionPath);
   const updateManifestPath = resolve(updateExtensionPath, "manifest.json");
   const oldManifest = JSON.parse(await readFile(updateManifestPath, "utf8"));
-  oldManifest.version = "0.0.9";
+  oldManifest.version = "0.1.0";
   await writeFile(updateManifestPath, `${JSON.stringify(oldManifest, null, 2)}\n`, "utf8");
 
   const oldContext = await launchProfile({
@@ -238,8 +296,10 @@ try {
   try {
     const worker = await getExtensionWorker(oldContext);
     updateBefore = await inspectExtension(worker);
-    if (updateBefore.version !== "0.0.9") throw new Error("Older update fixture did not load.");
+    if (updateBefore.version !== "0.1.0")
+      throw new Error("WebCap 0.1.0 update fixture did not load.");
     await setLifecycleMarker(worker, marker);
+    await seedLegacyState(worker);
   } finally {
     await oldContext.close();
   }
@@ -260,6 +320,20 @@ try {
       throw new Error("Updated package version did not load.");
     if ((await readLifecycleMarker(worker)) !== marker) {
       throw new Error("chrome.storage.local did not persist across update simulation.");
+    }
+    await openPopup(updatedContext, updateAfter.id);
+    const migration = await readMigrationState(worker);
+    if (JSON.stringify(migration.settings) !== JSON.stringify(legacySettings)) {
+      throw new Error("WebCap 0.1.0 capture settings were not preserved during update.");
+    }
+    if (migration.locale?.schemaVersion !== 1 || migration.locale?.locale !== "en") {
+      throw new Error("WebCap 0.1.0 locale was not preserved during update.");
+    }
+    if (migration.popupPreferences?.schemaVersion !== 1) {
+      throw new Error("WebCap 0.2.0 popup preferences were not initialized after update.");
+    }
+    if (migration.unrelated?.keep !== true) {
+      throw new Error("Unrelated chrome.storage.local data was not preserved during update.");
     }
     await uninstallSelf(worker);
   } finally {
@@ -299,6 +373,10 @@ try {
       to: updateAfter.version,
       extensionIdStable: updateBefore.id === updateAfter.id,
       localStoragePreserved: true,
+      captureSettingsPreserved: true,
+      localePreserved: true,
+      popupPreferencesInitialized: true,
+      unrelatedStoragePreserved: true,
     },
     uninstallVerified,
   };

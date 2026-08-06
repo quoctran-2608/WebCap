@@ -1,6 +1,6 @@
 {
   "name": "webcap",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Local-first Chrome extension for reliable viewport, full-page, region, element, and scroll-area capture.",
   "license": "UNLICENSED",

@@ -11,3 +11,7 @@ WebCap uses Chrome permissions only after a user opens the extension or starts a
 - Optional `http://*/*`, `https://*/*`, or `file:///*` access is declared only so Chrome can grant the exact origin/file pattern when original-PDF passthrough is explicitly requested. It is not pre-granted on installation, and denial does not disable image capture.
 
 The production manifest has no default host permission and does not include `<all_urls>`. The E2E harness temporarily grants its local fixture host only inside a copied test manifest.
+
+# WebCap 0.2.0 permission confirmation
+
+The 0.2.0 release candidate does not add required permissions or default host permissions. Required permissions remain activeTab, scripting, storage, downloads, offscreen and debugger. HTTP(S)/file access remains optional and contextual for original PDF passthrough only.

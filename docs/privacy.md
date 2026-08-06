@@ -77,3 +77,7 @@ Chrome may include cross-origin iframe, Canvas, and WebGL pixels in compositor s
 Users control when capture, optional permission requests, diagnostics copying, export, and download occur. Denying optional PDF permissions does not disable the standard image-capture modes.
 
 Any future telemetry, cloud storage, account, remote diagnostics, data sharing, or additional permission would require an explicit product/specification update, privacy review, user-facing disclosure, and an opt-in design before implementation.
+
+# WebCap 0.2.0 release boundary
+
+S26 adds no backend, telemetry, analytics SDK, account, cloud sync, remote diagnostics upload or remote executable code. Upgrade migration reads and rewrites only versioned local settings/preferences; screenshot tiles, previews and PDF artifacts remain local IndexedDB Blobs and runtime messages remain metadata-only.

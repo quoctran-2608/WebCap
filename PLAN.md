@@ -3,14 +3,14 @@ product: WebCap
 document: Active Implementation Plan
 version: 1.1
 date: 2026-08-06
-status: Active
+status: Release candidate validation
 repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.1.md
 spec: ./docs/spec-0.2.0.md
 audit: ./docs/audits/0.1.0-gap-audit.md
 release_target: 0.2.0
-current_session: S26
+current_session: S26-RC
 ---
 
 # WebCap — Implementation plan 0.2.0
@@ -59,7 +59,7 @@ S21–S25 đã hoàn tất reset lifecycle, region selector đáng tin cậy, ad
 | S23 | Adaptive auto-scroll và resumable frontier | DONE | S21–S22 |
 | S24 | Auto-PDF và mode-aware image/PDF output | DONE | S23 |
 | S25 | Stored settings, event-driven progress và simplified popup | DONE | S21–S24 stable contracts |
-| S26 | Gap closure hardening, migration, docs và RC 0.2.0 | PLANNED | S21–S25 |
+| S26 | Gap closure hardening, migration, docs và RC 0.2.0 | IN VALIDATION | S21–S25 |
 
 # 5. S21 — Reset lifecycle và “Chụp mới”
 
@@ -387,6 +387,21 @@ Khóa behavior, đóng audit items đã chọn, cập nhật docs và tạo RC 0
 - Zero P0/P1, critical advisory và unresolved review thread.
 - Reproducible package và lifecycle pass.
 - Platform limitations được Help/docs mô tả trung thực.
+
+## S26 implementation evidence
+
+- Package and manifest are synchronized at version 0.2.0 while required permissions, optional host permissions, minimum Chrome 116 and the local-first boundary remain unchanged.
+- Packaged lifecycle now simulates a real 0.1.0 → 0.2.0 update and verifies extension ID, capture settings, locale, unrelated local storage and newly initialized per-mode popup preferences.
+- Release Candidate compatibility resolves and tests minimum Chrome, previous stable and current stable; Linux, Windows and macOS retain packaged lifecycle coverage.
+- The 0.1.0 gap audit has final evidence/disposition for every MUST/SHOULD item; deferred items remain explicit 0.3+ scope rather than implicit omissions.
+- S26 implementation gate: {{S26_RUN_EVIDENCE}}. Reproducible package: {{S26_PACKAGE_EVIDENCE}}.
+- No tag, GitHub Release, Chrome Web Store upload, review submission or publication is performed.
+
+## S26 exit disposition
+
+- AC-01–AC-39 are covered by the retained and expanded unit, benchmark, actual-browser, privacy, permission and packaged lifecycle suites.
+- AC-40 is pending the final read-only Release Candidate minimum/previous/current Chrome and OS matrix on the S26 PR.
+- S26 remains IN VALIDATION until those permanent read-only workflows pass with zero P0/P1, critical advisory or unresolved review thread.
 
 # 11. Defer và platform boundaries
 

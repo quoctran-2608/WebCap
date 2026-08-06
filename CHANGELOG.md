@@ -6,7 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-06
+
 ### Added
+
+- S26 release hardening: package/manifest version 0.2.0, explicit 0.1.0 → 0.2.0 settings and locale migration validation, previous-stable Chrome compatibility, final gap disposition, release notes and AC-01–AC-40 traceability.
+- Reproducible 0.2.0 release-candidate evidence: {{S26_PACKAGE_EVIDENCE}}.
 
 - Durable stored capture settings and per-mode output preferences for visible, full-page, region, element and scroll-area jobs, including image quality, PDF page layout/quality and fixed/sticky handling.
 - Separate options reset that restores preference defaults without deleting capture jobs, tiles, artifacts, locale or downloaded files.
