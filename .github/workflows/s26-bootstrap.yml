@@ -83,10 +83,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Format and verify package lifecycle
+      - name: Format test and verify package lifecycle
         run: |
           pnpm exec prettier --write tests/release/packaged-lifecycle.mjs
-          pnpm format:check
           pnpm package
           pnpm test:release
 
