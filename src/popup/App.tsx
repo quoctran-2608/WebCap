@@ -27,6 +27,7 @@ import {
 } from "@shared/popup-preferences";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 
+import { AdvancedSettingsPanel } from "./AdvancedSettingsPanel";
 import { createArtifactPreview } from "./artifact-preview";
 import { captureSettingsForOutput } from "./capture-settings";
 import { downloadOriginalPdf, inspectPdfSource } from "./pdf-source-client";
@@ -189,6 +190,8 @@ export function App(): React.JSX.Element {
     DEFAULT_MODE_OUTPUT_PREFERENCES,
   );
   const [settingsReady, setSettingsReady] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsNotice, setSettingsNotice] = useState<string>();
   const [session, setSession] = useState<VisibleSessionSnapshot>();
   const [fullPageJob, setFullPageJob] = useState<CaptureJob>();
   const [localStatus, setLocalStatus] = useState<UiStatus>("idle");
@@ -929,6 +932,38 @@ export function App(): React.JSX.Element {
     [locale, outputByMode, selectedFormat, selectedMode],
   );
 
+  const handleSaveCaptureSettings = useCallback(
+    async (next: CaptureSettings): Promise<void> => {
+      setSettingsSaving(true);
+      setSettingsNotice(undefined);
+      try {
+        setCaptureSettings(await popupSettingsClient.saveCapture(next));
+        setSettingsNotice(t(locale, "popup.settings.saved"));
+      } catch (error) {
+        setSettingsNotice(genericErrorCopy(locale, error));
+      } finally {
+        setSettingsSaving(false);
+      }
+    },
+    [locale],
+  );
+
+  const handleResetOptions = useCallback(async (): Promise<void> => {
+    setSettingsSaving(true);
+    setSettingsNotice(undefined);
+    try {
+      const snapshot = await popupSettingsClient.reset();
+      setCaptureSettings(snapshot.capture);
+      setOutputByMode(snapshot.outputByMode);
+      setSelectedFormat(selectedImageFormat(snapshot.outputByMode, selectedMode));
+      setSettingsNotice(t(locale, "popup.settings.resetDone"));
+    } catch (error) {
+      setSettingsNotice(genericErrorCopy(locale, error));
+    } finally {
+      setSettingsSaving(false);
+    }
+  }, [locale, selectedMode]);
+
   const handleCopyDiagnostics = useCallback(async (): Promise<void> => {
     try {
       await copyText(diagnosticsJson);
@@ -1135,6 +1170,16 @@ export function App(): React.JSX.Element {
         ) : (
           <p className="field-label">{tiledOutputHint}</p>
         )}
+
+        <AdvancedSettingsPanel
+          locale={locale}
+          settings={captureSettings}
+          busy={busy}
+          saving={settingsSaving}
+          notice={settingsNotice}
+          onSave={handleSaveCaptureSettings}
+          onReset={handleResetOptions}
+        />
 
         {busy ? (
           <div className="capture-actions">
