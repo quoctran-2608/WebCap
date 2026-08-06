@@ -59,13 +59,22 @@ replace(
     '  }, [handleOperationError, runExport, selectedFormat]);\n',
     '  }, [captureSettings.imageQuality, handleOperationError, runExport, selectedFormat]);\n',
 )
-for old, new in [
-    ('        outputFormat: selectedFormat,\n', '        settings: jobSettings,\n'),
-    ('        outputFormat: selectedFormat,\n', '        settings: jobSettings,\n'),
-    ('        outputFormat: selectedFormat,\n', '        settings: jobSettings,\n'),
-    ('        outputFormat: selectedFormat,\n', '        settings: jobSettings,\n'),
-]:
-    replace(old, new)
+replace(
+    '      const job = await startFullPageCapture({\n        tabId: tabCapability.tabId,\n        windowId: tabCapability.windowId,\n        outputFormat: selectedFormat,\n      });\n',
+    '      const job = await startFullPageCapture({\n        tabId: tabCapability.tabId,\n        windowId: tabCapability.windowId,\n        settings: jobSettings,\n      });\n',
+)
+replace(
+    '      const job = await startRegionCapture({\n        tabId: tabCapability.tabId,\n        windowId: tabCapability.windowId,\n        outputFormat: selectedFormat,\n      });\n',
+    '      const job = await startRegionCapture({\n        tabId: tabCapability.tabId,\n        windowId: tabCapability.windowId,\n        settings: jobSettings,\n      });\n',
+)
+replace(
+    '      const job = await startElementCapture({\n        tabId: tabCapability.tabId,\n        windowId: tabCapability.windowId,\n        outputFormat: selectedFormat,\n      });\n',
+    '      const job = await startElementCapture({\n        tabId: tabCapability.tabId,\n        windowId: tabCapability.windowId,\n        settings: jobSettings,\n      });\n',
+)
+replace(
+    '      const job = await startScrollAreaCapture({\n        tabId: tabCapability.tabId,\n        windowId: tabCapability.windowId,\n        outputFormat: selectedFormat,\n      });\n',
+    '      const job = await startScrollAreaCapture({\n        tabId: tabCapability.tabId,\n        windowId: tabCapability.windowId,\n        settings: jobSettings,\n      });\n',
+)
 replace(
     '  }, [locale, selectedFormat, syncFullPageJob, tabCapability.tabId, tabCapability.windowId]);\n',
     '  }, [jobSettings, locale, syncFullPageJob, tabCapability.tabId, tabCapability.windowId]);\n',
