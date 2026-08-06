@@ -1,8 +1,5 @@
 import type { CaptureSettings, ImageFormat } from "@shared/contracts/domain";
-import {
-  createWebCapRuntimeError,
-  type WebCapErrorData,
-} from "@shared/errors/error";
+import { createWebCapRuntimeError, type WebCapErrorData } from "@shared/errors/error";
 import type { Result } from "@shared/result";
 import { SettingsRepository } from "@storage/settings-repository";
 
