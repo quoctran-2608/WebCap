@@ -8,7 +8,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 **0.1.0 release candidate remains complete and unchanged.** It has a deterministic, verified 24-entry Chrome Web Store ZIP (`webcap-0.1.0.zip`, 1,097,035 bytes, SHA-256 `630c44c07e72da0d5edc1c82c013ecf6caf995e0542ee19679380081e7b0cb7a`). The final gate passed formatting, ESLint, strict TypeScript, privacy/license/release/critical-security audits, 279 unit tests across 79 files, four PDF benchmarks, a verified Manifest V3 build, and 38 Playwright E2E cases including DPR 1/1.5/2 at 80/100/125/150% zoom. No tag, GitHub Release, Chrome Web Store upload, review submission, or publication has been performed.
 
-**0.2.0 implementation is active. S21 capture reset, S22 region-selector reliability, S23 adaptive auto-scroll, S24 automatic mode-aware output and S25 stored settings/event-driven simplified popup are complete; S26 release hardening is next.** New jobs use durable per-mode output and quality/PDF/fixed-sticky preferences, popup progress is event-driven with slow authoritative reconciliation, and technical worker/version/diagnostics information is progressively disclosed behind the user capture flow. The 0.1.0 artifact and package version remain unchanged until S26 deliberately prepares the 0.2.0 release candidate.
+**WebCap 0.2.0 release candidate is complete and ready for review.** S21–S25 delivered reset, reliable selectors, adaptive capture, automatic mode-aware output, stored settings and event-driven popup progress. S26 bumps the package to 0.2.0, validates upgrade from 0.1.0, adds previous-stable Chrome coverage, closes the gap audit and prepares a reproducible local-first release candidate without publishing it.
 
 ## 0.2.0 outcomes and remaining work
 
@@ -19,7 +19,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 - Delivered in S25: durable per-mode output plus image/PDF/fixed-sticky preferences are loaded before capture, snapshotted into each new job and reset independently from capture data.
 - Delivered in S25: validated runtime job-summary events replace continuous 350 ms polling; a 7.5-second authoritative reconciliation remains for missed events and reconnect.
 - Delivered in S25: the primary capture action precedes advanced settings, which remain available at idle/result and disappear while capture is busy, while version, milestones, raw tile counts, privacy help and diagnostics no longer compete in the default main flow.
-- Remaining in S26: acceptance gap closure, 0.1.0 → 0.2.0 migration, compatibility/release documentation, version bump and reproducible RC verification.
+- Delivered in S26: 0.1.0 → 0.2.0 settings/locale migration coverage, minimum/previous/current Chrome compatibility, version 0.2.0 metadata, acceptance traceability and reproducible RC packaging.
 - No backend, telemetry, remote executable code, new required permission or default host permission.
 
 ## Requirements
@@ -116,5 +116,11 @@ scripts/                Build, audit, packaging, browser-install and repository 
 - [Known capture limitations](./docs/known-limitations.md)
 - [0.1.0 release checklist](./docs/release-checklist.md)
 - [0.1.0 release notes](./docs/release/0.1.0.md)
+- [0.2.0 release-candidate notes](./docs/release/0.2.0.md)
 - [0.1.0 acceptance-criteria evidence](./docs/release/acceptance-criteria-0.1.0.md)
+- [0.2.0 acceptance-criteria evidence](./docs/release/acceptance-criteria-0.2.0.md)
 - [Chrome Web Store assets handoff](./docs/store-assets.md)
+
+<!-- S26_PACKAGE_EVIDENCE -->
+
+The final read-only CI run 31072090616 and Release Candidate run 31072090612 verified webcap-0.2.0.zip (25 entries, 1,195,785 bytes, SHA-256 a5e8a55d2e1038284199d702b27d57af8f351080b0c3d85c4019bc3a723a3e6d), Linux/Windows/macOS lifecycle, and Chrome 116.0.5845.96, previous stable 150.0.7871.124 and current stable 151.0.7922.76. Final publication remains an explicit release-owner action.

@@ -6,7 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-06
+
 ### Added
+
+- S26 release hardening: package/manifest version 0.2.0, explicit 0.1.0 → 0.2.0 settings and locale migration validation, previous-stable Chrome compatibility, final gap disposition, release notes and AC-01–AC-40 traceability.
+- Reproducible 0.2.0 release-candidate evidence: webcap-0.2.0.zip (25 entries, 1,195,785 bytes, SHA-256 a5e8a55d2e1038284199d702b27d57af8f351080b0c3d85c4019bc3a723a3e6d); read-only CI run 31072090616 and Release Candidate run 31072090612; Linux/Windows/macOS lifecycle and Chrome 116.0.5845.96, previous stable 150.0.7871.124 and current stable 151.0.7922.76 all pass.
 
 - Durable stored capture settings and per-mode output preferences for visible, full-page, region, element and scroll-area jobs, including image quality, PDF page layout/quality and fixed/sticky handling.
 - Separate options reset that restores preference defaults without deleting capture jobs, tiles, artifacts, locale or downloaded files.

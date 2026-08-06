@@ -18,3 +18,7 @@ These limitations are intentional boundaries, not silent failures. WebCap should
 | Store release           | The repository prepares artifacts and copy but does not contain developer-account credentials or publish automatically.             | Complete the manual dashboard checklist after explicit approval.                                                     |
 
 No known P0 or P1 defect is accepted for the 0.1.0 release candidate. Any newly discovered content-loss, duplicate-content, cleanup, privacy, or permission-lifecycle defect blocks release.
+
+# S26 0.2.0 confirmation
+
+The 0.2.0 release candidate retains the same platform boundaries: restricted Chrome surfaces, DRM/hardware overlays, cross-origin DOM and closed shadow roots are not bypassed; visible-scroll engines require the source tab to remain active; original PDF passthrough requires explicit optional permission and source access. Compatibility claims are limited to desktop Chrome 116+, previous stable and current stable evidence.

@@ -167,7 +167,7 @@ jobs:
   packaged-browser-compatibility:
     needs: build-and-quality
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -197,13 +197,17 @@ jobs:
           name: webcap-release-candidate-${{ github.sha }}
           path: artifacts
 
-      - name: Install minimum and current stable Chrome for Testing
+      - name: Install minimum, previous stable, and current stable Chrome for Testing
         id: chrome
         run: |
           node scripts/install-chrome-for-testing.mjs \
             --major 116 \
             --destination .release-browsers/chrome-116 \
             --github-output-key minimum
+          node scripts/install-chrome-for-testing.mjs \
+            --previous-stable \
+            --destination .release-browsers/chrome-previous-stable \
+            --github-output-key previous_stable
           node scripts/install-chrome-for-testing.mjs \
             --channel stable \
             --destination .release-browsers/chrome-stable \
@@ -216,6 +220,14 @@ jobs:
           --executable-path "${{ steps.chrome.outputs.minimum }}"
           --browser-label "chrome-${{ steps.chrome.outputs.minimum_version }}"
           --report artifacts/packaged-lifecycle-chrome-minimum.json
+
+      - name: Test package on previous stable Chrome
+        run: >-
+          xvfb-run -a node tests/release/packaged-lifecycle.mjs
+          --headed
+          --executable-path "${{ steps.chrome.outputs.previous_stable }}"
+          --browser-label "chrome-${{ steps.chrome.outputs.previous_stable_version }}"
+          --report artifacts/packaged-lifecycle-chrome-previous-stable.json
 
       - name: Test package on current stable Chrome
         run: >-

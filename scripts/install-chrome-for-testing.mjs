@@ -15,6 +15,7 @@ function parseArguments(arguments_) {
   const options = {
     channel: null,
     major: null,
+    previousStable: false,
     destination: null,
     githubOutputKey: null,
   };
@@ -30,6 +31,10 @@ function parseArguments(arguments_) {
       index += 1;
       continue;
     }
+    if (argument === "--previous-stable") {
+      options.previousStable = true;
+      continue;
+    }
     if (argument === "--destination") {
       options.destination = arguments_[index + 1] ?? null;
       index += 1;
@@ -42,8 +47,13 @@ function parseArguments(arguments_) {
     }
     throw new Error(`Unknown Chrome for Testing argument: ${argument}`);
   }
-  if ((options.channel === null) === (options.major === null)) {
-    throw new Error("Provide exactly one of --channel or --major.");
+  const selectors = [
+    options.channel !== null,
+    options.major !== null,
+    options.previousStable,
+  ].filter(Boolean).length;
+  if (selectors !== 1) {
+    throw new Error("Provide exactly one of --channel, --major, or --previous-stable.");
   }
   if (options.destination === null) throw new Error("--destination is required.");
   return options;
@@ -84,7 +94,33 @@ function findChromeDownload(downloads, platformName) {
   return candidate.url;
 }
 
+async function resolveMajorDownload(major, platformName) {
+  const payload = await fetchJson(KNOWN_GOOD_URL);
+  const prefix = `${major}.`;
+  const candidates = (payload.versions ?? [])
+    .filter((candidate) => candidate.version?.startsWith(prefix))
+    .sort((left, right) => compareVersions(right.version, left.version));
+  const entry = candidates.find((candidate) =>
+    candidate.downloads?.chrome?.some((download) => download.platform === platformName),
+  );
+  if (entry === undefined) throw new Error(`No Chrome for Testing build found for major ${major}.`);
+  return { version: entry.version, url: findChromeDownload(entry.downloads, platformName) };
+}
+
 async function resolveDownload(options, platformName) {
+  if (options.previousStable) {
+    const channels = await fetchJson(LAST_KNOWN_GOOD_URL);
+    const stable = Object.values(channels.channels ?? {}).find(
+      (candidate) => candidate.channel?.toLowerCase() === "stable",
+    );
+    if (stable === undefined) throw new Error("Stable Chrome channel metadata is unavailable.");
+    const stableMajor = Number(stable.version.split(".")[0]);
+    if (!Number.isInteger(stableMajor) || stableMajor <= 1) {
+      throw new Error(`Invalid stable Chrome version: ${stable.version}.`);
+    }
+    return resolveMajorDownload(stableMajor - 1, platformName);
+  }
+
   if (options.channel !== null) {
     const payload = await fetchJson(LAST_KNOWN_GOOD_URL);
     const normalizedChannel = options.channel.toLowerCase();
@@ -92,26 +128,10 @@ async function resolveDownload(options, platformName) {
       (candidate) => candidate.channel?.toLowerCase() === normalizedChannel,
     );
     if (entry === undefined) throw new Error(`Unknown Chrome channel: ${options.channel}.`);
-    return {
-      version: entry.version,
-      url: findChromeDownload(entry.downloads, platformName),
-    };
+    return { version: entry.version, url: findChromeDownload(entry.downloads, platformName) };
   }
 
-  const payload = await fetchJson(KNOWN_GOOD_URL);
-  const prefix = `${options.major}.`;
-  const candidates = (payload.versions ?? [])
-    .filter((candidate) => candidate.version?.startsWith(prefix))
-    .sort((left, right) => compareVersions(right.version, left.version));
-  const entry = candidates.find((candidate) =>
-    candidate.downloads?.chrome?.some((download) => download.platform === platformName),
-  );
-  if (entry === undefined)
-    throw new Error(`No Chrome for Testing build found for major ${options.major}.`);
-  return {
-    version: entry.version,
-    url: findChromeDownload(entry.downloads, platformName),
-  };
+  return resolveMajorDownload(options.major, platformName);
 }
 
 function run(command, arguments_) {

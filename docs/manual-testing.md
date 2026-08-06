@@ -247,3 +247,11 @@ Automated coverage is in `tests/unit/capture-reset-*.test.ts`, `tests/unit/captu
 6. Repeat at DPR 2 and 125% zoom. Compare the displayed CSS document rectangle with the persisted target rectangle.
 7. Force selector injection against a missing tab. Confirm the popup receives an error and IndexedDB/session storage contain zero orphan region jobs, summaries, tiles, selector roots, or tab leases.
 8. Capture a region and inspect the first pixels. Confirm the dim mask, crosshair, toolbar, handles, and labels are absent from the output.
+
+# S26 release-candidate matrix
+
+- Verify clean packaged install and 0.1.0 → 0.2.0 update preserve extension ID, capture settings, English/Vietnamese locale and unrelated local storage.
+- Verify minimum Chrome 116, previous stable and current stable packaged lifecycle.
+- Verify Linux, Windows and macOS install/update/storage/uninstall lifecycle.
+- Re-run static 30k/100k/>100k, finite lazy growth, infinite partial, region pointer/keyboard launch, element, scroll-area, visible, PDF passthrough, reset/restart and critical DPR/zoom flows.
+- Confirm no tag, GitHub Release or Chrome Web Store publication occurs during validation.

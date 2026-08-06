@@ -3,21 +3,21 @@ product: WebCap
 document: Active Implementation Plan
 version: 1.1
 date: 2026-08-06
-status: Active
+status: Release candidate complete
 repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.1.md
 spec: ./docs/spec-0.2.0.md
 audit: ./docs/audits/0.1.0-gap-audit.md
 release_target: 0.2.0
-current_session: S26
+current_session: S26-DONE
 ---
 
 # WebCap — Implementation plan 0.2.0
 
 Roadmap `S00–S20` đã tạo release candidate 0.1.0. Roadmap mới `S21–S26` xử lý các khoảng trống thực tế: reset/chụp mới, region drawing có thể nhìn thấy và sử dụng được, adaptive auto-scroll, auto-PDF/output routing, settings/UI/progress và hardening release.
 
-S21–S25 đã hoàn tất reset lifecycle, region selector đáng tin cậy, adaptive auto-scroll có resumable frontier, mode-aware output, stored settings, event-driven progress và simplified popup mà không thay manifest, package version hoặc artifact 0.1.0. S26 là session active tiếp theo.
+S21–S26 đã hoàn tất roadmap 0.2.0: reset lifecycle, reliable selectors, adaptive/resumable capture, mode-aware output, stored settings, event-driven progress, release migration và reproducible RC. Artifact 0.1.0 vẫn được giữ nguyên và 0.2.0 chưa được xuất bản.
 
 # 1. Nguồn sự thật
 
@@ -59,7 +59,7 @@ S21–S25 đã hoàn tất reset lifecycle, region selector đáng tin cậy, ad
 | S23 | Adaptive auto-scroll và resumable frontier | DONE | S21–S22 |
 | S24 | Auto-PDF và mode-aware image/PDF output | DONE | S23 |
 | S25 | Stored settings, event-driven progress và simplified popup | DONE | S21–S24 stable contracts |
-| S26 | Gap closure hardening, migration, docs và RC 0.2.0 | PLANNED | S21–S25 |
+| S26 | Gap closure hardening, migration, docs và RC 0.2.0 | DONE | S21–S25 |
 
 # 5. S21 — Reset lifecycle và “Chụp mới”
 
@@ -388,6 +388,22 @@ Khóa behavior, đóng audit items đã chọn, cập nhật docs và tạo RC 0
 - Reproducible package và lifecycle pass.
 - Platform limitations được Help/docs mô tả trung thực.
 
+## S26 implementation evidence
+
+- Package and manifest are synchronized at version 0.2.0 while required permissions, optional host permissions, minimum Chrome 116 and the local-first boundary remain unchanged.
+- Packaged lifecycle now simulates a real 0.1.0 → 0.2.0 update and verifies extension ID, capture settings, locale, unrelated local storage and newly initialized per-mode popup preferences.
+- Release Candidate compatibility resolves and tests minimum Chrome, previous stable and current stable; Linux, Windows and macOS retain packaged lifecycle coverage.
+- The 0.1.0 gap audit has final evidence/disposition for every MUST/SHOULD item; deferred items remain explicit 0.3+ scope rather than implicit omissions.
+- Final clean gates: read-only CI run 31072090616 and Release Candidate run 31072090612; 344/344 unit tests on 99 files, 4/4 PDF benchmarks, 51/51 Playwright E2E, Linux/Windows/macOS lifecycle and Chrome 116.0.5845.96, previous stable 150.0.7871.124 and current stable 151.0.7922.76.
+- Reproducible package: webcap-0.2.0.zip (25 entries, 1,195,785 bytes, SHA-256 a5e8a55d2e1038284199d702b27d57af8f351080b0c3d85c4019bc3a723a3e6d).
+- No tag, GitHub Release, Chrome Web Store upload, review submission or publication is performed.
+
+## S26 exit disposition
+
+- AC-01–AC-39 are covered by the retained and expanded unit, benchmark, actual-browser, privacy, permission and packaged lifecycle suites.
+- AC-40: PASS — packaged install/update/storage/uninstall passed on Linux, Windows and macOS plus Chrome 116.0.5845.96, previous stable 150.0.7871.124 and current stable 151.0.7922.76.
+- S26: DONE — AC-01–AC-40 pass, zero open P0/P1, zero critical advisory and zero unresolved review thread.
+
 # 11. Defer và platform boundaries
 
 Không kéo vào core 0.2.0 trừ khi S21–S25 hoàn tất sớm:
@@ -416,10 +432,8 @@ S21 Reset/cleanup
 
 # 13. Current session handoff
 
-**Current session: S26 — Hardening, gap closure và release candidate 0.2.0.**
+**Roadmap S21–S26 hoàn tất. WebCap 0.2.0 RC sẵn sàng để review.**
 
-1. Bắt đầu từ baseline S21–S25 đã merge và giữ nguyên semantics reset/selector/adaptive/output/settings/events.
-2. Rà `docs/audits/0.1.0-gap-audit.md`, acceptance AC-01–AC-40 và đóng mọi MUST/SHOULD bằng evidence hoặc disposition rõ.
-3. Kiểm thử migration 0.1.0 → 0.2.0, compatibility matrix, deterministic package và packaged lifecycle trên các target đã định.
-4. Chỉ bump package/manifest lên 0.2.0 trong S26; không thêm permission, backend, telemetry hoặc remote executable code.
-5. Không tag, tạo GitHub Release, upload Chrome Web Store hoặc publish nếu chưa có approval riêng.
+1. Giữ PR S26 chưa merge cho đến khi được phê duyệt.
+2. Giữ nguyên publication boundary: không tag, GitHub Release, Chrome Web Store upload/submission/publication nếu chưa có release-owner approval riêng.
+3. Mọi công việc sau core 0.2.0 phải mở roadmap/PR riêng thay vì mở rộng RC này.
