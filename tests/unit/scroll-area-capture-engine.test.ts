@@ -164,6 +164,46 @@ describe("ScrollAreaCaptureEngine", () => {
     );
   });
 
+  it("continues a max-tiles PDF prefix when only scroll height settles to a new value", async () => {
+    const harness = setup();
+    harness.context.settings = {
+      ...harness.context.settings,
+      limits: { ...harness.context.settings.limits, maxTiles: 2 },
+    };
+    // Chrome's PDF viewer can virtualize pages and revise only total scrollHeight mid-capture.
+    harness.scrollAndSettle.mockImplementation((request: ScrollAreaPageRequest) =>
+      Promise.resolve({
+        ...pageResult(request),
+        ...(request.row === 0 ? {} : { scrollHeight: 260, layoutChanged: true, mutationCount: 4 }),
+      }),
+    );
+
+    const result = await harness.engine.capture(harness.context);
+
+    expect(result.tiles).toHaveLength(2);
+    expect(result.partialCapture?.reason).toBe("max-tiles");
+    expect(harness.stored).toHaveLength(2);
+  });
+
+  it("still rejects width drift even when the plan is limited by max-tiles", async () => {
+    const harness = setup();
+    harness.context.settings = {
+      ...harness.context.settings,
+      limits: { ...harness.context.settings.limits, maxTiles: 2 },
+    };
+    harness.scrollAndSettle.mockImplementation((request: ScrollAreaPageRequest) =>
+      Promise.resolve({
+        ...pageResult(request),
+        ...(request.row === 0 ? {} : { scrollWidth: 110, layoutChanged: true }),
+      }),
+    );
+
+    await expect(harness.engine.capture(harness.context)).rejects.toMatchObject({
+      data: { code: "E_LAYOUT_UNSTABLE", causeCode: "ScrollAreaLayoutChanged" },
+    });
+    expect(harness.stored).toHaveLength(1);
+  });
+
   it("restores the container and document scroll state", async () => {
     const harness = setup();
 

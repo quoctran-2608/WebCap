@@ -273,7 +273,14 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
           },
         });
       }
-      if (page.layoutChanged) {
+      const boundedHeightOnlyDrift =
+        page.layoutChanged &&
+        plan.limitedByMaxTiles &&
+        Math.abs(page.scrollWidth - initial.scrollWidth) <= 2 &&
+        Math.abs(page.clientWidth - initial.clientWidth) <= 2 &&
+        Math.abs(page.clientHeight - initial.clientHeight) <= 2 &&
+        Math.abs(page.scrollHeight - initial.scrollHeight) > 2;
+      if (page.layoutChanged && !boundedHeightOnlyDrift) {
         throw captureError({
           code: "E_LAYOUT_UNSTABLE",
           message: "The selected container dimensions changed during capture.",
@@ -283,6 +290,13 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
             tileIndex: planned.index,
             scrollWidth: page.scrollWidth,
             scrollHeight: page.scrollHeight,
+            clientWidth: page.clientWidth,
+            clientHeight: page.clientHeight,
+            expectedScrollWidth: initial.scrollWidth,
+            expectedScrollHeight: initial.scrollHeight,
+            expectedClientWidth: initial.clientWidth,
+            expectedClientHeight: initial.clientHeight,
+            limitedByMaxTiles: plan.limitedByMaxTiles,
           },
         });
       }
