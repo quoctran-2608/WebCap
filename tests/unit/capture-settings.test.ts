@@ -42,21 +42,24 @@ describe("loadCaptureSettingsForNewJob", () => {
     },
   );
 
-  it("surfaces a typed storage error instead of silently using defaults", async () => {
-    const error = createWebCapError({
-      code: "E_STORAGE_READ",
-      stage: "storage",
-      message: "Stored settings could not be read.",
-      userMessageKey: "errors.settingsRead",
-      retryable: true,
-      fallbackAllowed: true,
-    });
-    const loader: CaptureSettingsLoader = {
-      load: () => Promise.resolve({ ok: false, error }),
-    };
+  it(
+    "surfaces a typed storage error instead of silently using defaults",
+    async () => {
+      const error = createWebCapError({
+        code: "E_STORAGE_READ",
+        stage: "storage",
+        message: "Stored settings could not be read.",
+        userMessageKey: "errors.settingsRead",
+        retryable: true,
+        fallbackAllowed: true,
+      });
+      const loader: CaptureSettingsLoader = {
+        load: () => Promise.resolve({ ok: false, error }),
+      };
 
-    await expect(loadCaptureSettingsForNewJob("png", loader)).rejects.toMatchObject({
-      data: { code: "E_STORAGE_READ", stage: "storage" },
-    });
-  });
+      await expect(loadCaptureSettingsForNewJob("png", loader)).rejects.toMatchObject({
+        data: { code: "E_STORAGE_READ", stage: "storage" },
+      });
+    },
+  );
 });
