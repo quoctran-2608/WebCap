@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { PopupSettingsClient, selectedImageFormat } from "@popup/settings-client";
-import { DEFAULT_POPUP_PREFERENCES } from "@shared/popup-preferences";
+import {
+  DEFAULT_POPUP_PREFERENCES,
+  type ModeOutputPreferences,
+} from "@shared/popup-preferences";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 
 describe("PopupSettingsClient", () => {
@@ -34,7 +37,7 @@ describe("PopupSettingsClient", () => {
     };
     const outputs = {
       load: vi.fn(),
-      saveOutputByMode: vi.fn((outputByMode) =>
+      saveOutputByMode: vi.fn((outputByMode: ModeOutputPreferences) =>
         Promise.resolve({
           ok: true as const,
           value: { ...DEFAULT_POPUP_PREFERENCES, outputByMode },
