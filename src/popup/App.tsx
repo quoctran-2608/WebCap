@@ -5,7 +5,13 @@ import iconData from "../../assets/icons.json";
 import { FOUNDATION_CAPABILITIES, type CaptureCapabilities } from "@shared/capabilities";
 import { copyText } from "@shared/clipboard";
 import { serializeSafeDiagnostics } from "@shared/diagnostics";
-import type { CaptureJob, CaptureMode, ImageFormat, OutputFormat } from "@shared/contracts/domain";
+import type {
+  CaptureJob,
+  CaptureMode,
+  CaptureSettings,
+  ImageFormat,
+  OutputFormat,
+} from "@shared/contracts/domain";
 import type { TabCapabilityPayload } from "@shared/contracts/messages";
 import { WebCapRuntimeError, type WebCapErrorCode } from "@shared/errors/error";
 import { errorPresentation, t, type MessageKey, type UiLocale } from "@shared/i18n";
@@ -15,11 +21,18 @@ import type {
   VisibleSessionSnapshot,
   VisibleSessionStatus,
 } from "@shared/contracts/visible-session";
+import {
+  DEFAULT_MODE_OUTPUT_PREFERENCES,
+  type ModeOutputPreferences,
+} from "@shared/popup-preferences";
+import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 
 import { createArtifactPreview } from "./artifact-preview";
+import { captureSettingsForOutput } from "./capture-settings";
 import { downloadOriginalPdf, inspectPdfSource } from "./pdf-source-client";
 import { requestPdfSourcePermission } from "./pdf-source-permission";
 import { estimateOutputBytes, formatBytes } from "./formatting";
+import { PopupSettingsClient, selectedImageFormat } from "./settings-client";
 import {
   cancelFullPageCapture,
   getActiveCaptureJob,
@@ -47,8 +60,8 @@ const CAPTURE_MODE_IDS = ["visible", "full-page", "region", "element", "scroll-a
 
 const OUTPUT_FORMATS: ReadonlyArray<OutputFormat> = ["png", "jpeg", "webp", "pdf"];
 
-const IMAGE_QUALITY = 0.92;
 const SESSION_POLL_MS = 350;
+const popupSettingsClient = new PopupSettingsClient();
 
 type WorkerStatus = "checking" | "connected" | "unavailable";
 type UiStatus = VisibleSessionStatus | "idle";
@@ -171,6 +184,11 @@ export function App(): React.JSX.Element {
   });
   const [selectedMode, setSelectedMode] = useState<CaptureMode>("visible");
   const [selectedFormat, setSelectedFormat] = useState<ImageFormat>("png");
+  const [captureSettings, setCaptureSettings] = useState<CaptureSettings>(DEFAULT_CAPTURE_SETTINGS);
+  const [outputByMode, setOutputByMode] = useState<ModeOutputPreferences>(
+    DEFAULT_MODE_OUTPUT_PREFERENCES,
+  );
+  const [settingsReady, setSettingsReady] = useState(false);
   const [session, setSession] = useState<VisibleSessionSnapshot>();
   const [fullPageJob, setFullPageJob] = useState<CaptureJob>();
   const [localStatus, setLocalStatus] = useState<UiStatus>("idle");
@@ -204,6 +222,28 @@ export function App(): React.JSX.Element {
     setFullPageJob(current);
     return current;
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void popupSettingsClient
+      .load()
+      .then((snapshot) => {
+        if (!active) return;
+        setCaptureSettings(snapshot.capture);
+        setOutputByMode(snapshot.outputByMode);
+        setSelectedFormat(selectedImageFormat(snapshot.outputByMode, "visible"));
+        setSettingsReady(true);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setSettingsReady(false);
+        setUiError(genericErrorCopy(locale, error));
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [locale]);
 
   useEffect(() => {
     let active = true;
@@ -245,6 +285,9 @@ export function App(): React.JSX.Element {
             ) {
               setFullPageJob(activeJob);
               setSelectedMode(activeJob.mode);
+              if (activeJob.settings.outputFormat !== "pdf") {
+                setSelectedFormat(activeJob.settings.outputFormat);
+              }
             }
           }
         } catch (error) {
@@ -317,7 +360,12 @@ export function App(): React.JSX.Element {
       ? t(locale, "popup.imageOutputHint")
       : t(locale, "popup.pdfOutputHint");
   const selectedModeEnabled = capabilities.modes[selectedMode];
+  const jobSettings = useMemo(
+    () => captureSettingsForOutput(captureSettings, selectedFormat),
+    [captureSettings, selectedFormat],
+  );
   const canCapture =
+    settingsReady &&
     workerStatus === "connected" &&
     tabCapability.status === "supported" &&
     selectedModeEnabled &&
@@ -446,15 +494,15 @@ export function App(): React.JSX.Element {
       const metadata = await startVisibleCapture({
         captureRequestId,
         outputFormat: selectedFormat,
-        quality: IMAGE_QUALITY,
+        quality: captureSettings.imageQuality,
       });
       activeCaptureRequestIdRef.current = undefined;
-      await runExport(metadata.captureId, selectedFormat, IMAGE_QUALITY);
+      await runExport(metadata.captureId, selectedFormat, captureSettings.imageQuality);
     } catch (error) {
       activeCaptureRequestIdRef.current = undefined;
       await handleOperationError(error);
     }
-  }, [handleOperationError, runExport, selectedFormat]);
+  }, [captureSettings.imageQuality, handleOperationError, runExport, selectedFormat]);
 
   const handleFullPageCapture = useCallback(async (): Promise<void> => {
     if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
@@ -467,14 +515,14 @@ export function App(): React.JSX.Element {
       const job = await startFullPageCapture({
         tabId: tabCapability.tabId,
         windowId: tabCapability.windowId,
-        outputFormat: selectedFormat,
+        settings: jobSettings,
       });
       setFullPageJob(job);
       await syncFullPageJob(job.id);
     } catch (error) {
       setUiError(genericErrorCopy(locale, error));
     }
-  }, [locale, selectedFormat, syncFullPageJob, tabCapability.tabId, tabCapability.windowId]);
+  }, [jobSettings, locale, syncFullPageJob, tabCapability.tabId, tabCapability.windowId]);
 
   const handleRegionCapture = useCallback(async (): Promise<void> => {
     if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
@@ -487,14 +535,14 @@ export function App(): React.JSX.Element {
       const job = await startRegionCapture({
         tabId: tabCapability.tabId,
         windowId: tabCapability.windowId,
-        outputFormat: selectedFormat,
+        settings: jobSettings,
       });
       setFullPageJob(job);
       window.close();
     } catch (error) {
       setUiError(genericErrorCopy(locale, error));
     }
-  }, [locale, selectedFormat, tabCapability.tabId, tabCapability.windowId]);
+  }, [jobSettings, locale, tabCapability.tabId, tabCapability.windowId]);
 
   const handleElementCapture = useCallback(async (): Promise<void> => {
     if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
@@ -507,13 +555,13 @@ export function App(): React.JSX.Element {
       const job = await startElementCapture({
         tabId: tabCapability.tabId,
         windowId: tabCapability.windowId,
-        outputFormat: selectedFormat,
+        settings: jobSettings,
       });
       setFullPageJob(job);
     } catch (error) {
       setUiError(genericErrorCopy(locale, error));
     }
-  }, [locale, selectedFormat, tabCapability.tabId, tabCapability.windowId]);
+  }, [jobSettings, locale, tabCapability.tabId, tabCapability.windowId]);
 
   const handleScrollAreaCapture = useCallback(async (): Promise<void> => {
     if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
@@ -526,13 +574,13 @@ export function App(): React.JSX.Element {
       const job = await startScrollAreaCapture({
         tabId: tabCapability.tabId,
         windowId: tabCapability.windowId,
-        outputFormat: selectedFormat,
+        settings: jobSettings,
       });
       setFullPageJob(job);
     } catch (error) {
       setUiError(genericErrorCopy(locale, error));
     }
-  }, [locale, selectedFormat, tabCapability.tabId, tabCapability.windowId]);
+  }, [jobSettings, locale, tabCapability.tabId, tabCapability.windowId]);
 
   const handleCapture = useCallback(async (): Promise<void> => {
     if (!canCapture) {
@@ -675,11 +723,12 @@ export function App(): React.JSX.Element {
       return;
     }
     if (session?.source !== undefined) {
-      await runExport(session.source.captureId, selectedFormat, IMAGE_QUALITY);
+      await runExport(session.source.captureId, selectedFormat, captureSettings.imageQuality);
       return;
     }
     await handleVisibleCapture();
   }, [
+    captureSettings.imageQuality,
     fullPageJob,
     handleFullPageCapture,
     handleRegionCapture,
@@ -855,6 +904,31 @@ export function App(): React.JSX.Element {
     ],
   );
 
+  const handleModeSelect = useCallback(
+    (mode: CaptureMode): void => {
+      setSelectedMode(mode);
+      setSelectedFormat(selectedImageFormat(outputByMode, mode));
+    },
+    [outputByMode],
+  );
+
+  const handleFormatSelect = useCallback(
+    async (format: ImageFormat): Promise<void> => {
+      const previous = selectedFormat;
+      setSelectedFormat(format);
+      setUiError(undefined);
+      try {
+        setOutputByMode(
+          await popupSettingsClient.saveModeOutput(outputByMode, selectedMode, format),
+        );
+      } catch (error) {
+        setSelectedFormat(previous);
+        setUiError(genericErrorCopy(locale, error));
+      }
+    },
+    [locale, outputByMode, selectedFormat, selectedMode],
+  );
+
   const handleCopyDiagnostics = useCallback(async (): Promise<void> => {
     try {
       await copyText(diagnosticsJson);
@@ -1027,7 +1101,7 @@ export function App(): React.JSX.Element {
                 type="button"
                 disabled={!enabled || busy}
                 aria-pressed={selected}
-                onClick={() => setSelectedMode(mode)}
+                onClick={() => handleModeSelect(mode)}
                 key={mode}
               >
                 <span>{t(locale, `popup.mode.${mode}` as MessageKey)}</span>
@@ -1049,7 +1123,7 @@ export function App(): React.JSX.Element {
               aria-label={t(locale, "popup.outputFormat")}
               value={selectedFormat}
               disabled={busy}
-              onChange={(event) => setSelectedFormat(event.target.value as ImageFormat)}
+              onChange={(event) => void handleFormatSelect(event.target.value as ImageFormat)}
             >
               {availableFormats.map((format) => (
                 <option value={format.id} key={format.id}>

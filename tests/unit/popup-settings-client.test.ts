@@ -1,10 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { PopupSettingsClient, selectedImageFormat } from "@popup/settings-client";
-import {
-  DEFAULT_POPUP_PREFERENCES,
-  type ModeOutputPreferences,
-} from "@shared/popup-preferences";
+import { DEFAULT_POPUP_PREFERENCES, type ModeOutputPreferences } from "@shared/popup-preferences";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 
 describe("PopupSettingsClient", () => {

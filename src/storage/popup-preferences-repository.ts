@@ -9,10 +9,7 @@ import {
   type StoredPopupPreferences,
 } from "@shared/popup-preferences";
 import { err, ok, type Result } from "@shared/result";
-import {
-  chromeLocalStorageAdapter,
-  type StorageAreaAdapter,
-} from "@storage/settings-repository";
+import { chromeLocalStorageAdapter, type StorageAreaAdapter } from "@storage/settings-repository";
 
 export interface PopupPreferencesRepositoryPort {
   load(): Promise<Result<StoredPopupPreferences, WebCapErrorData>>;
@@ -89,9 +86,7 @@ export class PopupPreferencesRepository implements PopupPreferencesRepositoryPor
     return this.save(DEFAULT_POPUP_PREFERENCES);
   }
 
-  private async persist(
-    record: StoredPopupPreferences,
-  ): Promise<Result<void, WebCapErrorData>> {
+  private async persist(record: StoredPopupPreferences): Promise<Result<void, WebCapErrorData>> {
     try {
       await this.storage.set({ [POPUP_PREFERENCES_STORAGE_KEY]: record });
       return ok(undefined);

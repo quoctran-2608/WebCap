@@ -16,9 +16,7 @@ export interface CaptureSettingsRepositoryPort {
 }
 
 export interface ModeOutputRepositoryPort {
-  load(): Promise<
-    Result<{ outputByMode: ModeOutputPreferences }, WebCapErrorData>
-  >;
+  load(): Promise<Result<{ outputByMode: ModeOutputPreferences }, WebCapErrorData>>;
   saveOutputByMode(
     outputByMode: ModeOutputPreferences,
   ): Promise<Result<{ outputByMode: ModeOutputPreferences }, WebCapErrorData>>;
