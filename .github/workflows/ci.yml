@@ -58,7 +58,23 @@ jobs:
           new = "def block(value: str) -> str:\n    return value"
           if content.count(old) != 1:
               raise SystemExit("Expected one block helper using dedent")
-          path.write_text(content.replace(old, new))
+          content = content.replace(old, new)
+
+          old_changelog = '''    "### Added\\n\\n",
+              block(
+                  """\\
+          ### Added
+          '''
+          new_changelog = '''    "## [Unreleased]\\n\\n### Added\\n\\n",
+              block(
+                  """\\
+          ## [Unreleased]
+
+          ### Added
+          '''
+          if content.count(old_changelog) != 1:
+              raise SystemExit("Expected one Unreleased changelog insertion marker")
+          path.write_text(content.replace(old_changelog, new_changelog))
           PY
           python .github/scripts/close_s25.py
           pnpm exec prettier --write src/popup/App.tsx src/popup/popup.css tests/e2e/popup-settings-accessibility.spec.ts PLAN.md docs/spec-0.2.0.md README.md CHANGELOG.md
