@@ -405,7 +405,7 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
           error: recoveryError(job),
         },
         {},
-        true,
+        false,
       );
     }
 
