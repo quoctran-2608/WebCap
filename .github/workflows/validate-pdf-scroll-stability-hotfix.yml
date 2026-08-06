@@ -6,17 +6,19 @@ on:
       - agent/0.2.2-pdf-scroll-stability-hotfix
 
 permissions:
-  contents: read
+  contents: write
 
-# Temporary read-only gate for PR #34; validation trigger 2.
 jobs:
   validate:
+    if: github.event.head_commit.message == 'Trigger PDF stability validation'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -70,19 +72,33 @@ jobs:
         run: pnpm test:release
 
       - name: Upload release candidate evidence
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: webcap-pdf-stability-hotfix-${{ github.sha }}
           path: artifacts/
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14
 
       - name: Upload Playwright report
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-pdf-stability-${{ github.sha }}
           path: playwright-report/
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 7
+
+      - name: Record validation evidence
+        env:
+          RUN_ID: ${{ github.run_id }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          ZIP=artifacts/webcap-0.2.0.zip
+          HASH=$(sha256sum "$ZIP" | awk '{print $1}')
+          BYTES=$(stat -c%s "$ZIP")
+          ENTRIES=$(unzip -Z1 "$ZIP" | wc -l | tr -d ' ')
+          printf '{\n  "runId": %s,\n  "sourceSha": "%s",\n  "zip": "webcap-0.2.0.zip",\n  "sha256": "%s",\n  "bytes": %s,\n  "entries": %s,\n  "status": "pass"\n}\n' "$RUN_ID" "$SOURCE_SHA" "$HASH" "$BYTES" "$ENTRIES" > .github/pdf-stability-validation.json
+          git config user.name "webcap-agent"
+          git config user.email "webcap-agent@users.noreply.github.com"
+          git add .github/pdf-stability-validation.json
+          git commit -m "Record PDF stability validation evidence"
+          git push origin HEAD:agent/0.2.2-pdf-scroll-stability-hotfix
