@@ -1,0 +1,87 @@
+name: Validate PDF scroll stability hotfix
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    if: github.event.pull_request.head.ref == 'agent/0.2.2-pdf-scroll-stability-hotfix'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Privacy, dependency, and release audit
+        run: pnpm run audit
+
+      - name: Critical dependency audit
+        run: pnpm audit:security
+
+      - name: Unit tests
+        run: pnpm test:unit
+
+      - name: PDF performance benchmark
+        run: pnpm benchmark:pdf
+
+      - name: Build extension
+        run: pnpm build
+
+      - name: Reproduce and verify release ZIP
+        run: node scripts/verify-reproducible-package.mjs
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Full extension E2E
+        run: pnpm test:e2e
+
+      - name: Packaged lifecycle smoke
+        run: pnpm test:release
+
+      - name: Upload release candidate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: webcap-pdf-stability-hotfix-${{ github.sha }}
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-pdf-stability-${{ github.sha }}
+          path: playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
