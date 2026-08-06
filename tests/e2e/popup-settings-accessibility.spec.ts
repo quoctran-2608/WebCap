@@ -19,11 +19,11 @@ test("@smoke exposes localized keyboard-operable advanced settings and atomic fe
   await expect(popup.getByLabel("Page margin (mm)")).toBeVisible();
 
   const imageQuality = popup.getByTestId("image-quality");
-  await expect(popup.getByLabel("Image quality: 90%")).toBeVisible();
+  await expect(imageQuality).toHaveAccessibleName("Image quality: 90%");
   await imageQuality.focus();
   await popup.keyboard.press("ArrowLeft");
   await expect(imageQuality).toHaveValue("89");
-  await expect(popup.getByLabel("Image quality: 89%")).toBeVisible();
+  await expect(imageQuality).toHaveAccessibleName("Image quality: 89%");
 
   const save = popup.getByRole("button", { name: "Save options" });
   await save.focus();
