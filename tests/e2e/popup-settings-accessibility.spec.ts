@@ -1,6 +1,6 @@
 import { expect, test } from "./extension.fixture";
 
-test("@smoke exposes localized keyboard-operable advanced settings and atomic feedback", async ({
+test("@smoke keeps the main CTA ahead of localized keyboard-operable settings and help", async ({
   openPopup,
 }) => {
   const popup = await openPopup();
