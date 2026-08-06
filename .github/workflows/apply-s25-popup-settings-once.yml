@@ -39,7 +39,7 @@ jobs:
           pnpm exec prettier --write src/popup/App.tsx src/popup/capture-settings.ts src/popup/full-page-client.ts src/popup/settings-client.ts src/shared/constants.ts src/shared/popup-preferences.ts src/storage/popup-preferences-repository.ts src/storage/settings-repository.ts tests/unit/capture-settings.test.ts tests/unit/popup-preferences-repository.test.ts tests/unit/popup-settings-client.test.ts
           pnpm lint
           pnpm typecheck
-          pnpm test:unit -- --run tests/unit/capture-settings.test.ts tests/unit/popup-preferences-repository.test.ts tests/unit/popup-settings-client.test.ts tests/unit/settings-repository.test.ts
+          pnpm exec vitest run tests/unit/capture-settings.test.ts tests/unit/popup-preferences-repository.test.ts tests/unit/popup-settings-client.test.ts tests/unit/settings-repository.test.ts
       - name: Commit clean phase 2 candidate
         run: |
           git rm scripts/apply-s25-popup-settings.py .github/workflows/apply-s25-popup-settings-once.yml
