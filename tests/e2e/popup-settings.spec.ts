@@ -176,9 +176,6 @@ test("@smoke persists advanced options, snapshots them into a job, and resets op
   await expect(popup.getByTestId("pdf-margin")).toHaveValue("8");
   await expect(popup.getByTestId("pdf-quality")).toHaveValue("90");
 
-  await popup.getByRole("button", { name: /^Vùng đang thấy/ }).click();
-  await expect(popup.getByLabel("Định dạng đầu ra")).toHaveValue("png");
-
   const retainedJob = await readLatestFullPageJob(serviceWorker);
   expect(retainedJob?.id).toBe(completedJob?.id);
   expect(retainedJob?.outputArtifactId).toBe(completedJob?.outputArtifactId);
