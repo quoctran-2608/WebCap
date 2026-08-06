@@ -1,6 +1,8 @@
 export const PROTOCOL_VERSION = 1 as const;
 export const SETTINGS_SCHEMA_VERSION = 1 as const;
 export const SETTINGS_STORAGE_KEY = "webcap.settings" as const;
+export const POPUP_PREFERENCES_SCHEMA_VERSION = 1 as const;
+export const POPUP_PREFERENCES_STORAGE_KEY = "webcap.popup-preferences" as const;
 export const VISIBLE_SESSION_STORAGE_KEY = "webcap.visible-session" as const;
 export const JOB_SESSION_STORAGE_KEY = "webcap.jobs.session" as const;
 

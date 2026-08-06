@@ -5,7 +5,7 @@ import {
   isCaptureResetResponse,
   type CaptureResetReport,
 } from "@shared/contracts/capture-reset";
-import type { CaptureJob, CaptureSettings, ImageFormat } from "@shared/contracts/domain";
+import type { CaptureJob, CaptureSettings } from "@shared/contracts/domain";
 import {
   createJobCancelMessage,
   createJobCreateMessage,
@@ -16,7 +16,6 @@ import {
   isJobResponseMessage,
 } from "@shared/contracts/job-messages";
 import { isErrorResponseMessage } from "@shared/contracts/messages";
-import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 
 function rejectAfter(timeoutMs: number): Promise<never> {
   return new Promise((_, reject) => {
@@ -52,7 +51,7 @@ async function sendJobRequest(
 function startTiledCapture(options: {
   tabId: number;
   windowId: number;
-  outputFormat: ImageFormat;
+  settings: CaptureSettings;
   mode: "full-page" | "region" | "element" | "scroll-area";
 }): Promise<CaptureJob> {
   return sendJobRequest(
@@ -64,10 +63,7 @@ function startTiledCapture(options: {
       mode: options.mode,
       preferredEngine:
         options.mode === "full-page" || options.mode === "scroll-area" ? "scroll" : "cdp",
-      settings: {
-        ...DEFAULT_CAPTURE_SETTINGS,
-        outputFormat: options.outputFormat,
-      },
+      settings: options.settings,
     }),
   );
 }
@@ -75,7 +71,7 @@ function startTiledCapture(options: {
 export function startFullPageCapture(options: {
   tabId: number;
   windowId: number;
-  outputFormat: ImageFormat;
+  settings: CaptureSettings;
 }): Promise<CaptureJob> {
   return startTiledCapture({ ...options, mode: "full-page" });
 }
@@ -83,7 +79,7 @@ export function startFullPageCapture(options: {
 export function startRegionCapture(options: {
   tabId: number;
   windowId: number;
-  outputFormat: ImageFormat;
+  settings: CaptureSettings;
 }): Promise<CaptureJob> {
   return startTiledCapture({ ...options, mode: "region" });
 }
@@ -91,7 +87,7 @@ export function startRegionCapture(options: {
 export function startElementCapture(options: {
   tabId: number;
   windowId: number;
-  outputFormat: ImageFormat;
+  settings: CaptureSettings;
 }): Promise<CaptureJob> {
   return startTiledCapture({ ...options, mode: "element" });
 }
@@ -99,7 +95,7 @@ export function startElementCapture(options: {
 export function startScrollAreaCapture(options: {
   tabId: number;
   windowId: number;
-  outputFormat: ImageFormat;
+  settings: CaptureSettings;
 }): Promise<CaptureJob> {
   return startTiledCapture({ ...options, mode: "scroll-area" });
 }

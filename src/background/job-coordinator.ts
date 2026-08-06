@@ -6,7 +6,7 @@ import type {
   CaptureSettings,
   JobState,
 } from "@shared/contracts/domain";
-import { summarizeJob, type TabJobLock } from "@shared/contracts/job";
+import { summarizeJob, type JobSummary, type TabJobLock } from "@shared/contracts/job";
 import {
   createWebCapError,
   createWebCapRuntimeError,
@@ -15,6 +15,7 @@ import {
 import { normalizeError } from "@shared/errors/normalize-error";
 import type { JobArtifactCleanupPort } from "@storage/job-artifact-cleanup-repository";
 import type { CaptureOwnedDataCleanupPort } from "./capture-data-cleanup-service";
+import type { JobSummaryEventPublisherPort } from "./job-event-publisher";
 import { createCaptureCompletionPolicy } from "./capture-completion-policy";
 import type { JobRepositoryPort } from "@storage/job-repository";
 import type { JobSessionRepositoryPort } from "@storage/job-session-repository";
@@ -82,6 +83,7 @@ export interface PersistentJobCoordinatorOptions {
   artifacts: JobArtifactCleanupPort;
   cleanup?: JobCleanupPort;
   ownedDataCleanup?: CaptureOwnedDataCleanupPort;
+  events?: JobSummaryEventPublisherPort;
   now?: () => Date;
   idFactory?: () => string;
 }
@@ -167,6 +169,7 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
   private readonly artifacts: JobArtifactCleanupPort;
   private readonly cleanup: JobCleanupPort;
   private readonly ownedDataCleanup: CaptureOwnedDataCleanupPort | undefined;
+  private readonly events: JobSummaryEventPublisherPort | undefined;
   private readonly now: () => Date;
   private readonly idFactory: () => string;
   private initializationPromise: Promise<void> | undefined;
@@ -178,6 +181,7 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
     this.artifacts = options.artifacts;
     this.cleanup = options.cleanup ?? noOpCleanup;
     this.ownedDataCleanup = options.ownedDataCleanup;
+    this.events = options.events;
     this.now = options.now ?? (() => new Date());
     this.idFactory = options.idFactory ?? (() => crypto.randomUUID());
   }
@@ -231,7 +235,9 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
 
     try {
       await this.jobs.create(job);
-      await this.sessions.saveSummary(summarizeJob(job));
+      const summary = summarizeJob(job);
+      await this.sessions.saveSummary(summary);
+      await this.publishSummary(summary);
       return job;
     } catch (error) {
       await Promise.allSettled([
@@ -399,7 +405,7 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
           error: recoveryError(job),
         },
         {},
-        true,
+        false,
       );
     }
 
@@ -499,9 +505,11 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
   }
 
   private async syncSession(job: CaptureJob): Promise<void> {
-    await this.sessions.saveSummary(summarizeJob(job));
+    const summary = summarizeJob(job);
+    await this.sessions.saveSummary(summary);
     if (isTerminalJobState(job.state)) {
       await this.sessions.releaseTabLock(job.tabId, job.id);
+      await this.publishSummary(summary);
       return;
     }
 
@@ -512,6 +520,15 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
     );
     if (!acquired) {
       throw activeJobConflict(job.tabId, job.id);
+    }
+    await this.publishSummary(summary);
+  }
+
+  private async publishSummary(summary: JobSummary): Promise<void> {
+    try {
+      await this.events?.publish(summary);
+    } catch {
+      // Durable session state remains authoritative when no popup listener exists.
     }
   }
 

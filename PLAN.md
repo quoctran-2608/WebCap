@@ -2,7 +2,7 @@
 product: WebCap
 document: Active Implementation Plan
 version: 1.1
-date: 2026-08-05
+date: 2026-08-06
 status: Active
 repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
@@ -10,14 +10,14 @@ prd: ./PRD_WebCap_v1.1.md
 spec: ./docs/spec-0.2.0.md
 audit: ./docs/audits/0.1.0-gap-audit.md
 release_target: 0.2.0
-current_session: S25
+current_session: S26
 ---
 
 # WebCap — Implementation plan 0.2.0
 
 Roadmap `S00–S20` đã tạo release candidate 0.1.0. Roadmap mới `S21–S26` xử lý các khoảng trống thực tế: reset/chụp mới, region drawing có thể nhìn thấy và sử dụng được, adaptive auto-scroll, auto-PDF/output routing, settings/UI/progress và hardening release.
 
-S21–S24 đã hoàn tất reset lifecycle, region selector đáng tin cậy, adaptive auto-scroll có resumable frontier và mode-aware output mà không thay manifest, package version hoặc artifact 0.1.0. S25 là session active tiếp theo.
+S21–S25 đã hoàn tất reset lifecycle, region selector đáng tin cậy, adaptive auto-scroll có resumable frontier, mode-aware output, stored settings, event-driven progress và simplified popup mà không thay manifest, package version hoặc artifact 0.1.0. S26 là session active tiếp theo.
 
 # 1. Nguồn sự thật
 
@@ -58,8 +58,8 @@ S21–S24 đã hoàn tất reset lifecycle, region selector đáng tin cậy, ad
 | S22 | Region drawing launch, interaction và accessibility | DONE | S21 cleanup primitive |
 | S23 | Adaptive auto-scroll và resumable frontier | DONE | S21–S22 |
 | S24 | Auto-PDF và mode-aware image/PDF output | DONE | S23 |
-| S25 | Stored settings, event-driven progress và simplified popup | PLANNED | S21–S24 stable contracts |
-| S26 | Gap closure hardening, migration, docs và RC 0.2.0 | BLOCKED | S21–S25 |
+| S25 | Stored settings, event-driven progress và simplified popup | DONE | S21–S24 stable contracts |
+| S26 | Gap closure hardening, migration, docs và RC 0.2.0 | PLANNED | S21–S25 |
 
 # 5. S21 — Reset lifecycle và “Chụp mới”
 
@@ -332,6 +332,25 @@ Move out of main flow: worker/version, engine, raw tiles, checksum, milestones, 
 - Main CTA rõ ở idle/result.
 - Không mất capability 0.1.0.
 
+## S25 implementation evidence
+
+- `SettingsRepository` được load/migrate trước khi capture có thể bắt đầu; visible và mọi tiled mode dùng snapshot đã validate thay vì hard-coded defaults.
+- Output preference được lưu riêng theo visible/full-page/region/element/scroll-area; image quality, PDF page size/orientation/margin/quality và fixed/sticky policy tồn tại qua popup reopen.
+- “Đặt lại tùy chọn” chỉ reset capture preferences, không xóa job, tile, artifact, locale hoặc downloaded files.
+- Popup nhận `JOB_SUMMARY_CHANGED` theo tab/job/revision và chỉ authoritative-fetch revision mới; polling 350 ms được thay bằng reconciliation 7,5 giây khi busy.
+- Coordinator phát đúng một summary event cho mỗi revision qua update, cancellation và worker recovery; interrupted recovery không còn duplicate failed event.
+- Main flow mặc định không hiển thị version, milestone, engine, checksum hoặc raw tile count. Technical status nằm trong disclosure; CTA đứng trước Advanced options và settings chỉ xuất hiện khi idle hoặc terminal, không xuất hiện khi busy.
+- Keyboard/browser coverage khóa English localization, range controls, save/reset feedback atomic, disclosure order, privacy help và action recovery.
+- Final clean gate: formatting, ESLint, strict TypeScript, privacy/dependency/release/critical-security audits, 344/344 unit tests trên 99 files, 4/4 PDF benchmarks, verified Manifest V3 build, reproducible 25-entry package, 51/51 Playwright E2E và packaged lifecycle smoke đều PASS.
+
+## S25 exit disposition
+
+- AC-28: PASS — default popup thu gọn worker/version/tab status và không hiển thị milestone, engine, checksum hoặc raw tile count trong main flow.
+- AC-29: PASS — advanced settings, help/privacy disclosures và actions có native keyboard semantics; localized live feedback dùng polite atomic status.
+- AC-35: PASS — stored format/quality/PDF/fixed-sticky settings được snapshot vào job và tồn tại qua popup reopen; options reset có ownership riêng.
+- AC-37: PASS — runtime event cập nhật progress theo revision; 7,5-second authoritative reconciliation chỉ là fallback, không còn continuous 350 ms polling.
+- S26 được mở khóa và trở thành active session cho gap closure, migration, release docs và RC 0.2.0.
+
 # 10. S26 — Hardening, gap closure và release candidate
 
 ## Mục tiêu
@@ -397,10 +416,10 @@ S21 Reset/cleanup
 
 # 13. Current session handoff
 
-**Current session: S23 — Adaptive auto-scroll và resumable frontier.**
+**Current session: S26 — Hardening, gap closure và release candidate 0.2.0.**
 
-1. Bắt đầu từ baseline S22 đã merge.
-2. Viết frontier/stable-end contracts và persistence trước engine/UI.
-3. Kiểm thử actual-browser 30k/100k/>100k, finite lazy growth, infinite guard và worker restart.
-4. Giữ nguyên S21 cleanup và S22 selector semantics.
-5. Không kéo S24 output routing hoặc S25 popup redesign vào scope S23.
+1. Bắt đầu từ baseline S21–S25 đã merge và giữ nguyên semantics reset/selector/adaptive/output/settings/events.
+2. Rà `docs/audits/0.1.0-gap-audit.md`, acceptance AC-01–AC-40 và đóng mọi MUST/SHOULD bằng evidence hoặc disposition rõ.
+3. Kiểm thử migration 0.1.0 → 0.2.0, compatibility matrix, deterministic package và packaged lifecycle trên các target đã định.
+4. Chỉ bump package/manifest lên 0.2.0 trong S26; không thêm permission, backend, telemetry hoặc remote executable code.
+5. Không tag, tạo GitHub Release, upload Chrome Web Store hoặc publish nếu chưa có approval riêng.

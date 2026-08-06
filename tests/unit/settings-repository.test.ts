@@ -47,6 +47,27 @@ describe("SettingsRepository", () => {
     expect(storage.writes).toBe(0);
   });
 
+  it("resets capture options without removing unrelated local data", async () => {
+    const storage = new MemoryStorage();
+    storage.data.other = { preserved: true };
+    const repository = new SettingsRepository(storage);
+    await repository.save({
+      ...DEFAULT_CAPTURE_SETTINGS,
+      imageQuality: 0.64,
+      fixedElementMode: "remove",
+    });
+
+    await expect(repository.reset()).resolves.toEqual({
+      ok: true,
+      value: DEFAULT_CAPTURE_SETTINGS,
+    });
+    expect(storage.data.other).toEqual({ preserved: true });
+    expect(storage.data[SETTINGS_STORAGE_KEY]).toEqual({
+      schemaVersion: 1,
+      settings: DEFAULT_CAPTURE_SETTINGS,
+    });
+  });
+
   it("normalizes storage write failures", async () => {
     const storage: StorageAreaAdapter = {
       get: () => Promise.resolve({}),

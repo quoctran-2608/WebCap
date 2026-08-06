@@ -10,6 +10,7 @@ import {
 import { createChromeTabsAdapter } from "@background/chrome-tabs-adapter";
 import { DebuggerClient } from "@background/debugger-client";
 import { FullPageCaptureCoordinator } from "@background/full-page-capture-coordinator";
+import { ChromeJobSummaryEventPublisher } from "@background/job-event-publisher";
 import { ModeAwareCaptureCoordinator } from "@background/mode-aware-capture-coordinator";
 import { createChromePagePreparationAdapter } from "@background/page-preparation-adapter";
 import { PagePreparationService } from "@background/page-preparation-service";
@@ -187,6 +188,7 @@ export function getPersistentJobRouterDependencies(): PersistentJobRouterDepende
     tiles,
     artifacts: jobArtifacts,
     ownedDataCleanup,
+    events: new ChromeJobSummaryEventPublisher(),
     cleanup: {
       async cleanup(job) {
         if (job.mode === "scroll-area") {

@@ -3,7 +3,7 @@ import { CaptureSettingsSchema, type CaptureSettings } from "@shared/contracts/d
 import { createWebCapError, type WebCapErrorData } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
 import { err, ok, type Result } from "@shared/result";
-import { migrateSettings, type StoredSettings } from "@shared/settings";
+import { DEFAULT_CAPTURE_SETTINGS, migrateSettings, type StoredSettings } from "@shared/settings";
 
 export interface StorageAreaAdapter {
   get(key: string): Promise<Record<string, unknown>>;
@@ -67,6 +67,10 @@ export class SettingsRepository {
     const record: StoredSettings = { schemaVersion: 1, settings: parsed.data };
     const persisted = await this.persistRecord(record);
     return persisted.ok ? ok(parsed.data) : persisted;
+  }
+
+  reset(): Promise<Result<CaptureSettings, WebCapErrorData>> {
+    return this.save(DEFAULT_CAPTURE_SETTINGS);
   }
 
   private async persistRecord(record: StoredSettings): Promise<Result<void, WebCapErrorData>> {

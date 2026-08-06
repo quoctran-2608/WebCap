@@ -5,7 +5,13 @@ import iconData from "../../assets/icons.json";
 import { FOUNDATION_CAPABILITIES, type CaptureCapabilities } from "@shared/capabilities";
 import { copyText } from "@shared/clipboard";
 import { serializeSafeDiagnostics } from "@shared/diagnostics";
-import type { CaptureJob, CaptureMode, ImageFormat, OutputFormat } from "@shared/contracts/domain";
+import type {
+  CaptureJob,
+  CaptureMode,
+  CaptureSettings,
+  ImageFormat,
+  OutputFormat,
+} from "@shared/contracts/domain";
 import type { TabCapabilityPayload } from "@shared/contracts/messages";
 import { WebCapRuntimeError, type WebCapErrorCode } from "@shared/errors/error";
 import { errorPresentation, t, type MessageKey, type UiLocale } from "@shared/i18n";
@@ -15,11 +21,20 @@ import type {
   VisibleSessionSnapshot,
   VisibleSessionStatus,
 } from "@shared/contracts/visible-session";
+import {
+  DEFAULT_MODE_OUTPUT_PREFERENCES,
+  type ModeOutputPreferences,
+} from "@shared/popup-preferences";
+import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 
+import { AdvancedSettingsPanel } from "./AdvancedSettingsPanel";
 import { createArtifactPreview } from "./artifact-preview";
+import { captureSettingsForOutput } from "./capture-settings";
 import { downloadOriginalPdf, inspectPdfSource } from "./pdf-source-client";
 import { requestPdfSourcePermission } from "./pdf-source-permission";
 import { estimateOutputBytes, formatBytes } from "./formatting";
+import { shouldRefreshJobFromSummary, subscribeToJobSummaryChanges } from "./job-events-client";
+import { PopupSettingsClient, selectedImageFormat } from "./settings-client";
 import {
   cancelFullPageCapture,
   getActiveCaptureJob,
@@ -47,8 +62,8 @@ const CAPTURE_MODE_IDS = ["visible", "full-page", "region", "element", "scroll-a
 
 const OUTPUT_FORMATS: ReadonlyArray<OutputFormat> = ["png", "jpeg", "webp", "pdf"];
 
-const IMAGE_QUALITY = 0.92;
-const SESSION_POLL_MS = 350;
+const RECONCILIATION_POLL_MS = 7_500;
+const popupSettingsClient = new PopupSettingsClient();
 
 type WorkerStatus = "checking" | "connected" | "unavailable";
 type UiStatus = VisibleSessionStatus | "idle";
@@ -171,6 +186,13 @@ export function App(): React.JSX.Element {
   });
   const [selectedMode, setSelectedMode] = useState<CaptureMode>("visible");
   const [selectedFormat, setSelectedFormat] = useState<ImageFormat>("png");
+  const [captureSettings, setCaptureSettings] = useState<CaptureSettings>(DEFAULT_CAPTURE_SETTINGS);
+  const [outputByMode, setOutputByMode] = useState<ModeOutputPreferences>(
+    DEFAULT_MODE_OUTPUT_PREFERENCES,
+  );
+  const [settingsReady, setSettingsReady] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsNotice, setSettingsNotice] = useState<string>();
   const [session, setSession] = useState<VisibleSessionSnapshot>();
   const [fullPageJob, setFullPageJob] = useState<CaptureJob>();
   const [localStatus, setLocalStatus] = useState<UiStatus>("idle");
@@ -204,6 +226,28 @@ export function App(): React.JSX.Element {
     setFullPageJob(current);
     return current;
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    void popupSettingsClient
+      .load()
+      .then((snapshot) => {
+        if (!active) return;
+        setCaptureSettings(snapshot.capture);
+        setOutputByMode(snapshot.outputByMode);
+        setSelectedFormat(selectedImageFormat(snapshot.outputByMode, "visible"));
+        setSettingsReady(true);
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setSettingsReady(false);
+        setUiError(genericErrorCopy(locale, error));
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [locale]);
 
   useEffect(() => {
     let active = true;
@@ -245,6 +289,9 @@ export function App(): React.JSX.Element {
             ) {
               setFullPageJob(activeJob);
               setSelectedMode(activeJob.mode);
+              if (activeJob.settings.outputFormat !== "pdf") {
+                setSelectedFormat(activeJob.settings.outputFormat);
+              }
             }
           }
         } catch (error) {
@@ -317,11 +364,20 @@ export function App(): React.JSX.Element {
       ? t(locale, "popup.imageOutputHint")
       : t(locale, "popup.pdfOutputHint");
   const selectedModeEnabled = capabilities.modes[selectedMode];
+  const jobSettings = useMemo(
+    () => captureSettingsForOutput(captureSettings, selectedFormat),
+    [captureSettings, selectedFormat],
+  );
   const canCapture =
+    settingsReady &&
     workerStatus === "connected" &&
     tabCapability.status === "supported" &&
     selectedModeEnabled &&
     !busy;
+  const showAdvancedSettings =
+    settingsReady &&
+    !busy &&
+    (tiledMode ? fullPageJob === undefined || terminal : status === "idle" || terminal);
 
   useEffect(() => {
     if (!visibleBusy || selectedMode !== "visible") {
@@ -330,7 +386,7 @@ export function App(): React.JSX.Element {
 
     const timer = globalThis.setInterval(() => {
       void syncSession().catch(() => undefined);
-    }, SESSION_POLL_MS);
+    }, RECONCILIATION_POLL_MS);
 
     return () => {
       globalThis.clearInterval(timer);
@@ -338,20 +394,50 @@ export function App(): React.JSX.Element {
   }, [selectedMode, syncSession, visibleBusy]);
 
   useEffect(() => {
+    if (
+      workerStatus !== "connected" ||
+      tabCapability.tabId === undefined ||
+      fullPageJob === undefined
+    ) {
+      return;
+    }
+
+    const tabId = tabCapability.tabId;
+    const jobId = fullPageJob.id;
+    let latestRevision = fullPageJob.stateRevision;
+    return subscribeToJobSummaryChanges((summary) => {
+      if (
+        !shouldRefreshJobFromSummary(summary, {
+          tabId,
+          jobId,
+          stateRevision: latestRevision,
+        })
+      ) {
+        return;
+      }
+      latestRevision = summary.stateRevision;
+      void syncFullPageJob(jobId).catch((error: unknown) => {
+        setUiError(genericErrorCopy(locale, error));
+      });
+    });
+  }, [fullPageJob, locale, syncFullPageJob, tabCapability.tabId, workerStatus]);
+
+  useEffect(() => {
     if (!fullPageBusy || fullPageJob === undefined) {
       return;
     }
 
+    const jobId = fullPageJob.id;
     const timer = globalThis.setInterval(() => {
-      void syncFullPageJob(fullPageJob.id).catch((error: unknown) => {
+      void syncFullPageJob(jobId).catch((error: unknown) => {
         setUiError(genericErrorCopy(locale, error));
       });
-    }, SESSION_POLL_MS);
+    }, RECONCILIATION_POLL_MS);
 
     return () => {
       globalThis.clearInterval(timer);
     };
-  }, [fullPageBusy, fullPageJob, locale, syncFullPageJob]);
+  }, [fullPageBusy, fullPageJob?.id, locale, syncFullPageJob]);
 
   useEffect(() => {
     if (terminal) {
@@ -446,15 +532,15 @@ export function App(): React.JSX.Element {
       const metadata = await startVisibleCapture({
         captureRequestId,
         outputFormat: selectedFormat,
-        quality: IMAGE_QUALITY,
+        quality: captureSettings.imageQuality,
       });
       activeCaptureRequestIdRef.current = undefined;
-      await runExport(metadata.captureId, selectedFormat, IMAGE_QUALITY);
+      await runExport(metadata.captureId, selectedFormat, captureSettings.imageQuality);
     } catch (error) {
       activeCaptureRequestIdRef.current = undefined;
       await handleOperationError(error);
     }
-  }, [handleOperationError, runExport, selectedFormat]);
+  }, [captureSettings.imageQuality, handleOperationError, runExport, selectedFormat]);
 
   const handleFullPageCapture = useCallback(async (): Promise<void> => {
     if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
@@ -467,14 +553,14 @@ export function App(): React.JSX.Element {
       const job = await startFullPageCapture({
         tabId: tabCapability.tabId,
         windowId: tabCapability.windowId,
-        outputFormat: selectedFormat,
+        settings: jobSettings,
       });
       setFullPageJob(job);
       await syncFullPageJob(job.id);
     } catch (error) {
       setUiError(genericErrorCopy(locale, error));
     }
-  }, [locale, selectedFormat, syncFullPageJob, tabCapability.tabId, tabCapability.windowId]);
+  }, [jobSettings, locale, syncFullPageJob, tabCapability.tabId, tabCapability.windowId]);
 
   const handleRegionCapture = useCallback(async (): Promise<void> => {
     if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
@@ -487,14 +573,14 @@ export function App(): React.JSX.Element {
       const job = await startRegionCapture({
         tabId: tabCapability.tabId,
         windowId: tabCapability.windowId,
-        outputFormat: selectedFormat,
+        settings: jobSettings,
       });
       setFullPageJob(job);
       window.close();
     } catch (error) {
       setUiError(genericErrorCopy(locale, error));
     }
-  }, [locale, selectedFormat, tabCapability.tabId, tabCapability.windowId]);
+  }, [jobSettings, locale, tabCapability.tabId, tabCapability.windowId]);
 
   const handleElementCapture = useCallback(async (): Promise<void> => {
     if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
@@ -507,13 +593,13 @@ export function App(): React.JSX.Element {
       const job = await startElementCapture({
         tabId: tabCapability.tabId,
         windowId: tabCapability.windowId,
-        outputFormat: selectedFormat,
+        settings: jobSettings,
       });
       setFullPageJob(job);
     } catch (error) {
       setUiError(genericErrorCopy(locale, error));
     }
-  }, [locale, selectedFormat, tabCapability.tabId, tabCapability.windowId]);
+  }, [jobSettings, locale, tabCapability.tabId, tabCapability.windowId]);
 
   const handleScrollAreaCapture = useCallback(async (): Promise<void> => {
     if (tabCapability.tabId === undefined || tabCapability.windowId === undefined) {
@@ -526,13 +612,13 @@ export function App(): React.JSX.Element {
       const job = await startScrollAreaCapture({
         tabId: tabCapability.tabId,
         windowId: tabCapability.windowId,
-        outputFormat: selectedFormat,
+        settings: jobSettings,
       });
       setFullPageJob(job);
     } catch (error) {
       setUiError(genericErrorCopy(locale, error));
     }
-  }, [locale, selectedFormat, tabCapability.tabId, tabCapability.windowId]);
+  }, [jobSettings, locale, tabCapability.tabId, tabCapability.windowId]);
 
   const handleCapture = useCallback(async (): Promise<void> => {
     if (!canCapture) {
@@ -675,11 +761,12 @@ export function App(): React.JSX.Element {
       return;
     }
     if (session?.source !== undefined) {
-      await runExport(session.source.captureId, selectedFormat, IMAGE_QUALITY);
+      await runExport(session.source.captureId, selectedFormat, captureSettings.imageQuality);
       return;
     }
     await handleVisibleCapture();
   }, [
+    captureSettings.imageQuality,
     fullPageJob,
     handleFullPageCapture,
     handleRegionCapture,
@@ -855,6 +942,63 @@ export function App(): React.JSX.Element {
     ],
   );
 
+  const handleModeSelect = useCallback(
+    (mode: CaptureMode): void => {
+      setSelectedMode(mode);
+      setSelectedFormat(selectedImageFormat(outputByMode, mode));
+    },
+    [outputByMode],
+  );
+
+  const handleFormatSelect = useCallback(
+    async (format: ImageFormat): Promise<void> => {
+      const previous = selectedFormat;
+      setSelectedFormat(format);
+      setUiError(undefined);
+      try {
+        setOutputByMode(
+          await popupSettingsClient.saveModeOutput(outputByMode, selectedMode, format),
+        );
+      } catch (error) {
+        setSelectedFormat(previous);
+        setUiError(genericErrorCopy(locale, error));
+      }
+    },
+    [locale, outputByMode, selectedFormat, selectedMode],
+  );
+
+  const handleSaveCaptureSettings = useCallback(
+    async (next: CaptureSettings): Promise<void> => {
+      setSettingsSaving(true);
+      setSettingsNotice(undefined);
+      try {
+        setCaptureSettings(await popupSettingsClient.saveCapture(next));
+        setSettingsNotice(t(locale, "popup.settings.saved"));
+      } catch (error) {
+        setSettingsNotice(genericErrorCopy(locale, error));
+      } finally {
+        setSettingsSaving(false);
+      }
+    },
+    [locale],
+  );
+
+  const handleResetOptions = useCallback(async (): Promise<void> => {
+    setSettingsSaving(true);
+    setSettingsNotice(undefined);
+    try {
+      const snapshot = await popupSettingsClient.reset();
+      setCaptureSettings(snapshot.capture);
+      setOutputByMode(snapshot.outputByMode);
+      setSelectedFormat(selectedImageFormat(snapshot.outputByMode, selectedMode));
+      setSettingsNotice(t(locale, "popup.settings.resetDone"));
+    } catch (error) {
+      setSettingsNotice(genericErrorCopy(locale, error));
+    } finally {
+      setSettingsSaving(false);
+    }
+  }, [locale, selectedMode]);
+
   const handleCopyDiagnostics = useCallback(async (): Promise<void> => {
     try {
       await copyText(diagnosticsJson);
@@ -880,33 +1024,36 @@ export function App(): React.JSX.Element {
         </div>
       </header>
 
-      <section className="status-card" aria-label={t(locale, "popup.extensionStatus")}>
-        <div className="status-row">
-          <span>{t(locale, "popup.workerLabel")}</span>
-          <strong
-            className={`status status--${workerStatus}`}
-            data-testid="worker-status"
-            data-status={workerStatus}
-          >
-            <span className="status__dot" aria-hidden="true" />
-            {workerStatusCopy(locale, workerStatus)}
-          </strong>
-        </div>
-        <div className="status-row">
-          <span>{t(locale, "popup.version")}</span>
-          <strong>{workerVersion ?? chrome.runtime.getManifest().version}</strong>
-        </div>
-        <div className="status-row">
-          <span>{t(locale, "popup.currentTab")}</span>
-          <strong
-            className={`status status--${tabCapability.status === "supported" ? "connected" : "pending"}`}
-            data-testid="tab-status"
-            data-status={tabCapability.status}
-          >
-            {tabStatusCopy(locale, tabCapability.status)}
-          </strong>
-        </div>
-      </section>
+      <details className="status-details" data-testid="extension-status-details">
+        <summary>{t(locale, "popup.extensionStatus")}</summary>
+        <section className="status-card" aria-label={t(locale, "popup.extensionStatus")}>
+          <div className="status-row">
+            <span>{t(locale, "popup.workerLabel")}</span>
+            <strong
+              className={`status status--${workerStatus}`}
+              data-testid="worker-status"
+              data-status={workerStatus}
+            >
+              <span className="status__dot" aria-hidden="true" />
+              {workerStatusCopy(locale, workerStatus)}
+            </strong>
+          </div>
+          <div className="status-row">
+            <span>{t(locale, "popup.version")}</span>
+            <strong>{workerVersion ?? chrome.runtime.getManifest().version}</strong>
+          </div>
+          <div className="status-row">
+            <span>{t(locale, "popup.currentTab")}</span>
+            <strong
+              className={`status status--${tabCapability.status === "supported" ? "connected" : "pending"}`}
+              data-testid="tab-status"
+              data-status={tabCapability.status}
+            >
+              {tabStatusCopy(locale, tabCapability.status)}
+            </strong>
+          </div>
+        </section>
+      </details>
 
       {tabCapability.status === "unsupported" && (
         <p className="restricted-page-notice" role="status" data-testid="restricted-page-copy">
@@ -934,7 +1081,6 @@ export function App(): React.JSX.Element {
                     : pdfCapabilityCopy(locale, pdfCapability).title}
               </h2>
             </div>
-            <span className="planned-badge">S17</span>
           </div>
 
           {pdfCapability !== undefined && (
@@ -1012,9 +1158,6 @@ export function App(): React.JSX.Element {
             <p className="section-heading__eyebrow">{t(locale, "popup.captureModeEyebrow")}</p>
             <h2 id="capture-title">{t(locale, `popup.title.${selectedMode}` as MessageKey)}</h2>
           </div>
-          <span className="planned-badge">
-            {selectedMode === "visible" ? "M1" : selectedMode === "scroll-area" ? "S16" : "S14"}
-          </span>
         </div>
 
         <div className="mode-grid" aria-label={t(locale, "popup.captureModes")}>
@@ -1027,7 +1170,7 @@ export function App(): React.JSX.Element {
                 type="button"
                 disabled={!enabled || busy}
                 aria-pressed={selected}
-                onClick={() => setSelectedMode(mode)}
+                onClick={() => handleModeSelect(mode)}
                 key={mode}
               >
                 <span>{t(locale, `popup.mode.${mode}` as MessageKey)}</span>
@@ -1049,7 +1192,7 @@ export function App(): React.JSX.Element {
               aria-label={t(locale, "popup.outputFormat")}
               value={selectedFormat}
               disabled={busy}
-              onChange={(event) => setSelectedFormat(event.target.value as ImageFormat)}
+              onChange={(event) => void handleFormatSelect(event.target.value as ImageFormat)}
             >
               {availableFormats.map((format) => (
                 <option value={format.id} key={format.id}>
@@ -1109,10 +1252,7 @@ export function App(): React.JSX.Element {
             {fullPageBusy && <span className="progress-card__spinner" aria-hidden="true" />}
             <div>
               <strong>{tiledStatusCopy(locale, fullPageJob)}</strong>
-              <small>
-                {fullPageJob.completedTiles}/{fullPageJob.totalTiles || "?"} tile ·{" "}
-                {fullPageProgress}%
-              </small>
+              <small>{fullPageProgress}%</small>
               <progress
                 value={fullPageJob.completedTiles}
                 max={Math.max(1, fullPageJob.totalTiles)}
@@ -1449,6 +1589,18 @@ export function App(): React.JSX.Element {
           <p className="feedback feedback--success" role="status" data-testid="reset-success">
             {resetNotice}
           </p>
+        )}
+
+        {showAdvancedSettings && (
+          <AdvancedSettingsPanel
+            locale={locale}
+            settings={captureSettings}
+            busy={busy}
+            saving={settingsSaving}
+            notice={settingsNotice}
+            onSave={handleSaveCaptureSettings}
+            onReset={handleResetOptions}
+          />
         )}
       </section>
 

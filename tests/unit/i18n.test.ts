@@ -29,6 +29,17 @@ describe("UI localization", () => {
     expect(t("en", "popup.exportPdfFallback")).toBe("Switch to PDF without recapturing");
   });
 
+  it("keeps advanced settings and reset isolation clear in both locales", () => {
+    expect(t("vi", "popup.settings.summary")).toBe("Tùy chọn nâng cao");
+    expect(t("en", "popup.settings.summary")).toBe("Advanced options");
+    expect(t("vi", "popup.settings.imageQuality", { value: 73 })).toBe("Chất lượng ảnh: 73%");
+    expect(t("en", "popup.settings.imageQuality", { value: 73 })).toBe("Image quality: 73%");
+    expect(t("vi", "popup.settings.resetDone")).toContain(
+      "Dữ liệu chụp hiện tại không bị thay đổi",
+    );
+    expect(t("en", "popup.settings.resetDone")).toContain("Current capture data was not changed");
+  });
+
   it("provides useful localized copy for every normalized error code", () => {
     for (const code of WebCapErrorCodeSchema.options) {
       for (const locale of ["vi", "en"] as const) {

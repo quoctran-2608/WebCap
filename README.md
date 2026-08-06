@@ -8,7 +8,7 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 **0.1.0 release candidate remains complete and unchanged.** It has a deterministic, verified 24-entry Chrome Web Store ZIP (`webcap-0.1.0.zip`, 1,097,035 bytes, SHA-256 `630c44c07e72da0d5edc1c82c013ecf6caf995e0542ee19679380081e7b0cb7a`). The final gate passed formatting, ESLint, strict TypeScript, privacy/license/release/critical-security audits, 279 unit tests across 79 files, four PDF benchmarks, a verified Manifest V3 build, and 38 Playwright E2E cases including DPR 1/1.5/2 at 80/100/125/150% zoom. No tag, GitHub Release, Chrome Web Store upload, review submission, or publication has been performed.
 
-**0.2.0 implementation is active. S21 capture reset, S22 region-selector reliability, S23 adaptive auto-scroll and S24 automatic mode-aware output are complete; S25 settings/events/simplified popup is next.** Full-page and scroll-area captures now create PDF automatically, while region and element captures create guarded PNG/JPEG/WebP output. Durable result metadata survives popup reopen and service-worker restart, auto-generated PDFs remain editable without recapture, and oversized image output offers an explicit PDF fallback that reuses the same stored tiles. S25–S26 remain planned for stored settings, event-driven progress, popup simplification and release hardening.
+**0.2.0 implementation is active. S21 capture reset, S22 region-selector reliability, S23 adaptive auto-scroll, S24 automatic mode-aware output and S25 stored settings/event-driven simplified popup are complete; S26 release hardening is next.** New jobs use durable per-mode output and quality/PDF/fixed-sticky preferences, popup progress is event-driven with slow authoritative reconciliation, and technical worker/version/diagnostics information is progressively disclosed behind the user capture flow. The 0.1.0 artifact and package version remain unchanged until S26 deliberately prepares the 0.2.0 release candidate.
 
 ## 0.2.0 outcomes and remaining work
 
@@ -16,9 +16,10 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 - Delivered in S22–S24: **Draw region** closes the popup only after selector readiness, supports pointer and keyboard editing, excludes selector UI and returns a guarded image result.
 - Delivered in S21: **New capture** safely cancels or discards the current local job and allows another capture on the same tab.
 - Delivered in S24: region/element default to guarded image output, full-page/scroll-area default to PDF, and oversized images receive an explicit no-recapture PDF fallback.
-- Remaining in S25: apply stored format, quality, PDF and fixed/sticky preferences to every new job.
-- Remaining in S25: replace continuous 350 ms polling with event-driven progress and slow reconciliation.
-- Remaining in S25: simplify the popup around capture goals, progress, download, edit and new capture; move technical details to help and diagnostics.
+- Delivered in S25: durable per-mode output plus image/PDF/fixed-sticky preferences are loaded before capture, snapshotted into each new job and reset independently from capture data.
+- Delivered in S25: validated runtime job-summary events replace continuous 350 ms polling; a 7.5-second authoritative reconciliation remains for missed events and reconnect.
+- Delivered in S25: the primary capture action precedes advanced settings, which remain available at idle/result and disappear while capture is busy, while version, milestones, raw tile counts, privacy help and diagnostics no longer compete in the default main flow.
+- Remaining in S26: acceptance gap closure, 0.1.0 → 0.2.0 migration, compatibility/release documentation, version bump and reproducible RC verification.
 - No backend, telemetry, remote executable code, new required permission or default host permission.
 
 ## Requirements
