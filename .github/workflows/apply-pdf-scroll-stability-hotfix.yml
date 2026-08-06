@@ -1,16 +1,16 @@
 name: Apply PDF scroll stability hotfix
 
 on:
-  push:
+  pull_request:
     branches:
-      - agent/0.2.2-pdf-scroll-stability-hotfix
+      - main
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.event.head_commit.message == 'Bootstrap PDF scroll stability hotfix'
+    if: github.event.pull_request.head.ref == 'agent/0.2.2-pdf-scroll-stability-hotfix'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
