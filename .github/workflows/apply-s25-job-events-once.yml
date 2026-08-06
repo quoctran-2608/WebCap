@@ -1,0 +1,50 @@
+name: Apply S25 job events once
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apply-s25-job-events-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  apply:
+    if: github.head_ref == 'agent/s25-settings-events-popup'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out S25 branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/s25-settings-events-popup
+          fetch-depth: 0
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply and validate event-driven progress
+        run: |
+          python scripts/apply-s25-job-events.py
+          pnpm exec prettier --write src/background/job-coordinator.ts src/background/job-event-publisher.ts src/background/persistent-job-router.ts src/popup/App.tsx src/popup/job-events-client.ts src/shared/contracts/job-events.ts tests/unit/job-coordinator.test.ts tests/unit/job-event-publisher.test.ts tests/unit/job-events-client.test.ts tests/unit/job-events.test.ts tests/e2e/popup-settings.spec.ts
+          pnpm lint
+          pnpm typecheck
+          pnpm exec vitest run tests/unit/job-coordinator.test.ts tests/unit/job-event-publisher.test.ts tests/unit/job-events-client.test.ts tests/unit/job-events.test.ts
+      - name: Commit clean event-driven progress candidate
+        run: |
+          git rm scripts/apply-s25-job-events.py .github/workflows/apply-s25-job-events-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src tests
+          git commit -m "Replace short polling with job summary events"
+          git push origin HEAD:agent/s25-settings-events-popup
