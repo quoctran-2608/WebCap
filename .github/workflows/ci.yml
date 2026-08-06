@@ -48,6 +48,18 @@ jobs:
 
       - name: Apply and format S25 closeout
         run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path(".github/scripts/close_s25.py")
+          content = path.read_text()
+          content = content.replace("from textwrap import dedent\n", "")
+          old = "def block(value: str) -> str:\n    return dedent(value)"
+          new = "def block(value: str) -> str:\n    return value"
+          if content.count(old) != 1:
+              raise SystemExit("Expected one block helper using dedent")
+          path.write_text(content.replace(old, new))
+          PY
           python .github/scripts/close_s25.py
           pnpm exec prettier --write src/popup/App.tsx src/popup/popup.css tests/e2e/popup-settings-accessibility.spec.ts PLAN.md docs/spec-0.2.0.md README.md CHANGELOG.md
 
