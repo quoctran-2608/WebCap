@@ -1,1 +1,0 @@
-This temporary file forces a distinct head before opening the replacement PR.
