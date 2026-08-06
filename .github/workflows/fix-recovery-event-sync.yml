@@ -1,0 +1,51 @@
+name: Fix recovery event synchronization
+
+on:
+  push:
+    branches:
+      - agent/s25-settings-events-popup
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/s25-settings-events-popup
+          fetch-depth: 0
+
+      - name: Patch recovery synchronization
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/background/job-coordinator.ts")
+          content = path.read_text()
+          old = '''          error: recoveryError(job),
+                },
+                {},
+                true,
+              );'''
+          new = '''          error: recoveryError(job),
+                },
+                {},
+                false,
+              );'''
+          if content.count(old) != 1:
+              raise SystemExit("Expected exactly one interrupted-recovery transition block")
+          path.write_text(content.replace(old, new))
+          PY
+          rm .github/workflows/fix-recovery-event-sync.yml
+
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/background/job-coordinator.ts .github/workflows/fix-recovery-event-sync.yml
+          git commit -m "Avoid duplicate recovery job events"
+          git push origin HEAD:agent/s25-settings-events-popup
