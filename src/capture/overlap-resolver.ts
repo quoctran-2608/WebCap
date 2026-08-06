@@ -21,6 +21,11 @@ export interface ScrollCapturePlan {
   limitedByMaxTiles: boolean;
 }
 
+interface ScrollStops {
+  stops: number[];
+  total: number;
+}
+
 function planError(
   message: string,
   causeCode: string,
@@ -52,25 +57,26 @@ function createStops(
   extent: number,
   viewportExtent: number,
   overlap: number,
-): number[] {
+  maximumStops: number,
+): ScrollStops {
   const maximumStart = Math.max(start, start + extent - viewportExtent);
   if (maximumStart - start <= TILE_COVERAGE_EPSILON_CSS) {
-    return [start];
+    return { stops: [start], total: 1 };
   }
 
   const safeOverlap = Math.min(Math.max(0, overlap), Math.max(0, viewportExtent - 1));
   const step = Math.max(1, viewportExtent - safeOverlap);
-  const stops = [start];
+  const distance = maximumStart - start;
+  const total = Math.max(
+    1,
+    Math.ceil((distance - TILE_COVERAGE_EPSILON_CSS) / step) + 1,
+  );
+  const boundedCount = Math.min(total, Math.max(1, Math.floor(maximumStops)));
+  const stops = Array.from({ length: boundedCount }, (_, index) =>
+    Math.min(maximumStart, start + index * step),
+  );
 
-  while ((stops.at(-1) ?? start) < maximumStart - TILE_COVERAGE_EPSILON_CSS) {
-    const previous = stops.at(-1) ?? start;
-    const next = Math.min(maximumStart, previous + step);
-    if (next <= previous + TILE_COVERAGE_EPSILON_CSS) {
-      break;
-    }
-    stops.push(next);
-  }
-  return stops;
+  return { stops, total };
 }
 
 function assertCoverage(target: Rect, tiles: CaptureTile[], rows: number, columns: number): void {
@@ -134,7 +140,8 @@ function assertCoverage(target: Rect, tiles: CaptureTile[], rows: number, column
       }
       if (
         row === rows - 1 &&
-        Math.abs(output.y + output.height - (target.y + target.height)) > TILE_COVERAGE_EPSILON_CSS
+        Math.abs(output.y + output.height - (target.y + target.height)) >
+          TILE_COVERAGE_EPSILON_CSS
       ) {
         throw planError("Scroll capture does not reach the target bottom edge.", "BottomGap", {
           column,
@@ -154,16 +161,13 @@ export function planScrollCaptureTiles(request: ScrollCapturePlanRequest): Scrol
   const maxTiles = Math.floor(requirePositive(request.maxTiles, "maximum tile count"));
   const overlap = Number.isFinite(request.overlapCss) ? Math.max(0, request.overlapCss) : 0;
 
-  const allXStops = createStops(target.x, target.width, viewportWidth, overlap);
-  const allYStops = createStops(target.y, target.height, viewportHeight, overlap);
-  const tileCount = allXStops.length * allYStops.length;
-  const limitedByMaxTiles = tileCount > maxTiles;
-  const columnCount = allXStops.length <= maxTiles ? allXStops.length : maxTiles;
-  const rowCount = limitedByMaxTiles
-    ? Math.max(1, Math.floor(maxTiles / columnCount))
-    : allYStops.length;
-  const xStops = allXStops.slice(0, columnCount);
-  const yStops = allYStops.slice(0, rowCount);
+  const xPlan = createStops(target.x, target.width, viewportWidth, overlap, maxTiles);
+  const columnCount = xPlan.stops.length;
+  const maximumRows = Math.max(1, Math.floor(maxTiles / columnCount));
+  const yPlan = createStops(target.y, target.height, viewportHeight, overlap, maximumRows);
+  const limitedByMaxTiles = xPlan.total > maxTiles / yPlan.total;
+  const xStops = xPlan.stops;
+  const yStops = yPlan.stops;
   const limitedTarget: Rect = {
     x: target.x,
     y: target.y,
