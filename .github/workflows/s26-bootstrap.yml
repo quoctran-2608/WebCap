@@ -20,7 +20,7 @@ concurrency:
 jobs:
   fix-and-validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Check out latest S26 branch
@@ -80,8 +80,10 @@ jobs:
           path.write_text(content[:start] + replacement + content[end:])
           PY
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install dependencies and Chromium
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
 
       - name: Format test and verify package lifecycle
         run: |
