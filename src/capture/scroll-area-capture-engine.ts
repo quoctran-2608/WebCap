@@ -32,8 +32,7 @@ function captureError(options: {
     | "E_TAB_NOT_ACTIVE"
     | "E_LAYOUT_UNSTABLE"
     | "E_CAPTURE_EMPTY"
-    | "E_CLEANUP_PARTIAL"
-    | "E_TILE_PLAN";
+    | "E_CLEANUP_PARTIAL";
   stage?: "capture" | "cleanup" | "plan" | "protocol";
   message: string;
   userMessageKey: string;
@@ -187,25 +186,6 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
       fixedElementMode: "preserve",
       settleMs: context.settings.lazyLoad.settleMs,
     });
-    if (
-      initial.scrollWidth > context.settings.limits.maxCssWidth ||
-      initial.scrollHeight > context.settings.limits.maxCssHeight
-    ) {
-      throw captureError({
-        code: "E_TILE_PLAN",
-        stage: "plan",
-        message: "The selected scrollable container exceeds the configured capture dimensions.",
-        userMessageKey: "errors.tilePlan",
-        causeCode: "ScrollAreaDimensionLimitExceeded",
-        retryable: false,
-        safeContext: {
-          scrollWidth: initial.scrollWidth,
-          scrollHeight: initial.scrollHeight,
-          maxCssWidth: context.settings.limits.maxCssWidth,
-          maxCssHeight: context.settings.limits.maxCssHeight,
-        },
-      });
-    }
     const targetRect = {
       x: 0,
       y: 0,
@@ -239,7 +219,14 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
       overlapCss: this.overlapCss,
       maxTiles: context.settings.limits.maxTiles,
     });
-    await context.onPlan(metrics, plan.targetRect, plan.tiles);
+    const partialCapture = plan.limitedByMaxTiles
+      ? {
+          reason: "max-tiles" as const,
+          capturedRect: plan.targetRect,
+          limitValue: context.settings.limits.maxTiles,
+        }
+      : undefined;
+    await context.onPlan(metrics, plan.targetRect, plan.tiles, partialCapture);
 
     const storedTiles: CaptureTile[] = [];
     let captureScale: CapturePixelScale | undefined;
@@ -378,7 +365,12 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
       storedTiles.push(captured);
     }
 
-    return { metrics, targetRect: plan.targetRect, tiles: storedTiles };
+    return {
+      metrics,
+      targetRect: plan.targetRect,
+      tiles: storedTiles,
+      ...(partialCapture === undefined ? {} : { partialCapture }),
+    };
   }
 
   async cleanup(context: CaptureEngineContext): Promise<void> {

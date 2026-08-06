@@ -92,4 +92,23 @@ describe("planScrollCaptureTiles", () => {
     expect(result.columns).toBe(4);
     expect(result.targetRect).toEqual({ x: 0, y: 0, width: 1_808, height: 500 });
   });
+
+  it("bounds stop generation for an extremely tall internal surface", () => {
+    const result = planScrollCaptureTiles({
+      jobId: "very-tall",
+      targetRect: { x: 0, y: 0, width: 1, height: 100_000_000 },
+      viewportWidthCss: 1,
+      viewportHeightCss: 1,
+      pixelScale: 1,
+      overlapCss: 0,
+      maxTiles: 4,
+    });
+
+    expect(result.limitedByMaxTiles).toBe(true);
+    expect(result.rows).toBe(4);
+    expect(result.columns).toBe(1);
+    expect(result.tiles).toHaveLength(4);
+    expect(result.tiles.map((tile) => tile.scrollYCss)).toEqual([0, 1, 2, 3]);
+    expect(result.targetRect).toEqual({ x: 0, y: 0, width: 1, height: 4 });
+  });
 });
