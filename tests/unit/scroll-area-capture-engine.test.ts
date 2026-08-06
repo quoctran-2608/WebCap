@@ -13,7 +13,7 @@ import type { CaptureTile } from "@shared/contracts/domain";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 
 const HUNDRED_PIXEL_PNG =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAIAAAD/gAIDAAAAnklEQVR42u3QMQEAAAgDILV/51nBzwci0CmuRoEsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWd8Wil4Bx2r6t7cAAAAASUVORK5CYII=";
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAIAAAD/gAIDAAAAnklEQVR42u3QMQEAAAgDILV/51nBzwci0CmuRoEsWbJkyZKlQJYsWbJkyVIgS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWd8Wil4Bx2r6t7cAAAAASUVORK5CYII=";
 const descriptor = {
   schemaVersion: 1 as const,
   selectionId: "scroll-selection",
@@ -45,9 +45,11 @@ function pageResult(request: ScrollAreaPageRequest): ScrollAreaPageResult {
   };
 }
 
-function setup() {
+function setup(
+  createPageResult: (request: ScrollAreaPageRequest) => ScrollAreaPageResult = pageResult,
+) {
   const scrollAndSettle = vi.fn((request: ScrollAreaPageRequest) =>
-    Promise.resolve(pageResult(request)),
+    Promise.resolve(createPageResult(request)),
   );
   const cleanup = vi.fn(() =>
     Promise.resolve({
@@ -134,6 +136,70 @@ describe("ScrollAreaCaptureEngine", () => {
     expect(result.partialCapture).toBeUndefined();
     expect(harness.scrollAndSettle).toHaveBeenCalledTimes(4);
     expect(harness.stored.map((tile) => tile.scrollYCss)).toEqual([0, 80, 120]);
+  });
+
+  it("continues when a PDF-like viewer changes only its internal scroll height", async () => {
+    let calls = 0;
+    const harness = setup((request) => {
+      const result = pageResult(request);
+      calls += 1;
+      if (calls > 1) {
+        result.scrollHeight = 244;
+        result.mutationCount = 3;
+        result.layoutChanged =
+          request.expectedScrollHeight !== undefined &&
+          Math.abs(result.scrollHeight - request.expectedScrollHeight) > 2;
+      }
+      return result;
+    });
+
+    const result = await harness.engine.capture(harness.context);
+
+    expect(result.tiles).toHaveLength(3);
+    expect(harness.stored).toHaveLength(3);
+    expect(
+      harness.scrollAndSettle.mock.calls
+        .slice(1)
+        .every(([request]) => request.expectedScrollHeight === undefined),
+    ).toBe(true);
+  });
+
+  it("retries a transient viewport geometry change before capturing the tile", async () => {
+    let transientChangePending = true;
+    const harness = setup((request) => {
+      const result = pageResult(request);
+      if (request.expectedScrollWidth !== undefined && transientChangePending) {
+        transientChangePending = false;
+        result.scrollWidth = 104;
+        result.layoutChanged = true;
+      }
+      return result;
+    });
+
+    const result = await harness.engine.capture(harness.context);
+
+    expect(result.tiles).toHaveLength(3);
+    expect(harness.scrollAndSettle).toHaveBeenCalledTimes(5);
+    expect(harness.stored).toHaveLength(3);
+  });
+
+  it("still rejects a persistent viewport geometry change", async () => {
+    const harness = setup((request) => {
+      const result = pageResult(request);
+      if (request.expectedScrollWidth !== undefined) {
+        result.scrollWidth = 110;
+        result.layoutChanged = true;
+      }
+      return result;
+    });
+
+    await expect(harness.engine.capture(harness.context)).rejects.toMatchObject({
+      data: {
+        code: "E_LAYOUT_UNSTABLE",
+        causeCode: "ScrollAreaViewportGeometryChanged",
+      },
+    });
+    expect(harness.stored).toEqual([]);
   });
 
   it("keeps a contiguous prefix and marks max-tiles instead of failing", async () => {

@@ -247,6 +247,42 @@ test("@smoke captures nested scroll content and restores every scroll position",
   await expect(result.getByRole("heading", { name: "PDF đã sẵn sàng" })).toBeVisible();
 });
 
+test("@smoke continues when a PDF-like viewer adjusts scroll height while rendering", async ({
+  serviceWorker,
+  targetPage,
+  openPopup,
+}) => {
+  await targetPage.goto("http://127.0.0.1:4174/scroll-area.html");
+  const target = targetPage.locator("#pdf-like-scroll");
+  await target.scrollIntoViewIfNeeded();
+  const before = await target.evaluate((element) => ({
+    top: element.scrollTop,
+    width: element.scrollWidth,
+    height: element.scrollHeight,
+  }));
+  const popup = await openPopup();
+  await startScrollAreaSelection(popup);
+  await targetPage.bringToFront();
+  await selectContainer(targetPage, target);
+
+  const state = await waitForState(serviceWorker, "completed");
+  expect(state.job).toMatchObject({
+    state: "completed",
+    activeEngine: "scroll",
+    activeOutputFormat: "pdf",
+    cleanupCompleted: true,
+    completedTiles: expect.any(Number),
+    totalTiles: expect.any(Number),
+    targetRect: { x: 0, y: 0, width: before.width, height: before.height },
+  });
+  expect(state.job?.completedTiles).toBe(state.job?.totalTiles);
+  expect(state.job?.completedTiles).toBeGreaterThan(3);
+  expect(state.job?.errorCode).toBeUndefined();
+  expect(state.tiles.every((tile) => tile.blobSize > 0)).toBe(true);
+  await expect(targetPage.locator("#pdf-height-drift")).toHaveAttribute("data-adjusted", "true");
+  await expect(target).toHaveJSProperty("scrollTop", before.top);
+});
+
 test("@smoke covers a wide scroll area with a two-dimensional internal grid", async ({
   serviceWorker,
   targetPage,

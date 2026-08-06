@@ -13,7 +13,7 @@
       }
       body {
         margin: 0;
-        min-height: 2200px;
+        min-height: 2600px;
         color: #0f172a;
         font-family: Arial, sans-serif;
         background: linear-gradient(#e2e8f0, #cbd5e1);
@@ -79,6 +79,32 @@
       .message:nth-child(odd) {
         margin-left: auto;
         background: #fef3c7;
+      }
+      #pdf-like-scroll {
+        width: 520px;
+        height: 260px;
+        overflow: auto;
+        border: 5px solid #0369a1;
+        background: #e0f2fe;
+        scroll-behavior: auto;
+      }
+      .pdf-like-pages {
+        width: 100%;
+        padding: 18px;
+      }
+      .pdf-like-page {
+        height: 210px;
+        margin-bottom: 18px;
+        display: grid;
+        place-items: center;
+        border: 1px solid #7dd3fc;
+        border-radius: 6px;
+        background: white;
+        box-shadow: 0 4px 12px rgba(3, 105, 161, 0.12);
+        font-weight: 700;
+      }
+      #pdf-height-drift {
+        height: 0;
       }
       #wide-scroll {
         width: 520px;
@@ -157,6 +183,14 @@
       </section>
 
       <section class="card">
+        <h2>PDF-like lazy viewer</h2>
+        <div id="pdf-like-scroll" data-testid="pdf-like-scroll">
+          <div class="pdf-like-pages" id="pdf-like-pages"></div>
+          <div id="pdf-height-drift" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <section class="card">
         <h2>Wide table panel</h2>
         <div id="wide-scroll" data-testid="wide-scroll">
           <div class="wide-canvas" id="wide-canvas"></div>
@@ -188,6 +222,25 @@
         cell.textContent = `C${index + 1}`;
         canvas.append(cell);
       }
+
+      const pdfPages = document.querySelector("#pdf-like-pages");
+      for (let index = 0; index < 8; index += 1) {
+        const page = document.createElement("div");
+        page.className = "pdf-like-page";
+        page.textContent = `PDF page ${index + 1}`;
+        pdfPages.append(page);
+      }
+      const pdfScroll = document.querySelector("#pdf-like-scroll");
+      const pdfHeightDrift = document.querySelector("#pdf-height-drift");
+      let pdfHeightAdjusted = false;
+      pdfScroll.addEventListener("scroll", () => {
+        if (!pdfHeightAdjusted && pdfScroll.scrollTop > 260) {
+          pdfHeightAdjusted = true;
+          pdfHeightDrift.style.height = "24px";
+          pdfHeightDrift.dataset.adjusted = "true";
+        }
+      });
+
       document.querySelector("#nested-scroll").scrollTop = 128;
       document.querySelector("#outer-scroll").scrollTop = 18;
       document.querySelector("#wide-scroll").scrollLeft = 84;
