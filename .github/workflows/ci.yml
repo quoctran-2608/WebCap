@@ -37,17 +37,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Format long PDF regression
-        run: pnpm exec prettier --write tests/unit/scroll-area-long-pdf.test.ts
-
-      - name: Upload formatted long PDF regression
-        uses: actions/upload-artifact@v4
-        with:
-          name: formatted-long-pdf-regression
-          path: tests/unit/scroll-area-long-pdf.test.ts
-          if-no-files-found: error
-          retention-days: 1
-
       - name: Check formatting
         run: pnpm format:check
 
