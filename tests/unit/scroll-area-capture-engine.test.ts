@@ -120,18 +120,45 @@ describe("ScrollAreaCaptureEngine", () => {
     ).toBe(true);
   });
 
-  it("fails instead of silently truncating content beyond configured dimensions", async () => {
+  it("starts internal scrolling instead of failing at the legacy CSS-height limit", async () => {
     const harness = setup();
     harness.context.settings = {
       ...harness.context.settings,
       limits: { ...harness.context.settings.limits, maxCssHeight: 200 },
     };
 
-    await expect(harness.engine.capture(harness.context)).rejects.toMatchObject({
-      data: { code: "E_TILE_PLAN", causeCode: "ScrollAreaDimensionLimitExceeded" },
+    const result = await harness.engine.capture(harness.context);
+
+    expect(result.tiles).toHaveLength(3);
+    expect(result.targetRect).toEqual({ x: 0, y: 0, width: 100, height: 220 });
+    expect(result.partialCapture).toBeUndefined();
+    expect(harness.scrollAndSettle).toHaveBeenCalledTimes(4);
+    expect(harness.stored.map((tile) => tile.scrollYCss)).toEqual([0, 80, 120]);
+  });
+
+  it("keeps a contiguous prefix and marks max-tiles instead of failing", async () => {
+    const harness = setup();
+    harness.context.settings = {
+      ...harness.context.settings,
+      limits: { ...harness.context.settings.limits, maxTiles: 2 },
+    };
+
+    const result = await harness.engine.capture(harness.context);
+
+    expect(result.tiles).toHaveLength(2);
+    expect(result.targetRect).toEqual({ x: 0, y: 0, width: 100, height: 180 });
+    expect(result.partialCapture).toEqual({
+      reason: "max-tiles",
+      capturedRect: { x: 0, y: 0, width: 100, height: 180 },
+      limitValue: 2,
     });
-    expect(harness.onPlan).not.toHaveBeenCalled();
-    expect(harness.stored).toEqual([]);
+    expect(harness.scrollAndSettle).toHaveBeenCalledTimes(3);
+    expect(harness.onPlan).toHaveBeenCalledWith(
+      expect.any(Object),
+      { x: 0, y: 0, width: 100, height: 180 },
+      expect.arrayContaining([expect.objectContaining({ index: 0 }), expect.objectContaining({ index: 1 })]),
+      result.partialCapture,
+    );
   });
 
   it("restores the container and document scroll state", async () => {
