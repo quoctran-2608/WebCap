@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { PersistentJobCoordinator, type JobCleanupPort } from "@background/job-coordinator";
+import type { JobSummaryEventPublisherPort } from "@background/job-event-publisher";
 import type { CaptureJob } from "@shared/contracts/domain";
 import type { JobSummary, TabJobLock } from "@shared/contracts/job";
 import { summarizeJob } from "@shared/contracts/job";
@@ -191,6 +192,7 @@ function setup(
   options: {
     now?: Date;
     cleanup?: JobCleanupPort;
+    events?: JobSummaryEventPublisherPort;
     id?: string;
   } = {},
 ) {
@@ -198,21 +200,29 @@ function setup(
   const sessions = new MemorySessions();
   const tiles = new MemoryTiles();
   const artifacts = new MemoryArtifacts();
+  const published: JobSummary[] = [];
+  const events: JobSummaryEventPublisherPort = options.events ?? {
+    publish(summary) {
+      published.push(structuredClone(summary));
+      return Promise.resolve();
+    },
+  };
   const coordinator = new PersistentJobCoordinator({
     jobs,
     sessions,
     tiles,
     artifacts,
+    events,
     now: () => options.now ?? new Date("2026-08-02T16:02:00.000Z"),
     idFactory: () => options.id ?? "job-created",
     ...(options.cleanup === undefined ? {} : { cleanup: options.cleanup }),
   });
-  return { coordinator, jobs, sessions, tiles, artifacts };
+  return { coordinator, jobs, sessions, tiles, artifacts, published };
 }
 
 describe("PersistentJobCoordinator", () => {
   it("creates one active job per tab and persists its summary and lock", async () => {
-    const { coordinator, sessions } = setup();
+    const { coordinator, sessions, published } = setup();
     const created = await coordinator.create({
       tabId: 7,
       windowId: 2,
@@ -232,6 +242,7 @@ describe("PersistentJobCoordinator", () => {
     });
     expect(sessions.summaries.get(created.id)).toEqual(summarizeJob(created));
     expect(sessions.locks.get(7)).toMatchObject({ jobId: created.id });
+    expect(published).toEqual([summarizeJob(created)]);
     await expect(
       coordinator.create({
         tabId: 7,
@@ -240,6 +251,30 @@ describe("PersistentJobCoordinator", () => {
         settings: DEFAULT_CAPTURE_SETTINGS,
       }),
     ).rejects.toMatchObject({ code: "E_CAPTURE_RATE_LIMIT" });
+  });
+
+  it("keeps durable transitions successful when event delivery fails", async () => {
+    let eventCalls = 0;
+    const { coordinator, sessions } = setup({
+      events: {
+        publish() {
+          eventCalls += 1;
+          return Promise.reject(new Error("popup closed"));
+        },
+      },
+    });
+    const created = await coordinator.create({
+      tabId: 7,
+      windowId: 2,
+      mode: "full-page",
+      settings: DEFAULT_CAPTURE_SETTINGS,
+    });
+
+    const preparing = await coordinator.transition(created.id, "preparing");
+
+    expect(preparing).toMatchObject({ state: "preparing", stateRevision: 1 });
+    expect(sessions.summaries.get(created.id)).toEqual(summarizeJob(preparing));
+    expect(eventCalls).toBe(2);
   });
 
   it("prefers an active job and restores the latest durable terminal job for a tab", async () => {

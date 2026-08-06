@@ -144,6 +144,41 @@ test("@smoke persists advanced options, snapshots them into a job, and resets op
   await expect(popup.getByTestId("pdf-margin")).toHaveValue("12");
   await expect(popup.getByTestId("pdf-quality")).toHaveValue("81");
 
+  await popup.evaluate(() => {
+    const scope = globalThis as typeof globalThis & {
+      __webcapJobEvents?: Array<{
+        jobId: string;
+        state: string;
+        stateRevision: number;
+      }>;
+    };
+    scope.__webcapJobEvents = [];
+    chrome.runtime.onMessage.addListener((message: unknown) => {
+      if (
+        typeof message === "object" &&
+        message !== null &&
+        "type" in message &&
+        message.type === "JOB_SUMMARY_CHANGED" &&
+        "payload" in message
+      ) {
+        const payload = message.payload as {
+          summary?: { jobId?: string; state?: string; stateRevision?: number };
+        };
+        if (
+          typeof payload.summary?.jobId === "string" &&
+          typeof payload.summary.state === "string" &&
+          typeof payload.summary.stateRevision === "number"
+        ) {
+          scope.__webcapJobEvents?.push({
+            jobId: payload.summary.jobId,
+            state: payload.summary.state,
+            stateRevision: payload.summary.stateRevision,
+          });
+        }
+      }
+    });
+  });
+
   await popup.getByRole("button", { name: /^Toàn bộ trang/ }).click();
   await popup.getByRole("button", { name: "Bắt đầu chụp toàn trang" }).click();
   await expect(popup.getByTestId("tiled-output-result")).toBeVisible({ timeout: 45_000 });
@@ -163,6 +198,26 @@ test("@smoke persists advanced options, snapshots them into a job, and resets op
       },
     },
   });
+
+  const progressEvents = await popup.evaluate(() => {
+    const scope = globalThis as typeof globalThis & {
+      __webcapJobEvents?: Array<{
+        jobId: string;
+        state: string;
+        stateRevision: number;
+      }>;
+    };
+    return scope.__webcapJobEvents ?? [];
+  });
+  const jobEvents = progressEvents.filter((event) => event.jobId === completedJob?.id);
+  expect(jobEvents.length).toBeGreaterThan(2);
+  expect(jobEvents.map((event) => event.state)).toContain("capturing");
+  expect(jobEvents.at(-1)).toMatchObject({ state: "completed" });
+  for (let index = 1; index < jobEvents.length; index += 1) {
+    expect(jobEvents[index]?.stateRevision).toBeGreaterThan(
+      jobEvents[index - 1]?.stateRevision ?? -1,
+    );
+  }
 
   await openAdvancedSettings(popup);
   await popup.getByTestId("reset-settings").click();

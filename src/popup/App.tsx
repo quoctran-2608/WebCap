@@ -33,6 +33,7 @@ import { captureSettingsForOutput } from "./capture-settings";
 import { downloadOriginalPdf, inspectPdfSource } from "./pdf-source-client";
 import { requestPdfSourcePermission } from "./pdf-source-permission";
 import { estimateOutputBytes, formatBytes } from "./formatting";
+import { subscribeToJobSummaryChanges } from "./job-events-client";
 import { PopupSettingsClient, selectedImageFormat } from "./settings-client";
 import {
   cancelFullPageCapture,
@@ -61,7 +62,7 @@ const CAPTURE_MODE_IDS = ["visible", "full-page", "region", "element", "scroll-a
 
 const OUTPUT_FORMATS: ReadonlyArray<OutputFormat> = ["png", "jpeg", "webp", "pdf"];
 
-const SESSION_POLL_MS = 350;
+const RECONCILIATION_POLL_MS = 7_500;
 const popupSettingsClient = new PopupSettingsClient();
 
 type WorkerStatus = "checking" | "connected" | "unavailable";
@@ -381,7 +382,7 @@ export function App(): React.JSX.Element {
 
     const timer = globalThis.setInterval(() => {
       void syncSession().catch(() => undefined);
-    }, SESSION_POLL_MS);
+    }, RECONCILIATION_POLL_MS);
 
     return () => {
       globalThis.clearInterval(timer);
@@ -389,20 +390,46 @@ export function App(): React.JSX.Element {
   }, [selectedMode, syncSession, visibleBusy]);
 
   useEffect(() => {
+    if (
+      workerStatus !== "connected" ||
+      tabCapability.tabId === undefined ||
+      fullPageJob === undefined
+    ) {
+      return;
+    }
+
+    let latestRevision = fullPageJob.stateRevision;
+    return subscribeToJobSummaryChanges((summary) => {
+      if (
+        summary.tabId !== tabCapability.tabId ||
+        summary.jobId !== fullPageJob.id ||
+        summary.stateRevision <= latestRevision
+      ) {
+        return;
+      }
+      latestRevision = summary.stateRevision;
+      void syncFullPageJob(summary.jobId).catch((error: unknown) => {
+        setUiError(genericErrorCopy(locale, error));
+      });
+    });
+  }, [fullPageJob, locale, syncFullPageJob, tabCapability.tabId, workerStatus]);
+
+  useEffect(() => {
     if (!fullPageBusy || fullPageJob === undefined) {
       return;
     }
 
+    const jobId = fullPageJob.id;
     const timer = globalThis.setInterval(() => {
-      void syncFullPageJob(fullPageJob.id).catch((error: unknown) => {
+      void syncFullPageJob(jobId).catch((error: unknown) => {
         setUiError(genericErrorCopy(locale, error));
       });
-    }, SESSION_POLL_MS);
+    }, RECONCILIATION_POLL_MS);
 
     return () => {
       globalThis.clearInterval(timer);
     };
-  }, [fullPageBusy, fullPageJob, locale, syncFullPageJob]);
+  }, [fullPageBusy, fullPageJob?.id, locale, syncFullPageJob]);
 
   useEffect(() => {
     if (terminal) {
