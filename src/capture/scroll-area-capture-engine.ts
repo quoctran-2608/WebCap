@@ -258,10 +258,7 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
           rows: plan.rows,
           columns: plan.columns,
           fixedElementMode: context.settings.fixedElementMode,
-          settleMs: Math.min(
-            5_000,
-            context.settings.lazyLoad.settleMs * Math.max(1, attempt + 1),
-          ),
+          settleMs: Math.min(5_000, context.settings.lazyLoad.settleMs * Math.max(1, attempt + 1)),
           expectedScrollWidth: initial.scrollWidth,
           // Long PDF viewers commonly replace lazy placeholders while scrolling. Their
           // scrollHeight can drift even though the viewport geometry and requested
