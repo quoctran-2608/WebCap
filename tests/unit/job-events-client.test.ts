@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  shouldRefreshJobFromSummary,
   subscribeToJobSummaryChanges,
   type RuntimeMessageEventPort,
   type RuntimeMessageListener,
@@ -33,7 +34,21 @@ class MemoryRuntimeEvents implements RuntimeMessageEventPort {
   }
 }
 
-describe("subscribeToJobSummaryChanges", () => {
+describe("job summary event client", () => {
+  it("refreshes only a newer revision for the current tab and job", () => {
+    const current = { jobId: "job-event", tabId: 7, stateRevision: 3 };
+
+    expect(shouldRefreshJobFromSummary(summary, current)).toBe(true);
+    expect(
+      shouldRefreshJobFromSummary({ ...summary, stateRevision: 3 }, current),
+    ).toBe(false);
+    expect(
+      shouldRefreshJobFromSummary({ ...summary, stateRevision: 2 }, current),
+    ).toBe(false);
+    expect(shouldRefreshJobFromSummary({ ...summary, jobId: "other" }, current)).toBe(false);
+    expect(shouldRefreshJobFromSummary({ ...summary, tabId: 8 }, current)).toBe(false);
+  });
+
   it("forwards only validated job summary events", () => {
     const events = new MemoryRuntimeEvents();
     const callback = vi.fn();
