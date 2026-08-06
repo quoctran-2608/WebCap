@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { loadCaptureSettingsForNewJob, type CaptureSettingsLoader } from "@popup/capture-settings";
+import {
+  loadCaptureSettingsForNewJob,
+  type CaptureSettingsLoader,
+} from "@popup/capture-settings";
 import { createWebCapError } from "@shared/errors/error";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 
