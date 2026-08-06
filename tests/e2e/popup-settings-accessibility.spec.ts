@@ -1,6 +1,6 @@
 import { expect, test } from "./extension.fixture";
 
-test("@smoke keeps the main CTA ahead of localized keyboard-operable settings and help", async ({
+test("@smoke keeps the main CTA ahead of localized result-safe settings and help", async ({
   openPopup,
 }) => {
   const popup = await openPopup();
