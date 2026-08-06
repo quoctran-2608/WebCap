@@ -1,31 +1,25 @@
-name: S26 Bootstrap
+name: S26 Migration Fix
 
 on:
   push:
     branches: [agent/s26-hardening-rc]
     paths:
       - ".github/workflows/s26-bootstrap.yml"
-      - "scripts/s26-bootstrap.mjs"
-  pull_request:
-    branches: [main]
-    paths:
-      - ".github/workflows/s26-bootstrap.yml"
-      - "scripts/s26-bootstrap.mjs"
 
 permissions:
   contents: write
 
 concurrency:
-  group: s26-bootstrap-${{ github.ref }}
+  group: s26-migration-fix
   cancel-in-progress: true
 
 jobs:
-  implement-and-validate:
+  fix-and-validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 20
 
     steps:
-      - name: Check out S26 branch
+      - name: Check out latest S26 branch
         uses: actions/checkout@v4
         with:
           ref: agent/s26-hardening-rc
@@ -43,70 +37,8 @@ jobs:
           node-version: 22.22.0
           cache: pnpm
 
-      - name: Apply, validate, and publish observable S26 state
-        shell: bash
+      - name: Replace order-sensitive migration assertion
         run: |
-          set +e
-          set -o pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          python - <<'PY'
-          from pathlib import Path
-          path = Path("scripts/s26-bootstrap.mjs")
-          content = path.read_text()
-          replacements = [
-              (
-                  'await page.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });',
-                  'await page.goto("chrome-extension://" + extensionId + "/popup.html", { waitUntil: "domcontentloaded" });',
-              ),
-              (
-                  '  await updateReleaseWorkflow();',
-                  '  if (env.S26_UPDATE_WORKFLOW === "true") await updateReleaseWorkflow();',
-              ),
-          ]
-          for old, new in replacements:
-              if old not in content:
-                  raise SystemExit(f"S26 bootstrap patch target is missing: {old}")
-              content = content.replace(old, new, 1)
-          path.write_text(content)
-          PY
-
-          fail_stage() {
-            stage="$1"
-            log_file="$2"
-            {
-              echo "# S26 bootstrap failure"
-              echo
-              echo "Stage: ${stage}"
-              echo "Run: ${GITHUB_RUN_ID}"
-              echo "Head: ${GITHUB_SHA}"
-              echo
-              echo '```text'
-              tail -n 240 "${log_file}" || true
-              echo '```'
-            } > docs/s26-bootstrap-failure.md
-            git add docs/s26-bootstrap-failure.md
-            git commit -m "Record S26 bootstrap failure at ${stage}" || true
-            git push origin HEAD:agent/s26-hardening-rc
-            exit 1
-          }
-
-          run_stage() {
-            stage="$1"
-            shift
-            log_file="/tmp/s26-${stage//[^a-zA-Z0-9]/-}.log"
-            echo "::group::${stage}"
-            "$@" 2>&1 | tee "${log_file}"
-            status=${PIPESTATUS[0]}
-            echo "::endgroup::"
-            if [ "${status}" -ne 0 ]; then
-              fail_stage "${stage}" "${log_file}"
-            fi
-          }
-
-          run_stage apply node scripts/s26-bootstrap.mjs
-
           python - <<'PY'
           from pathlib import Path
           path = Path("tests/release/packaged-lifecycle.mjs")
@@ -114,6 +46,10 @@ jobs:
           old = '''    if (JSON.stringify(migration.settings) !== JSON.stringify(legacySettings)) {
               throw new Error("WebCap 0.1.0 capture settings were not preserved during update.");
             }'''
+          if old not in content:
+              old = '''    if (JSON.stringify(migration.settings) !== JSON.stringify(legacySettings)) {
+            throw new Error("WebCap 0.1.0 capture settings were not preserved during update.");
+          }'''
           new = '''    const migratedSettings = migration.settings;
             if (
               migratedSettings?.schemaVersion !== 1 ||
@@ -121,55 +57,41 @@ jobs:
               migratedSettings.settings?.imageQuality !== 0.82 ||
               migratedSettings.settings?.fixedElementMode !== "remove" ||
               migratedSettings.settings?.lazyLoad?.enabled !== true ||
+              migratedSettings.settings?.lazyLoad?.stepRatio !== 0.8 ||
+              migratedSettings.settings?.lazyLoad?.settleMs !== 250 ||
+              migratedSettings.settings?.lazyLoad?.maxDurationMs !== 15_000 ||
               migratedSettings.settings?.limits?.maxCssHeight !== 100_000 ||
+              migratedSettings.settings?.limits?.maxCssWidth !== 32_768 ||
+              migratedSettings.settings?.limits?.maxTiles !== 256 ||
+              migratedSettings.settings?.limits?.maxEstimatedBytes !== 512 * 1024 * 1024 ||
               migratedSettings.settings?.pdf?.pageSize !== "letter" ||
               migratedSettings.settings?.pdf?.orientation !== "landscape" ||
               migratedSettings.settings?.pdf?.marginMm !== 12 ||
               migratedSettings.settings?.pdf?.jpegQuality !== 0.78
             ) {
-              throw new Error("WebCap 0.1.0 capture settings were not preserved during update.");
+              throw new Error(
+                `WebCap 0.1.0 capture settings were not preserved during update: ${JSON.stringify(migratedSettings)}.`,
+              );
             }'''
           if old not in content:
-              raise SystemExit("Generated migration assertion target is missing")
+              raise SystemExit("Order-sensitive migration assertion was not found")
           path.write_text(content.replace(old, new, 1))
           PY
 
-          run_stage install pnpm install --frozen-lockfile
-          run_stage format pnpm format
-          run_stage format-check pnpm format:check
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
-          rm -f docs/s26-bootstrap-failure.md
-          git add -A -- . ':(exclude).github/workflows/**' ':(exclude)scripts/s26-bootstrap.mjs'
-          run_stage stage-commit git commit -m "Stage WebCap 0.2.0 release-candidate implementation"
-          run_stage stage-push git push origin HEAD:agent/s26-hardening-rc
+      - name: Format and verify package lifecycle
+        run: |
+          pnpm exec prettier --write tests/release/packaged-lifecycle.mjs
+          pnpm format:check
+          pnpm package
+          pnpm test:release
 
-          run_stage lint pnpm lint
-          run_stage typecheck pnpm typecheck
-          run_stage audits bash -lc "pnpm run audit && pnpm audit:security"
-          run_stage unit-tests pnpm test:unit
-          run_stage pdf-benchmarks pnpm benchmark:pdf
-          run_stage build pnpm build
-          run_stage reproducible-package node scripts/verify-reproducible-package.mjs
-          run_stage playwright-install pnpm exec playwright install --with-deps chromium
-          run_stage extension-e2e pnpm test:e2e
-          run_stage packaged-migration pnpm test:release
-          run_stage record-evidence node scripts/s26-bootstrap.mjs --record-evidence
-          run_stage final-format pnpm format
-          run_stage final-format-check pnpm format:check
-          run_stage diff-check git diff --check
-
-          rm -f docs/s26-bootstrap-failure.md
-          git add -A -- . ':(exclude).github/workflows/**' ':(exclude)scripts/s26-bootstrap.mjs'
-          run_stage final-commit git commit -m "Prepare WebCap 0.2.0 release candidate"
-          run_stage final-push git push origin HEAD:agent/s26-hardening-rc
-
-      - name: Upload implementation evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: s26-bootstrap-${{ github.sha }}
-          path: |
-            artifacts/
-            playwright-report/
-          if-no-files-found: ignore
-          retention-days: 14
+      - name: Commit validated assertion
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/release/packaged-lifecycle.mjs
+          git commit -m "Validate WebCap 0.1.0 settings migration semantically"
+          git push origin HEAD:agent/s26-hardening-rc
