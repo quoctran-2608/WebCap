@@ -323,8 +323,28 @@ try {
     }
     await openPopup(updatedContext, updateAfter.id);
     const migration = await readMigrationState(worker);
-    if (JSON.stringify(migration.settings) !== JSON.stringify(legacySettings)) {
-      throw new Error("WebCap 0.1.0 capture settings were not preserved during update.");
+    const migratedSettings = migration.settings;
+    if (
+      migratedSettings?.schemaVersion !== 1 ||
+      migratedSettings.settings?.outputFormat !== "webp" ||
+      migratedSettings.settings?.imageQuality !== 0.82 ||
+      migratedSettings.settings?.fixedElementMode !== "remove" ||
+      migratedSettings.settings?.lazyLoad?.enabled !== true ||
+      migratedSettings.settings?.lazyLoad?.stepRatio !== 0.8 ||
+      migratedSettings.settings?.lazyLoad?.settleMs !== 250 ||
+      migratedSettings.settings?.lazyLoad?.maxDurationMs !== 15_000 ||
+      migratedSettings.settings?.limits?.maxCssHeight !== 100_000 ||
+      migratedSettings.settings?.limits?.maxCssWidth !== 32_768 ||
+      migratedSettings.settings?.limits?.maxTiles !== 256 ||
+      migratedSettings.settings?.limits?.maxEstimatedBytes !== 512 * 1024 * 1024 ||
+      migratedSettings.settings?.pdf?.pageSize !== "letter" ||
+      migratedSettings.settings?.pdf?.orientation !== "landscape" ||
+      migratedSettings.settings?.pdf?.marginMm !== 12 ||
+      migratedSettings.settings?.pdf?.jpegQuality !== 0.78
+    ) {
+      throw new Error(
+        `WebCap 0.1.0 capture settings were not preserved during update: ${JSON.stringify(migratedSettings)}.`,
+      );
     }
     if (migration.locale?.schemaVersion !== 1 || migration.locale?.locale !== "en") {
       throw new Error("WebCap 0.1.0 locale was not preserved during update.");
