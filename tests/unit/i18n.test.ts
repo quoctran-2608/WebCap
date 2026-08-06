@@ -32,12 +32,8 @@ describe("UI localization", () => {
   it("keeps advanced settings and reset isolation clear in both locales", () => {
     expect(t("vi", "popup.settings.summary")).toBe("Tùy chọn nâng cao");
     expect(t("en", "popup.settings.summary")).toBe("Advanced options");
-    expect(t("vi", "popup.settings.imageQuality", { value: 73 })).toBe(
-      "Chất lượng ảnh: 73%",
-    );
-    expect(t("en", "popup.settings.imageQuality", { value: 73 })).toBe(
-      "Image quality: 73%",
-    );
+    expect(t("vi", "popup.settings.imageQuality", { value: 73 })).toBe("Chất lượng ảnh: 73%");
+    expect(t("en", "popup.settings.imageQuality", { value: 73 })).toBe("Image quality: 73%");
     expect(t("vi", "popup.settings.resetDone")).toContain(
       "Dữ liệu chụp hiện tại không bị thay đổi",
     );
