@@ -33,7 +33,7 @@ import { captureSettingsForOutput } from "./capture-settings";
 import { downloadOriginalPdf, inspectPdfSource } from "./pdf-source-client";
 import { requestPdfSourcePermission } from "./pdf-source-permission";
 import { estimateOutputBytes, formatBytes } from "./formatting";
-import { subscribeToJobSummaryChanges } from "./job-events-client";
+import { shouldRefreshJobFromSummary, subscribeToJobSummaryChanges } from "./job-events-client";
 import { PopupSettingsClient, selectedImageFormat } from "./settings-client";
 import {
   cancelFullPageCapture,
@@ -398,17 +398,21 @@ export function App(): React.JSX.Element {
       return;
     }
 
+    const tabId = tabCapability.tabId;
+    const jobId = fullPageJob.id;
     let latestRevision = fullPageJob.stateRevision;
     return subscribeToJobSummaryChanges((summary) => {
       if (
-        summary.tabId !== tabCapability.tabId ||
-        summary.jobId !== fullPageJob.id ||
-        summary.stateRevision <= latestRevision
+        !shouldRefreshJobFromSummary(summary, {
+          tabId,
+          jobId,
+          stateRevision: latestRevision,
+        })
       ) {
         return;
       }
       latestRevision = summary.stateRevision;
-      void syncFullPageJob(summary.jobId).catch((error: unknown) => {
+      void syncFullPageJob(jobId).catch((error: unknown) => {
         setUiError(genericErrorCopy(locale, error));
       });
     });
