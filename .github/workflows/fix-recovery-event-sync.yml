@@ -27,15 +27,15 @@ jobs:
           path = Path("src/background/job-coordinator.ts")
           content = path.read_text()
           old = '''          error: recoveryError(job),
-                },
-                {},
-                true,
-              );'''
+        },
+        {},
+        true,
+      );'''
           new = '''          error: recoveryError(job),
-                },
-                {},
-                false,
-              );'''
+        },
+        {},
+        false,
+      );'''
           if content.count(old) != 1:
               raise SystemExit("Expected exactly one interrupted-recovery transition block")
           path.write_text(content.replace(old, new))
