@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
 
-# Temporary read-only gate for PR #34; removed before merge.
+# Temporary read-only gate for PR #34; validation trigger 2.
 jobs:
   validate:
     runs-on: ubuntu-24.04
