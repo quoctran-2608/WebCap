@@ -67,10 +67,7 @@ function createStops(
   const safeOverlap = Math.min(Math.max(0, overlap), Math.max(0, viewportExtent - 1));
   const step = Math.max(1, viewportExtent - safeOverlap);
   const distance = maximumStart - start;
-  const total = Math.max(
-    1,
-    Math.ceil((distance - TILE_COVERAGE_EPSILON_CSS) / step) + 1,
-  );
+  const total = Math.max(1, Math.ceil((distance - TILE_COVERAGE_EPSILON_CSS) / step) + 1);
   const boundedCount = Math.min(total, Math.max(1, Math.floor(maximumStops)));
   const stops = Array.from({ length: boundedCount }, (_, index) =>
     Math.min(maximumStart, start + index * step),
@@ -140,8 +137,7 @@ function assertCoverage(target: Rect, tiles: CaptureTile[], rows: number, column
       }
       if (
         row === rows - 1 &&
-        Math.abs(output.y + output.height - (target.y + target.height)) >
-          TILE_COVERAGE_EPSILON_CSS
+        Math.abs(output.y + output.height - (target.y + target.height)) > TILE_COVERAGE_EPSILON_CSS
       ) {
         throw planError("Scroll capture does not reach the target bottom edge.", "BottomGap", {
           column,
