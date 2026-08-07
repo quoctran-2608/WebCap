@@ -1,11 +1,12 @@
 export const WEBCAP_DATABASE_NAME = "webcap-db";
-export const WEBCAP_DATABASE_VERSION = 1;
+export const WEBCAP_DATABASE_VERSION = 2;
 
 export const WEBCAP_STORES = Object.freeze({
   jobs: "jobs",
   tiles: "tiles",
   artifacts: "artifacts",
   dedupe: "dedupe",
+  pdfDocuments: "pdfDocuments",
 });
 
 export interface OpenDatabaseOptions {
@@ -35,6 +36,13 @@ function createSchema(database: IDBDatabase): void {
 
   if (!database.objectStoreNames.contains(WEBCAP_STORES.dedupe)) {
     database.createObjectStore(WEBCAP_STORES.dedupe, { keyPath: "requestId" });
+  }
+
+  if (!database.objectStoreNames.contains(WEBCAP_STORES.pdfDocuments)) {
+    const pdfDocuments = database.createObjectStore(WEBCAP_STORES.pdfDocuments, {
+      keyPath: "jobId",
+    });
+    pdfDocuments.createIndex("byExpiresAt", "expiresAt", { unique: false });
   }
 }
 
