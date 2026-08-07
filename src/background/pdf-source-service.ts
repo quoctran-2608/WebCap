@@ -293,7 +293,11 @@ export class PdfSourceService {
           });
         }
       } catch {
-        if (candidate.urlExtensionSignal || candidate.chromePdfViewerSignal || candidate.scheme === "blob") {
+        if (
+          candidate.urlExtensionSignal ||
+          candidate.chromePdfViewerSignal ||
+          candidate.scheme === "blob"
+        ) {
           return capability(candidate, {
             status: "original-passthrough",
             permission,
@@ -551,7 +555,8 @@ export class PdfSourceService {
     return {
       ...streamed,
       filename:
-        contentDispositionFilename(response.headers.get("content-disposition")) ?? candidate.filename,
+        contentDispositionFilename(response.headers.get("content-disposition")) ??
+        candidate.filename,
       contentTypeSignal,
       cleanup: () => writer.cleanup(),
     };

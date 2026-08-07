@@ -310,7 +310,11 @@ describe("PdfSourceService", () => {
       capability: { status: "original-passthrough", reason: "downloaded-original" },
       originalByteLength: bytes.byteLength,
     });
-    expect(recover).toHaveBeenCalledWith(7, "https://example.test/report.pdf", "original-pdf-1-cdp");
+    expect(recover).toHaveBeenCalledWith(
+      7,
+      "https://example.test/report.pdf",
+      "original-pdf-1-cdp",
+    );
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
