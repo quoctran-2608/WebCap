@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>WebCap virtualized PDF viewer fixture</title>
+    <style>
+      * { box-sizing: border-box; }
+      html, body { margin: 0; min-height: 100%; background: #eef1f4; font-family: system-ui, sans-serif; }
+      main { padding: 32px; }
+      h1 { margin: 0 0 16px; font-size: 22px; }
+      #pdf-scroll {
+        position: relative;
+        width: 940px;
+        height: 610px;
+        overflow: auto;
+        border: 1px solid #8b929a;
+        background: #3c4148;
+        overscroll-behavior: contain;
+      }
+      #pdf-spacer { position: relative; width: 100%; }
+      .page {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        background: white;
+        border: 1px solid #d5d8dc;
+        box-shadow: 0 2px 10px rgb(0 0 0 / 22%);
+        color: #222;
+        display: grid;
+        place-items: center;
+        font-size: 18px;
+      }
+      .page > span { opacity: 0.72; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Virtualized 500-page PDF viewer</h1>
+      <div
+        id="pdf-scroll"
+        class="pdf-viewer virtualized-viewer"
+        data-page-count="500"
+        aria-label="PDF viewer, 500 pages"
+      >
+        <div id="pdf-spacer"></div>
+      </div>
+    </main>
+    <script>
+      (() => {
+        const PAGE_COUNT = 500;
+        const GAP = 14;
+        const viewer = document.querySelector('#pdf-scroll');
+        const spacer = document.querySelector('#pdf-spacer');
+        const pages = Array.from({ length: PAGE_COUNT }, (_, index) => {
+          const landscape = index % 9 === 4;
+          const compact = index % 11 === 6;
+          return {
+            index,
+            width: landscape ? 850 : compact ? 590 : 640,
+            height: landscape ? 120 : compact ? 130 : 160,
+          };
+        });
+        const offsets = [];
+        let totalHeight = 0;
+        for (const page of pages) {
+          offsets.push(totalHeight);
+          totalHeight += page.height + GAP;
+        }
+        totalHeight -= GAP;
+        spacer.style.height = `${totalHeight}px`;
+
+        let maxLivePages = 0;
+        let renderCount = 0;
+        function firstVisibleIndex(scrollTop) {
+          let low = 0;
+          let high = pages.length - 1;
+          while (low < high) {
+            const middle = Math.floor((low + high) / 2);
+            const bottom = offsets[middle] + pages[middle].height;
+            if (bottom < scrollTop) low = middle + 1;
+            else high = middle;
+          }
+          return low;
+        }
+
+        function render() {
+          renderCount += 1;
+          const first = Math.max(0, firstVisibleIndex(viewer.scrollTop) - 2);
+          const visibleBottom = viewer.scrollTop + viewer.clientHeight;
+          let last = first;
+          while (last < pages.length - 1 && offsets[last] < visibleBottom) last += 1;
+          last = Math.min(pages.length - 1, last + 2);
+          spacer.querySelectorAll('.page').forEach((element) => element.remove());
+          for (let index = first; index <= last; index += 1) {
+            const page = pages[index];
+            const element = document.createElement('section');
+            element.className = 'page';
+            element.dataset.pageNumber = String(index + 1);
+            element.setAttribute('aria-label', `Page ${index + 1}`);
+            element.style.top = `${offsets[index]}px`;
+            element.style.width = `${page.width}px`;
+            element.style.height = `${page.height}px`;
+            element.innerHTML = `<span>Page ${index + 1}</span>`;
+            spacer.append(element);
+          }
+          maxLivePages = Math.max(maxLivePages, spacer.querySelectorAll('.page').length);
+          window.__webcapVirtualPdfFixture = {
+            pageCount: PAGE_COUNT,
+            livePages: spacer.querySelectorAll('.page').length,
+            maxLivePages,
+            renderCount,
+            totalHeight,
+          };
+        }
+        viewer.addEventListener('scroll', () => requestAnimationFrame(render), { passive: true });
+        render();
+      })();
+    </script>
+  </body>
+</html>
