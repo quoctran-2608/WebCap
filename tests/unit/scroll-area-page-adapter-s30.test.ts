@@ -76,9 +76,7 @@ const projectedMap: DocumentPageMap = {
 const expandedMap: DocumentPageMap = {
   ...discoveredMap,
   pages: discoveredMap.pages.map((page) =>
-    page.index === 5
-      ? { ...page, sourceRectCss: { ...page.sourceRectCss, y: 6500 } }
-      : page,
+    page.index === 5 ? { ...page, sourceRectCss: { ...page.sourceRectCss, y: 6500 } } : page,
   ),
 };
 
