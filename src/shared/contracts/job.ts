@@ -29,6 +29,8 @@ export const JobSummarySchema = z
     stateRevision: NonNegativeIntegerSchema,
     completedTiles: NonNegativeIntegerSchema,
     totalTiles: NonNegativeIntegerSchema,
+    completedDocumentPages: NonNegativeIntegerSchema.optional(),
+    totalDocumentPages: NonNegativeIntegerSchema.optional(),
     updatedAt: IsoDateTimeSchema,
     expiresAt: IsoDateTimeSchema,
     activeEngine: CaptureEngineKindSchema.optional(),
@@ -103,6 +105,18 @@ export type StoredTileRecord = z.infer<typeof StoredTileRecordSchema>;
 export type StoredDedupeRecord = z.infer<typeof StoredDedupeRecordSchema>;
 
 export function summarizeJob(job: CaptureJob): JobSummary {
+  const storedBottom = Math.max(
+    0,
+    ...job.tilePlan
+      .filter((tile) => tile.status === "stored")
+      .map((tile) => {
+        const rect = tile.outputRectCss ?? tile.sourceRectCss;
+        return rect.y + rect.height;
+      }),
+  );
+  const completedDocumentPages = job.documentPageMap?.pages.filter(
+    (page) => page.sourceRectCss.y + page.sourceRectCss.height <= storedBottom + 0.01,
+  ).length;
   return JobSummarySchema.parse({
     schemaVersion: 1,
     jobId: job.id,
@@ -112,6 +126,10 @@ export function summarizeJob(job: CaptureJob): JobSummary {
     stateRevision: job.stateRevision,
     completedTiles: job.completedTiles,
     totalTiles: job.totalTiles,
+    ...(completedDocumentPages === undefined ? {} : { completedDocumentPages }),
+    ...(job.documentPageMap === undefined
+      ? {}
+      : { totalDocumentPages: job.documentPageMap.sourcePageCount }),
     updatedAt: job.updatedAt,
     expiresAt: job.expiresAt,
     ...(job.activeEngine === undefined ? {} : { activeEngine: job.activeEngine }),

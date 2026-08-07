@@ -82,6 +82,24 @@ export const RectSchema = z
   })
   .strict();
 
+export const DocumentPageSchema = z
+  .object({
+    index: NonNegativeIntegerSchema,
+    sourceRectCss: RectSchema.refine((rect) => rect.width > 0 && rect.height > 0),
+  })
+  .strict();
+
+export const DocumentPageMapSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    strategy: z.enum(["dom", "projected"]),
+    confidence: z.number().finite().min(0).max(1),
+    complete: z.boolean(),
+    sourcePageCount: PositiveIntegerSchema,
+    pages: z.array(DocumentPageSchema).min(1).max(10_000),
+  })
+  .strict();
+
 export const ElementTargetDescriptorSchema = z
   .object({
     schemaVersion: z.literal(1),
@@ -222,6 +240,7 @@ export const CaptureJobSchema = z
     metrics: PageMetricsSchema.optional(),
     targetRect: RectSchema.optional(),
     targetDescriptor: ElementTargetDescriptorSchema.optional(),
+    documentPageMap: DocumentPageMapSchema.optional(),
     tilePlan: z.array(CaptureTileSchema),
     completedTiles: NonNegativeIntegerSchema,
     totalTiles: NonNegativeIntegerSchema,
@@ -251,6 +270,8 @@ export type CaptureCompletionPolicy = z.infer<typeof CaptureCompletionPolicySche
 export type CaptureOutput = z.infer<typeof CaptureOutputSchema>;
 export type ExportProgress = z.infer<typeof ExportProgressSchema>;
 export type Rect = z.infer<typeof RectSchema>;
+export type DocumentPage = z.infer<typeof DocumentPageSchema>;
+export type DocumentPageMap = z.infer<typeof DocumentPageMapSchema>;
 export type ElementTargetDescriptor = z.infer<typeof ElementTargetDescriptorSchema>;
 export type PageMetrics = z.infer<typeof PageMetricsSchema>;
 export type CaptureTile = z.infer<typeof CaptureTileSchema>;

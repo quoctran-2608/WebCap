@@ -30,6 +30,7 @@ export type JobTransitionPatch = Partial<
     | "metrics"
     | "targetRect"
     | "targetDescriptor"
+    | "documentPageMap"
     | "tilePlan"
     | "completedTiles"
     | "totalTiles"
@@ -113,6 +114,39 @@ export function validateJobInvariants(
     tileIndexes.add(tile.index);
   }
 
+  if (job.documentPageMap !== undefined) {
+    const pageMap = job.documentPageMap;
+    if (job.mode !== "scroll-area") {
+      return err(
+        stateError(
+          "Only scroll-area jobs may persist a document page map.",
+          "DocumentPageModeMismatch",
+          {
+            mode: job.mode,
+          },
+        ),
+      );
+    }
+    if (pageMap.pages.length !== pageMap.sourcePageCount) {
+      return err(
+        stateError("Document page count must match the page map.", "DocumentPageCountMismatch", {
+          sourcePageCount: pageMap.sourcePageCount,
+          mappedPages: pageMap.pages.length,
+        }),
+      );
+    }
+    for (const [index, page] of pageMap.pages.entries()) {
+      if (page.index !== index || page.sourceRectCss.width <= 0 || page.sourceRectCss.height <= 0) {
+        return err(
+          stateError("Document pages must be sequential and non-empty.", "DocumentPageMapInvalid", {
+            expectedIndex: index,
+            pageIndex: page.index,
+          }),
+        );
+      }
+    }
+  }
+
   if (job.adaptiveFrontier !== undefined) {
     const frontier = job.adaptiveFrontier;
     if (job.mode !== "full-page") {
@@ -155,6 +189,44 @@ export function validateJobInvariants(
         completedPages: job.exportProgress.completedPages,
         totalPages: job.exportProgress.totalPages,
       }),
+    );
+  }
+
+  if (
+    job.documentPageMap?.complete === true &&
+    job.partialCapture === undefined &&
+    job.activeOutputFormat === "pdf" &&
+    job.exportProgress !== undefined &&
+    job.exportProgress.totalPages !== job.documentPageMap.sourcePageCount
+  ) {
+    return err(
+      stateError(
+        "Dedicated PDF output progress must match the detected source page count.",
+        "PdfSourcePageCountMismatch",
+        {
+          sourcePageCount: job.documentPageMap.sourcePageCount,
+          outputPages: job.exportProgress.totalPages,
+        },
+      ),
+    );
+  }
+
+  if (
+    job.state === "completed" &&
+    job.documentPageMap?.complete === true &&
+    job.partialCapture === undefined &&
+    job.activeOutputFormat === "pdf" &&
+    job.output?.pageCount !== job.documentPageMap.sourcePageCount
+  ) {
+    return err(
+      stateError(
+        "A completed dedicated PDF must contain every detected source page.",
+        "PdfCompletedPageCountMismatch",
+        {
+          sourcePageCount: job.documentPageMap.sourcePageCount,
+          outputPages: job.output?.pageCount ?? 0,
+        },
+      ),
     );
   }
 

@@ -363,28 +363,35 @@ export class PdfExporter {
       firstTile.expectedPixelHeight / firstTile.sourceRectCss.height,
       "y",
     );
+    const totalPixelWidth = Math.max(1, Math.round(payload.targetRect.width * renderScaleX));
     const totalPixelHeight = Math.max(1, Math.round(payload.targetRect.height * renderScaleY));
-    const canvasWidth = Math.max(1, Math.round(payload.targetRect.width * renderScaleX));
     const pagePixelRanges = pages.map((page) => {
-      const pixelRange = roundRange(
+      const pixelXRange = roundRange(
+        (page.sourceRectCss.x - payload.targetRect.x) * renderScaleX,
+        (page.sourceRectCss.x + page.sourceRectCss.width - payload.targetRect.x) * renderScaleX,
+        totalPixelWidth,
+      );
+      const pixelYRange = roundRange(
         (page.sourceRectCss.y - payload.targetRect.y) * renderScaleY,
         (page.sourceRectCss.y + page.sourceRectCss.height - payload.targetRect.y) * renderScaleY,
         totalPixelHeight,
       );
-      if (pixelRange.length <= 0) {
+      if (pixelXRange.length <= 0 || pixelYRange.length <= 0) {
         throw exportError("PDF page pixel range is empty.", "PdfPagePixelRangeMissing");
       }
-      return { page, pixelRange };
+      return { page, pixelXRange, pixelYRange };
     });
     const maxPagePixelArea = Math.max(
-      ...pagePixelRanges.map(({ pixelRange }) => canvasWidth * pixelRange.length),
+      ...pagePixelRanges.map(
+        ({ pixelXRange, pixelYRange }) => pixelXRange.length * pixelYRange.length,
+      ),
     );
     const largestTilePixelArea = Math.max(
       ...payload.tiles.map((tile) => tile.expectedPixelWidth * tile.expectedPixelHeight),
     );
     const initialHeap = readHeapSnapshot(this.environment);
     const memoryEstimate = assertPdfExportMemorySafe({
-      widthCss: payload.targetRect.width,
+      widthCss: Math.max(...pages.map((page) => page.sourceRectCss.width)),
       heightCss: payload.targetRect.height,
       renderScaleX,
       renderScaleY,
@@ -415,8 +422,8 @@ export class PdfExporter {
 
     try {
       for (const [outputIndex, entry] of pagePixelRanges.entries()) {
-        const { page, pixelRange } = entry;
-        const canvas = this.environment.createCanvas(canvasWidth, pixelRange.length);
+        const { page, pixelXRange, pixelYRange } = entry;
+        const canvas = this.environment.createCanvas(pixelXRange.length, pixelYRange.length);
         maxCanvasPixelArea = Math.max(maxCanvasPixelArea, canvas.width * canvas.height);
         sampleHeap();
         try {
@@ -466,8 +473,9 @@ export class PdfExporter {
                   intersection.logicalRectCss.width -
                   payload.targetRect.x) *
                   renderScaleX,
-                canvasWidth,
+                totalPixelWidth,
               );
+              const destinationX = globalDestinationX.start - pixelXRange.start;
               const globalDestinationY = roundRange(
                 (intersection.logicalRectCss.y - payload.targetRect.y) * renderScaleY,
                 (intersection.logicalRectCss.y +
@@ -476,12 +484,14 @@ export class PdfExporter {
                   renderScaleY,
                 totalPixelHeight,
               );
-              const destinationY = globalDestinationY.start - pixelRange.start;
+              const destinationY = globalDestinationY.start - pixelYRange.start;
               if (
                 sourceX.length <= 0 ||
                 sourceY.length <= 0 ||
                 globalDestinationX.length <= 0 ||
                 globalDestinationY.length <= 0 ||
+                destinationX < 0 ||
+                destinationX + globalDestinationX.length > canvas.width ||
                 destinationY < 0 ||
                 destinationY + globalDestinationY.length > canvas.height
               ) {
@@ -496,7 +506,7 @@ export class PdfExporter {
                 sourceY.start,
                 sourceX.length,
                 sourceY.length,
-                globalDestinationX.start,
+                destinationX,
                 destinationY,
                 globalDestinationX.length,
                 globalDestinationY.length,

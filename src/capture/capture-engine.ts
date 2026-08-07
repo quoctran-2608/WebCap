@@ -2,6 +2,7 @@ import type {
   AdaptiveCaptureFrontier,
   CaptureEngineKind,
   CaptureJob,
+  DocumentPageMap,
   CaptureMode,
   ElementTargetDescriptor,
   CaptureSettings,
@@ -50,6 +51,7 @@ export interface CaptureEngineContext {
     targetRect: Rect,
     tiles: CaptureTile[],
     partialCapture?: PartialCapture,
+    documentPageMap?: DocumentPageMap,
   ): Promise<void>;
   checkpointFrontier?(frontier: AdaptiveCaptureFrontier): Promise<void>;
   discardTilesFromIndex?(firstIndex: number): Promise<void>;
@@ -62,6 +64,7 @@ export interface CaptureEngineResult {
   targetRect: Rect;
   tiles: CaptureTile[];
   partialCapture?: PartialCapture;
+  documentPageMap?: DocumentPageMap;
 }
 
 export interface CaptureEngine {
