@@ -270,7 +270,11 @@ async function discoverPdfViewerInContent(
 
   const runtime = (globalThis as typeof globalThis & StateCarrier).__webcapElementSelectionV1__;
   const stored = runtime?.targets?.get(selectionId);
-  if (stored === undefined || !(stored.element instanceof HTMLElement) || !stored.element.isConnected) {
+  if (
+    stored === undefined ||
+    !(stored.element instanceof HTMLElement) ||
+    !stored.element.isConnected
+  ) {
     return undefined;
   }
   const target = stored.element;
@@ -420,7 +424,11 @@ async function discoverPdfViewerInContent(
       if (selected.size > 0) sampleAdapter = "canvas-visual";
     }
 
-    if (declaredPageCount > selected.size && selected.size > 0 && sampleAdapter !== "canvas-visual") {
+    if (
+      declaredPageCount > selected.size &&
+      selected.size > 0 &&
+      sampleAdapter !== "canvas-visual"
+    ) {
       sampleAdapter = "virtualized";
     }
     adapter = sampleAdapter;
