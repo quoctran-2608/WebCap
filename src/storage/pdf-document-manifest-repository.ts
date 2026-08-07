@@ -1,7 +1,4 @@
-import {
-  PdfDocumentManifestSchema,
-  type PdfDocumentManifest,
-} from "@shared/contracts/pdf-capture";
+import { PdfDocumentManifestSchema, type PdfDocumentManifest } from "@shared/contracts/pdf-capture";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 
 import { requestResult, storageError, transactionDone } from "./indexeddb-helpers";
@@ -56,9 +53,7 @@ function parseManifest(value: unknown): PdfDocumentManifest {
   return parsed.data;
 }
 
-export class IndexedDbPdfDocumentManifestRepository
-  implements PdfDocumentManifestRepositoryPort
-{
+export class IndexedDbPdfDocumentManifestRepository implements PdfDocumentManifestRepositoryPort {
   private readonly openDatabase: () => Promise<IDBDatabase>;
 
   constructor(options: IndexedDbPdfDocumentManifestRepositoryOptions = {}) {
