@@ -50,6 +50,7 @@ function manifest(state: PdfDocumentManifest["state"] = "writing"): PdfDocumentM
     pages: sourcePages,
     state,
     progress: derivePdfPageProgress(sourcePages, 2, 0),
+    outputPlan: { kind: "source-order", sourcePageIndexes: [0, 1] },
     outputState: "writing",
     lastVerifiedPage: 1,
     createdAt: timestamp,
@@ -59,7 +60,7 @@ function manifest(state: PdfDocumentManifest["state"] = "writing"): PdfDocumentM
 }
 
 describe("PDF state machine", () => {
-  it("requires exact written-page agreement before completion", () => {
+  it("requires exact source verification and output-plan agreement before completion", () => {
     const source = manifest();
     const result = transitionPdfManifest(source, "completed", nextTimestamp, {
       outputState: "completed",
@@ -72,7 +73,7 @@ describe("PDF state machine", () => {
     const written = pages("written");
     const complete = transitionPdfManifest(source, "completed", nextTimestamp, {
       pages: written,
-      progress: derivePdfPageProgress(written, 2, 0),
+      progress: derivePdfPageProgress(written, 2, 0, undefined, 2),
       outputState: "completed",
     });
     expect(complete).toMatchObject({
@@ -80,6 +81,25 @@ describe("PDF state machine", () => {
       value: {
         state: "completed",
         progress: { discoveredPages: 2, capturedPages: 2, verifiedPages: 2, outputPages: 2 },
+      },
+    });
+  });
+
+  it("allows a verified editor subset without pretending source verification is partial", () => {
+    const source = manifest();
+    const editedPages = [source.pages[0]!, { ...source.pages[1]!, state: "written" as const }];
+    const complete = transitionPdfManifest(source, "completed", nextTimestamp, {
+      pages: editedPages,
+      outputPlan: { kind: "editor", sourcePageIndexes: [1], editRevision: 3 },
+      progress: derivePdfPageProgress(editedPages, 2, 0, undefined, 1),
+      outputState: "completed",
+    });
+
+    expect(complete).toMatchObject({
+      ok: true,
+      value: {
+        progress: { verifiedPages: 2, outputPages: 1 },
+        outputPlan: { kind: "editor", sourcePageIndexes: [1], editRevision: 3 },
       },
     });
   });
@@ -99,11 +119,11 @@ describe("PDF state machine", () => {
     });
   });
 
-  it("rejects progress that is not derived from page state", () => {
+  it("rejects source progress that is not derived from page state", () => {
     const source = manifest();
     const candidate = {
       ...source,
-      progress: { ...source.progress, outputPages: 1 },
+      progress: { ...source.progress, capturedPages: 1 },
     };
     expect(validatePdfManifestInvariants(candidate)).toMatchObject({
       ok: false,
