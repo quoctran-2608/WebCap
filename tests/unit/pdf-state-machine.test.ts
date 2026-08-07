@@ -104,6 +104,30 @@ describe("PDF state machine", () => {
     });
   });
 
+  it("allows replanning before writing resumes but blocks plan changes mid-write", () => {
+    const paused = manifest("paused");
+    const replanned = transitionPdfManifest(paused, "verifying", nextTimestamp, {
+      outputPlan: { kind: "editor", sourcePageIndexes: [1], editRevision: 4 },
+      outputState: "not-started",
+    });
+    expect(replanned).toMatchObject({
+      ok: true,
+      value: {
+        state: "verifying",
+        outputPlan: { kind: "editor", sourcePageIndexes: [1], editRevision: 4 },
+      },
+    });
+
+    const writing = manifest("writing");
+    const changedMidWrite = updatePdfManifest(writing, nextTimestamp, {
+      outputPlan: { kind: "editor", sourcePageIndexes: [1], editRevision: 4 },
+    });
+    expect(changedMidWrite).toMatchObject({
+      ok: false,
+      error: { causeCode: "PdfOutputPlanChanged" },
+    });
+  });
+
   it("rejects page lifecycle regression", () => {
     const source = manifest();
     const regressed = pages("captured");
