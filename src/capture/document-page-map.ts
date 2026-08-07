@@ -76,6 +76,7 @@ export function buildDocumentPageMap(options: {
   candidates: readonly DocumentPageCandidate[];
   scrollWidth: number;
   scrollHeight: number;
+  declaredPageCount?: number;
 }): DocumentPageMap | undefined {
   if (!finitePositive(options.scrollWidth) || !finitePositive(options.scrollHeight)) {
     return undefined;
@@ -90,7 +91,10 @@ export function buildDocumentPageMap(options: {
   for (const candidate of ordered) {
     const previous = deduplicated.at(-1);
     if (previous !== undefined && overlapsSamePage(previous.rect, candidate.rect)) {
-      if (candidate.rect.width * candidate.rect.height > previous.rect.width * previous.rect.height) {
+      if (
+        candidate.rect.width * candidate.rect.height >
+        previous.rect.width * previous.rect.height
+      ) {
         deduplicated[deduplicated.length - 1] = candidate;
       }
       continue;
@@ -115,8 +119,14 @@ export function buildDocumentPageMap(options: {
   const declaredIndexes = deduplicated
     .map((candidate) => candidate.declaredIndex)
     .filter((value): value is number => value !== undefined);
-  const declaredPageCount =
+  const candidateDeclaredPageCount =
     declaredIndexes.length === 0 ? undefined : Math.max(...declaredIndexes) + 1;
+  const declaredPageCount =
+    options.declaredPageCount !== undefined &&
+    Number.isInteger(options.declaredPageCount) &&
+    options.declaredPageCount > 0
+      ? Math.max(options.declaredPageCount, candidateDeclaredPageCount ?? 0)
+      : candidateDeclaredPageCount;
   const edgeTolerance = Math.max(64, medianGap * 2, medianHeight * 0.08);
   const coversTop = first.y <= edgeTolerance;
   const coversBottom = last.y + last.height >= options.scrollHeight - edgeTolerance;

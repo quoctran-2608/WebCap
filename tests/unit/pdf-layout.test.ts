@@ -6,6 +6,7 @@ import {
   inchesToPt,
   mmToPt,
   planPdfDocument,
+  planPdfDocumentPages,
   resolvePdfPageBox,
 } from "@offscreen/pdf-layout";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
@@ -55,6 +56,32 @@ describe("PDF page layout", () => {
     expect(plan.pages.reduce((sum, page) => sum + page.sourceRectCss.height, 0)).toBeCloseTo(
       source.height,
       8,
+    );
+  });
+
+  it("keeps one output page per detected source page without splitting", () => {
+    const pages = planPdfDocumentPages(
+      {
+        schemaVersion: 1,
+        strategy: "dom",
+        confidence: 1,
+        complete: true,
+        sourcePageCount: 2,
+        pages: [
+          { index: 0, sourceRectCss: { x: 120, y: 20, width: 800, height: 1132 } },
+          { index: 1, sourceRectCss: { x: 40, y: 1180, width: 1132, height: 800 } },
+        ],
+      },
+      DEFAULT_CAPTURE_SETTINGS.pdf,
+    );
+
+    expect(pages).toHaveLength(2);
+    expect(pages[0]?.sourceRectCss).toEqual({ x: 120, y: 20, width: 800, height: 1132 });
+    expect(pages[1]?.sourceRectCss).toEqual({ x: 40, y: 1180, width: 1132, height: 800 });
+    expect(pages[0]?.pageHeightPt).toBeGreaterThan(pages[0]?.pageWidthPt ?? 0);
+    expect(pages[1]?.pageWidthPt).toBeGreaterThan(pages[1]?.pageHeightPt ?? 0);
+    expect(pages.every((page) => page.imageRectPt.width > 0 && page.imageRectPt.height > 0)).toBe(
+      true,
     );
   });
 

@@ -1,4 +1,9 @@
-import type { ElementTargetDescriptor, FixedElementMode, Rect } from "@shared/contracts/domain";
+import type {
+  DocumentPageMap,
+  ElementTargetDescriptor,
+  FixedElementMode,
+  Rect,
+} from "@shared/contracts/domain";
 import { PAGE_PREPARATION_CONTENT_SCRIPT_FILE } from "@shared/contracts/page-preparation";
 import {
   createScrollAreaCleanupMessage,
@@ -44,6 +49,7 @@ export interface ScrollAreaPageResult {
   mutationCount: number;
   scrollSnapped: boolean;
   layoutChanged: boolean;
+  documentPageMap?: DocumentPageMap;
 }
 
 export interface ScrollAreaCleanupResult {
@@ -145,6 +151,9 @@ export class ChromeScrollAreaPageAdapter implements ScrollAreaPageAdapter {
       mutationCount: payload.mutationCount,
       scrollSnapped: payload.scrollSnapped,
       layoutChanged: payload.layoutChanged,
+      ...(payload.documentPageMap === undefined
+        ? {}
+        : { documentPageMap: payload.documentPageMap }),
     };
   }
 
