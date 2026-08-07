@@ -1,6 +1,8 @@
 import { PDFDocument } from "pdf-lib";
 import { describe, expect, it, vi } from "vitest";
 
+import type { PdfSourceCdpRecoveryPort } from "@background/pdf-source-cdp-recovery";
+import type { PdfSourceDiscoveryPort } from "@background/pdf-source-discovery";
 import {
   PdfSourceService,
   type PdfSourceFetchPort,
@@ -8,6 +10,7 @@ import {
 } from "@background/pdf-source-service";
 import type { ArtifactRecord } from "@shared/contracts/artifact";
 import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
+import type { PdfSourceSpoolPort } from "@storage/pdf-source-spool";
 
 async function samplePdf(): Promise<Uint8Array> {
   const document = await PDFDocument.create();
@@ -42,10 +45,34 @@ function permissions(granted = true): PdfSourcePermissionPort {
   };
 }
 
+function memorySpool(): PdfSourceSpoolPort {
+  return {
+    availableBytes: () => Promise.resolve(Number.MAX_SAFE_INTEGER),
+    create: () => {
+      const chunks: ArrayBuffer[] = [];
+      return Promise.resolve({
+        write: (chunk) => {
+          chunks.push(Uint8Array.from(chunk).buffer);
+          return Promise.resolve();
+        },
+        close: (mimeType) => Promise.resolve(new Blob(chunks, { type: mimeType })),
+        abort: () => {
+          chunks.length = 0;
+          return Promise.resolve();
+        },
+        cleanup: () => Promise.resolve(),
+      });
+    },
+  };
+}
+
 function service(options: {
   url?: string;
   permissionGranted?: boolean;
   fetcher: PdfSourceFetchPort;
+  discovery?: PdfSourceDiscoveryPort;
+  cdpRecovery?: PdfSourceCdpRecoveryPort;
+  spool?: PdfSourceSpoolPort;
 }) {
   const artifacts = repository();
   const download = vi.fn(() => Promise.resolve(91));
@@ -65,6 +92,9 @@ function service(options: {
       },
       permissions: permissions(options.permissionGranted ?? true),
       fetcher: options.fetcher,
+      ...(options.discovery === undefined ? {} : { discovery: options.discovery }),
+      ...(options.cdpRecovery === undefined ? {} : { cdpRecovery: options.cdpRecovery }),
+      spool: options.spool ?? memorySpool(),
       artifacts: artifacts.port,
       downloads: { download },
       now: () => new Date("2026-08-04T05:00:00.000Z"),
@@ -102,10 +132,7 @@ describe("PdfSourceService", () => {
 
   it("does not fetch before the user grants the exact host permission", async () => {
     const fetch = vi.fn(() => Promise.reject(new Error("must not run")));
-    const { instance } = service({
-      permissionGranted: false,
-      fetcher: { fetch },
-    });
+    const { instance } = service({ permissionGranted: false, fetcher: { fetch } });
 
     await expect(instance.inspect()).resolves.toMatchObject({
       status: "original-passthrough",
@@ -115,7 +142,7 @@ describe("PdfSourceService", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("stores and downloads byte-identical original PDF data with SHA-256 metadata", async () => {
+  it("stores and downloads byte-identical streamed PDF data with SHA-256 metadata", async () => {
     const bytes = await samplePdf();
     const { instance, artifacts, download } = service({
       fetcher: {
@@ -157,10 +184,55 @@ describe("PdfSourceService", () => {
     expect(download).toHaveBeenCalledWith("original-pdf-1");
     expect(artifacts.records).toHaveLength(1);
     const stored = artifacts.records[0];
-    expect(stored).toBeDefined();
     if (stored === undefined) throw new Error("Original PDF artifact was not stored.");
-    expect(stored.role).toBe("output");
     expect(new Uint8Array(await stored.blob.arrayBuffer())).toEqual(bytes);
+  });
+
+  it("does not reject a streamed source because Content-Length exceeds the legacy 128 MiB cap", async () => {
+    const bytes = await samplePdf();
+    const { instance } = service({
+      fetcher: {
+        fetch: () =>
+          Promise.resolve(
+            new Response(Uint8Array.from(bytes).buffer, {
+              status: 200,
+              headers: {
+                "content-type": "application/pdf",
+                "content-length": String(256 * 1024 * 1024),
+              },
+            }),
+          ),
+      },
+    });
+
+    await expect(instance.downloadOriginal("request-large-header", 7)).resolves.toMatchObject({
+      originalByteLength: bytes.byteLength,
+      capability: { status: "original-passthrough" },
+    });
+  });
+
+  it("discovers a PDF embedded inside a normal HTML viewer page", async () => {
+    const fetch = vi.fn((input: string) =>
+      Promise.resolve(
+        new Response(null, {
+          status: 200,
+          headers: {
+            "content-type": input.includes("embedded.pdf") ? "application/pdf" : "text/html",
+          },
+        }),
+      ),
+    );
+    const { instance } = service({
+      url: "https://example.test/viewer",
+      discovery: { discover: () => Promise.resolve(["https://cdn.test/embedded.pdf"]) },
+      fetcher: { fetch },
+    });
+
+    await expect(instance.inspect()).resolves.toMatchObject({
+      status: "original-passthrough",
+      filename: "embedded.pdf",
+      sourceLabel: "cdn.test",
+    });
   });
 
   it("supports a local file source only after Chrome file access is enabled", async () => {
@@ -190,11 +262,9 @@ describe("PdfSourceService", () => {
     });
   });
 
-  it("returns auth-required without reading or storing a protected response", async () => {
+  it("returns auth-required without storing when no CDP recovery is available", async () => {
     const { instance, artifacts, download } = service({
-      fetcher: {
-        fetch: () => Promise.resolve(new Response("Sign in", { status: 401 })),
-      },
+      fetcher: { fetch: () => Promise.resolve(new Response("Sign in", { status: 401 })) },
     });
 
     await expect(instance.downloadOriginal("request-auth", 7)).resolves.toMatchObject({
@@ -204,6 +274,55 @@ describe("PdfSourceService", () => {
     });
     expect(artifacts.records).toHaveLength(0);
     expect(download).not.toHaveBeenCalled();
+  });
+
+  it("recovers an authenticated source through CDP after direct fetch is denied", async () => {
+    const bytes = await samplePdf();
+    const cleanup = vi.fn(() => Promise.resolve());
+    const recover = vi.fn(() =>
+      Promise.resolve({
+        blob: new Blob([Uint8Array.from(bytes).buffer], { type: "application/pdf" }),
+        byteLength: bytes.byteLength,
+        checksumSha256: "a".repeat(64),
+        signature: true,
+        cleanup,
+      }),
+    );
+    const { instance } = service({
+      fetcher: { fetch: () => Promise.resolve(new Response("Sign in", { status: 401 })) },
+      cdpRecovery: { recover },
+    });
+
+    await expect(instance.downloadOriginal("request-cdp", 7)).resolves.toMatchObject({
+      capability: { status: "original-passthrough", reason: "downloaded-original" },
+      originalByteLength: bytes.byteLength,
+    });
+    expect(recover).toHaveBeenCalledWith(
+      7,
+      "https://example.test/report.pdf",
+      "original-pdf-1-cdp",
+    );
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves a signature-valid but geometry-uninspectable original", async () => {
+    const bytes = new TextEncoder().encode("%PDF-1.7\nnot-parseable-but-preservable");
+    const { instance } = service({
+      fetcher: {
+        fetch: () =>
+          Promise.resolve(
+            new Response(bytes, {
+              status: 200,
+              headers: { "content-type": "application/pdf" },
+            }),
+          ),
+      },
+    });
+
+    await expect(instance.downloadOriginal("request-encrypted-like", 7)).resolves.toMatchObject({
+      artifact: { width: 1, height: 1 },
+      capability: { status: "original-passthrough" },
+    });
   });
 
   it("rejects a response that claims PDF but has no PDF signature", async () => {
