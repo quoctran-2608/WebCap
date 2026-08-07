@@ -21,6 +21,7 @@ const ALLOWED_TRANSITIONS: Readonly<Record<JobState, readonly JobState[]>> = Obj
 
 export interface JobInvariantContext {
   sourceArtifactExists?: boolean;
+  pdfCompletionVerified?: boolean;
 }
 
 export type JobTransitionPatch = Partial<
@@ -206,6 +207,25 @@ export function validateJobInvariants(
         {
           sourcePageCount: job.documentPageMap.sourcePageCount,
           outputPages: job.exportProgress.totalPages,
+        },
+      ),
+    );
+  }
+
+  if (
+    job.state === "completed" &&
+    job.documentPageMap?.complete === true &&
+    job.partialCapture === undefined &&
+    job.activeOutputFormat === "pdf" &&
+    context.pdfCompletionVerified !== true
+  ) {
+    return err(
+      stateError(
+        "A dedicated PDF cannot complete without verified document-manifest evidence.",
+        "PdfCompletionEvidenceMissing",
+        {
+          sourcePageCount: job.documentPageMap.sourcePageCount,
+          outputPages: job.output?.pageCount ?? 0,
         },
       ),
     );
