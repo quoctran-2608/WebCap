@@ -101,15 +101,14 @@ function normalizeCandidate(
   const right = Math.max(left, Math.min(scrollWidth, rect.x + rect.width));
   const bottom = Math.max(top, Math.min(scrollHeight, rect.y + rect.height));
   if (right - left < PAGE_EDGE_MIN_CSS || bottom - top < PAGE_EDGE_MIN_CSS) return undefined;
+  const { declaredIndex, ...rest } = candidate;
+  const validDeclaredIndex =
+    declaredIndex !== undefined && Number.isInteger(declaredIndex) && declaredIndex >= 0;
   return {
-    ...candidate,
+    ...rest,
     rect: { x: left, y: top, width: right - left, height: bottom - top },
     confidence: Math.max(0, Math.min(1, candidate.confidence)),
-    ...(candidate.declaredIndex === undefined ||
-    !Number.isInteger(candidate.declaredIndex) ||
-    candidate.declaredIndex < 0
-      ? { declaredIndex: undefined }
-      : { declaredIndex: candidate.declaredIndex }),
+    ...(validDeclaredIndex ? { declaredIndex } : {}),
   };
 }
 
@@ -159,10 +158,6 @@ function declaredCompletion(
 
   const ordered = Array.from({ length: count }, (_, index) => byIndex.get(index));
   if (ordered.some((candidate) => candidate === undefined)) return undefined;
-  const pages = ordered.map((candidate, index) => ({
-    index,
-    sourceRectCss: (candidate as PdfViewerPageCandidate).rect,
-  }));
   const evidence = ordered.filter(
     (candidate): candidate is PdfViewerPageCandidate => candidate !== undefined,
   );
@@ -172,7 +167,10 @@ function declaredCompletion(
     confidence: Math.max(0.9, confidenceFor(evidence)),
     complete: true,
     sourcePageCount: count,
-    pages,
+    pages: evidence.map((candidate, index) => ({
+      index,
+      sourceRectCss: candidate.rect,
+    })),
   };
 }
 
@@ -371,6 +369,20 @@ async function discoverPdfViewerInContent(
       ancestor = ancestor.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
     }
   };
+  const pdfContextSignal = (): boolean => {
+    if (document.contentType.toLowerCase().includes("pdf")) return true;
+    if (/\.pdf(?:$|[?#])/iu.test(globalThis.location.href)) return true;
+    for (const root of collectRoots()) {
+      if (
+        root.querySelector(
+          'embed[type="application/pdf"], object[type="application/pdf"], source[type="application/pdf"]',
+        ) !== null
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
   const sample = () => {
     const selectors = [
       ".page[data-page-number]",
@@ -391,6 +403,7 @@ async function discoverPdfViewerInContent(
       for (const element of Array.from(root.querySelectorAll(selectors))) selected.add(element);
     }
 
+    inspectPageCount([...selected]);
     let sampleAdapter: PdfViewerAdapterKind = "generic-semantic";
     if ([...selected].some((element) => element.matches(".page[data-page-number]"))) {
       sampleAdapter = "pdfjs";
@@ -398,13 +411,15 @@ async function discoverPdfViewerInContent(
       sampleAdapter = "shadow-root";
     }
     if (selected.size === 0) {
-      for (const root of roots) {
-        for (const canvas of Array.from(root.querySelectorAll("canvas"))) selected.add(canvas);
+      inspectPageCount([]);
+      if (declaredPageCount > 0 || pdfContextSignal()) {
+        for (const root of roots) {
+          for (const canvas of Array.from(root.querySelectorAll("canvas"))) selected.add(canvas);
+        }
       }
       if (selected.size > 0) sampleAdapter = "canvas-visual";
     }
 
-    inspectPageCount([...selected]);
     if (declaredPageCount > selected.size && selected.size > 0 && sampleAdapter !== "canvas-visual") {
       sampleAdapter = "virtualized";
     }
@@ -440,7 +455,7 @@ async function discoverPdfViewerInContent(
     await frames();
     sample();
     const boundedSettleMs = Math.min(250, Math.max(0, Math.round(settleMs)));
-    const step = Math.max(128, Math.round(Math.max(1, target.clientHeight) * 0.72));
+    const step = Math.max(128, Math.round(Math.max(1, target.clientHeight) * 0.8));
     const maxSamples = 10_000;
     let nextTop = 0;
     while (sampleIndex < maxSamples) {
