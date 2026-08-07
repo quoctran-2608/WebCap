@@ -16,6 +16,7 @@ import {
   isDedicatedViewerPdfJob,
   type PdfCaptureOrchestratorPort,
 } from "./pdf-capture-orchestrator";
+import { getPdfCaptureOrchestrator } from "./pdf-capture-runtime";
 
 export interface PdfOffscreenPort {
   exportPdf(options: PdfExportPayload): Promise<ArtifactMetadata>;
@@ -129,7 +130,7 @@ export class PdfExportService {
     this.tiles = options.tiles;
     this.offscreen = options.offscreen;
     this.manifests = options.manifests;
-    this.pdfDocuments = options.pdfDocuments;
+    this.pdfDocuments = options.pdfDocuments ?? getPdfCaptureOrchestrator();
     this.artifacts = options.artifacts;
     this.now = options.now ?? (() => new Date());
     this.createId = options.createId ?? (() => crypto.randomUUID());
