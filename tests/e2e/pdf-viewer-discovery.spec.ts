@@ -107,14 +107,16 @@ test("@smoke discovers all 500 virtualized PDF pages without simultaneous DOM no
   expect(state.documentPageMap?.confidence ?? 0).toBeGreaterThanOrEqual(0.9);
 
   const fixtureStats = await targetPage.evaluate(() => {
-    return (window as typeof window & {
-      __webcapVirtualPdfFixture?: {
-        pageCount: number;
-        livePages: number;
-        maxLivePages: number;
-        renderCount: number;
-      };
-    }).__webcapVirtualPdfFixture;
+    return (
+      window as typeof window & {
+        __webcapVirtualPdfFixture?: {
+          pageCount: number;
+          livePages: number;
+          maxLivePages: number;
+          renderCount: number;
+        };
+      }
+    ).__webcapVirtualPdfFixture;
   });
   expect(fixtureStats).toBeDefined();
   expect(fixtureStats?.pageCount).toBe(500);
