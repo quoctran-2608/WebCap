@@ -126,7 +126,7 @@ function capability(patch: Partial<PdfSourceCapability> = {}): PdfSourceCapabili
 }
 
 describe("PdfCaptureOrchestrator", () => {
-  it("bootstraps S27 page metadata and completes only after page verification", async () => {
+  it("bootstraps S27 page metadata and completes only after source and output verification", async () => {
     const { repository, service } = orchestrator();
     const job = dedicatedJob();
 
@@ -134,6 +134,7 @@ describe("PdfCaptureOrchestrator", () => {
     expect(prepared).toMatchObject({
       state: "writing",
       expectedPageCount: 2,
+      outputPlan: { kind: "source-order", sourcePageIndexes: [0, 1] },
       progress: {
         discoveredPages: 2,
         capturedPages: 2,
@@ -153,7 +154,8 @@ describe("PdfCaptureOrchestrator", () => {
     const evidence = await service.completeViewerOutput(job, 2);
     expect(evidence).toMatchObject({
       jobId: job.id,
-      expectedPageCount: 2,
+      sourcePageCount: 2,
+      expectedOutputPageCount: 2,
       outputPageCount: 2,
       verified: true,
     });
@@ -161,6 +163,35 @@ describe("PdfCaptureOrchestrator", () => {
       state: "completed",
       outputState: "completed",
       progress: { discoveredPages: 2, capturedPages: 2, verifiedPages: 2, outputPages: 2 },
+    });
+  });
+
+  it("supports a verified editor subset/reorder without weakening source verification", async () => {
+    const { repository, service } = orchestrator();
+    const job = dedicatedJob();
+    await service.prepareViewerExport(job, {
+      kind: "editor",
+      sourcePageIndexes: [1],
+      editRevision: 4,
+    });
+
+    const progress = await service.recordOutputProgress(job.id, 1, 1);
+    expect(progress).toMatchObject({
+      progress: { discoveredPages: 2, verifiedPages: 2, outputPages: 1 },
+      outputPlan: { kind: "editor", sourcePageIndexes: [1], editRevision: 4 },
+    });
+    expect(progress?.pages.map((page) => page.state)).toEqual(["verified", "written"]);
+
+    const evidence = await service.completeViewerOutput(job, 1);
+    expect(evidence).toMatchObject({
+      sourcePageCount: 2,
+      expectedOutputPageCount: 1,
+      outputPageCount: 1,
+      verified: true,
+    });
+    expect(await repository.get(job.id)).toMatchObject({
+      state: "completed",
+      progress: { verifiedPages: 2, outputPages: 1 },
     });
   });
 
