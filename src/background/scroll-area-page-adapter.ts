@@ -1,4 +1,7 @@
-import { ChromePdfViewerDiscovery, type PdfViewerDiscoveryPort } from "@background/pdf-viewer-discovery";
+import {
+  ChromePdfViewerDiscovery,
+  type PdfViewerDiscoveryPort,
+} from "@background/pdf-viewer-discovery";
 import type {
   DocumentPageMap,
   ElementTargetDescriptor,
