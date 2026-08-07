@@ -53,13 +53,7 @@ jobs:
         run: pnpm audit:security
 
       - name: Unit tests
-        run: |
-          mkdir -p artifacts
-          set +e
-          pnpm test:unit 2>&1 | tee artifacts/s28-unit.log
-          status=${PIPESTATUS[0]}
-          set -e
-          exit "$status"
+        run: pnpm test:unit
 
       - name: PDF performance benchmark
         run: pnpm benchmark:pdf
