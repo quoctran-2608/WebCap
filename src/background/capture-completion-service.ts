@@ -15,6 +15,7 @@ import {
   isDedicatedViewerPdfJob,
   type PdfCaptureOrchestratorPort,
 } from "./pdf-capture-orchestrator";
+import { getPdfCaptureOrchestrator } from "./pdf-capture-runtime";
 
 export interface CompletionPdfExportPort {
   start(jobId: string, settings?: CaptureSettings["pdf"]): Promise<CaptureJob>;
@@ -98,7 +99,11 @@ function newestOutput(records: ArtifactRecord[]): ArtifactRecord | undefined {
 }
 
 export class CaptureCompletionService {
-  constructor(private readonly options: CaptureCompletionServiceOptions) {}
+  private readonly pdfDocuments: PdfCaptureOrchestratorPort | undefined;
+
+  constructor(private readonly options: CaptureCompletionServiceOptions) {
+    this.pdfDocuments = options.pdfDocuments ?? getPdfCaptureOrchestrator();
+  }
 
   async startAuto(jobId: string): Promise<CaptureJob> {
     const job = await this.requireJob(jobId);
@@ -182,7 +187,7 @@ export class CaptureCompletionService {
       isDedicatedViewerPdfJob(job) &&
       job.partialCapture === undefined;
     const evidence = dedicated
-      ? await this.options.pdfDocuments?.completeViewerOutput(job, totalPages)
+      ? await this.pdfDocuments?.completeViewerOutput(job, totalPages)
       : undefined;
     if (dedicated && evidence === undefined) throw completionEvidenceError(job.id);
 
