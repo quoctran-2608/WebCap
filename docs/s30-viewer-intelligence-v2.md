@@ -21,6 +21,8 @@ S30 does not implement page-native raster capture, adaptive page batches, OPFS r
 ```text
 scroll-area initial probe
         ↓
+PDF/page evidence gate
+        ↓
 PdfViewerDiscovery
         ↓
 scroll viewer incrementally
@@ -37,10 +39,12 @@ strict DocumentPageMap
         ↓
 restore viewer scroll position
         ↓
+expand capture extent from verified pages if lazy rendering grew the viewer
+        ↓
 existing S27 page-aware capture/export
 ```
 
-The discovery pass does not capture screenshots and does not allocate a full-document canvas. It only records bounded page geometry metadata.
+The discovery pass does not capture screenshots and does not allocate a full-document canvas. It only records bounded page geometry metadata. Ordinary scroll containers without page evidence or a PDF/document/viewer descriptor skip this pass entirely.
 
 ## Completion rules
 
@@ -54,7 +58,7 @@ A page map is complete only when one of these proof paths succeeds.
 - duplicate observations are collapsed by stable page index;
 - the highest-confidence geometry for each logical page is retained.
 
-This allows a 500-page document to complete even when only 3–5 page nodes exist at a time.
+This allows a 500-page document to complete even when only a small moving page window exists at a time.
 
 ### Geometry/visual proof
 
@@ -70,7 +74,7 @@ Canvas candidates require independent PDF context or declared page-count evidenc
 
 ## Projection boundary
 
-The legacy S27 `projected` page map remains in the domain schema for compatibility, but S30 no longer accepts it as final viewer-completion evidence in the scroll-area adapter.
+The legacy S27 `projected` page map remains in the domain schema for compatibility, but S30 no longer accepts it as final viewer-completion evidence when incremental discovery is responsible for the target.
 
 Uniform rhythm can remain a diagnostic/fallback hint, but it cannot by itself make a PDF job page-complete.
 
@@ -78,9 +82,17 @@ Uniform rhythm can remain a diagnostic/fallback hint, but it cannot by itself ma
 
 Every accepted page keeps its independently observed `sourceRectCss`. No median width/height is substituted for a declared page sequence, so mixed portrait/landscape and mixed-size pages survive discovery unchanged.
 
+## Lazy viewer growth and capture metrics
+
+A viewer may increase `scrollHeight` while discovery activates lazy rendering or replaces placeholders. The original measurement probe therefore cannot always remain the source of truth for capture planning.
+
+After a complete page map is proven, the scroll-area adapter expands the planned width/height to at least the verified page-map extent. Height growth is accepted as normal PDF virtualization behavior; newly discovered width growth beyond tolerance still sets the existing layout-change safety signal instead of silently weakening width-drift protection.
+
 ## Restoration and safety
 
 - discovery preserves and restores the selected container's original `scrollLeft` and `scrollTop`;
+- discovery is gated to the initial measurement probe and only for targets with PDF/page evidence;
+- camelCase and tokenized viewer descriptors such as `pdfViewer`, `pdf-viewer` and `documentViewer` are recognized;
 - no new Chrome permission is added;
 - no backend, telemetry, remote code or page-content upload is introduced;
 - discovery returns no complete map when terminal proof or page continuity is missing;
@@ -96,6 +108,8 @@ S30 adds deterministic tests for:
 - canvas-only completion requiring stable terminal proof;
 - recycled geometry deduplication without collapsing adjacent logical pages;
 - adapter integration only on the initial measurement probe;
+- lazy viewer height growth expanding capture planning from the verified page-map extent;
+- ordinary scroll containers skipping the expensive discovery pass;
 - rejection of the legacy projection-only page map when incremental discovery has no completion proof.
 
 ## Exit target
