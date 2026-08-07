@@ -6,6 +6,7 @@ interface DiscoveryState {
   id?: string;
   state?: string;
   completedTiles?: number;
+  error?: unknown;
   documentPageMap?: {
     strategy: string;
     confidence: number;
@@ -59,6 +60,7 @@ async function readDiscoveryState(serviceWorker: Worker): Promise<DiscoveryState
       state: string;
       completedTiles: number;
       updatedAt: string;
+      error?: unknown;
       documentPageMap?: DiscoveryState["documentPageMap"];
     }>;
     const job = jobs
@@ -70,6 +72,7 @@ async function readDiscoveryState(serviceWorker: Worker): Promise<DiscoveryState
           id: job.id,
           state: job.state,
           completedTiles: job.completedTiles,
+          ...(job.error === undefined ? {} : { error: job.error }),
           ...(job.documentPageMap === undefined ? {} : { documentPageMap: job.documentPageMap }),
         };
   });
@@ -88,7 +91,13 @@ test("@smoke discovers all 500 virtualized PDF pages without simultaneous DOM no
 
   await expect
     .poll(
-      async () => (await readDiscoveryState(serviceWorker)).documentPageMap?.sourcePageCount ?? 0,
+      async () => {
+        const state = await readDiscoveryState(serviceWorker);
+        if (state.state === "failed") {
+          throw new Error(`S30 discovery job failed: ${JSON.stringify(state.error)}`);
+        }
+        return state.documentPageMap?.sourcePageCount ?? 0;
+      },
       {
         timeout: 60_000,
       },
