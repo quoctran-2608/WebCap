@@ -2,7 +2,7 @@ name: Apply S27 dedicated PDF capture
 
 on:
   pull_request:
-    types: [opened]
+    types: [opened, synchronize]
     branches: [main]
 
 permissions:
@@ -37,7 +37,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Apply implementation
-        run: node scripts/apply-s27-dedicated-pdf-capture.mjs
+        run: |
+          node scripts/apply-s27-dedicated-pdf-capture.mjs
+          node scripts/apply-s27-typecheck-fix.mjs
 
       - name: Format implementation
         run: >-
