@@ -50,23 +50,19 @@ function memorySpool(): PdfSourceSpoolPort {
     availableBytes: () => Promise.resolve(Number.MAX_SAFE_INTEGER),
     create: () => {
       const chunks: Uint8Array[] = [];
-      let closed = false;
       return Promise.resolve({
         write: (chunk) => {
           chunks.push(Uint8Array.from(chunk));
           return Promise.resolve();
         },
         close: (mimeType) => {
-          closed = true;
           return Promise.resolve(new Blob(chunks, { type: mimeType }));
         },
         abort: () => {
-          closed = true;
           chunks.length = 0;
           return Promise.resolve();
         },
         cleanup: () => {
-          closed = true;
           return Promise.resolve();
         },
       });
