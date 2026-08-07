@@ -82,7 +82,9 @@ export class IndexedDbPdfDocumentManifestRepository implements PdfDocumentManife
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(PDF_DOCUMENT_STORE, "readonly");
-      const value = await requestResult<unknown>(transaction.objectStore(PDF_DOCUMENT_STORE).get(jobId));
+      const value = await requestResult<unknown>(
+        transaction.objectStore(PDF_DOCUMENT_STORE).get(jobId),
+      );
       return value === undefined ? undefined : parseManifest(value);
     } catch (error) {
       throw storageError("read", error);
