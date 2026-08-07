@@ -1,0 +1,62 @@
+name: S30 temporary formatter
+
+on:
+  push:
+    branches: [agent/s30-viewer-intelligence-v2]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: s30-format-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/s30-viewer-intelligence-v2
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Format S30 files
+        run: >-
+          pnpm exec prettier --write
+          src/background/pdf-viewer-discovery.ts
+          src/background/scroll-area-page-adapter.ts
+          tests/unit/pdf-viewer-discovery.test.ts
+          tests/unit/scroll-area-page-adapter-s30.test.ts
+          tests/e2e/pdf-viewer-discovery.spec.ts
+          tests/fixtures/pdf-virtualized-viewer.html
+          docs/s30-viewer-intelligence-v2.md
+
+      - name: Commit canonical formatting
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No formatting changes required."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/background/pdf-viewer-discovery.ts src/background/scroll-area-page-adapter.ts tests/unit/pdf-viewer-discovery.test.ts tests/unit/scroll-area-page-adapter-s30.test.ts tests/e2e/pdf-viewer-discovery.spec.ts tests/fixtures/pdf-virtualized-viewer.html docs/s30-viewer-intelligence-v2.md
+          git commit -m "Format S30 viewer intelligence files"
+          git push origin HEAD:agent/s30-viewer-intelligence-v2
