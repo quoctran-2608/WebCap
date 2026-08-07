@@ -49,22 +49,18 @@ function memorySpool(): PdfSourceSpoolPort {
   return {
     availableBytes: () => Promise.resolve(Number.MAX_SAFE_INTEGER),
     create: () => {
-      const chunks: Uint8Array[] = [];
+      const chunks: ArrayBuffer[] = [];
       return Promise.resolve({
         write: (chunk) => {
-          chunks.push(Uint8Array.from(chunk));
+          chunks.push(Uint8Array.from(chunk).buffer);
           return Promise.resolve();
         },
-        close: (mimeType) => {
-          return Promise.resolve(new Blob(chunks, { type: mimeType }));
-        },
+        close: (mimeType) => Promise.resolve(new Blob(chunks, { type: mimeType })),
         abort: () => {
           chunks.length = 0;
           return Promise.resolve();
         },
-        cleanup: () => {
-          return Promise.resolve();
-        },
+        cleanup: () => Promise.resolve(),
       });
     },
   };
@@ -96,8 +92,8 @@ function service(options: {
       },
       permissions: permissions(options.permissionGranted ?? true),
       fetcher: options.fetcher,
-      discovery: options.discovery,
-      cdpRecovery: options.cdpRecovery,
+      ...(options.discovery === undefined ? {} : { discovery: options.discovery }),
+      ...(options.cdpRecovery === undefined ? {} : { cdpRecovery: options.cdpRecovery }),
       spool: options.spool ?? memorySpool(),
       artifacts: artifacts.port,
       downloads: { download },
@@ -136,10 +132,7 @@ describe("PdfSourceService", () => {
 
   it("does not fetch before the user grants the exact host permission", async () => {
     const fetch = vi.fn(() => Promise.reject(new Error("must not run")));
-    const { instance } = service({
-      permissionGranted: false,
-      fetcher: { fetch },
-    });
+    const { instance } = service({ permissionGranted: false, fetcher: { fetch } });
 
     await expect(instance.inspect()).resolves.toMatchObject({
       status: "original-passthrough",
@@ -271,9 +264,7 @@ describe("PdfSourceService", () => {
 
   it("returns auth-required without storing when no CDP recovery is available", async () => {
     const { instance, artifacts, download } = service({
-      fetcher: {
-        fetch: () => Promise.resolve(new Response("Sign in", { status: 401 })),
-      },
+      fetcher: { fetch: () => Promise.resolve(new Response("Sign in", { status: 401 })) },
     });
 
     await expect(instance.downloadOriginal("request-auth", 7)).resolves.toMatchObject({
@@ -290,7 +281,7 @@ describe("PdfSourceService", () => {
     const cleanup = vi.fn(() => Promise.resolve());
     const recover = vi.fn(() =>
       Promise.resolve({
-        blob: new Blob([bytes], { type: "application/pdf" }),
+        blob: new Blob([Uint8Array.from(bytes).buffer], { type: "application/pdf" }),
         byteLength: bytes.byteLength,
         checksumSha256: "a".repeat(64),
         signature: true,
