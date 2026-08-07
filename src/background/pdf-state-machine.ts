@@ -120,18 +120,26 @@ function validateOutputPlan(
   const unique = new Set(plan.sourcePageIndexes);
   if (unique.size !== plan.sourcePageIndexes.length) {
     return err(
-      stateError("PDF output plan cannot contain duplicate source pages.", "PdfOutputPlanDuplicate", {
-        outputPages: plan.sourcePageIndexes.length,
-      }),
+      stateError(
+        "PDF output plan cannot contain duplicate source pages.",
+        "PdfOutputPlanDuplicate",
+        {
+          outputPages: plan.sourcePageIndexes.length,
+        },
+      ),
     );
   }
   for (const pageIndex of plan.sourcePageIndexes) {
     if (pageIndex >= manifest.pages.length) {
       return err(
-        stateError("PDF output plan references an unknown source page.", "PdfOutputPlanPageMissing", {
-          pageIndex,
-          discoveredPages: manifest.pages.length,
-        }),
+        stateError(
+          "PDF output plan references an unknown source page.",
+          "PdfOutputPlanPageMissing",
+          {
+            pageIndex,
+            discoveredPages: manifest.pages.length,
+          },
+        ),
       );
     }
   }
@@ -164,7 +172,10 @@ function validateOutputPlan(
   return ok(undefined);
 }
 
-function sameOutputPlan(left: PdfOutputPlan | undefined, right: PdfOutputPlan | undefined): boolean {
+function sameOutputPlan(
+  left: PdfOutputPlan | undefined,
+  right: PdfOutputPlan | undefined,
+): boolean {
   if (left === undefined || right === undefined) return left === right;
   return (
     left.kind === right.kind &&
@@ -261,7 +272,8 @@ export function validatePdfManifestInvariants(
 
   if (
     manifest.progress.currentPage !== undefined &&
-    manifest.progress.currentPage >= Math.max(manifest.expectedPageCount ?? 0, manifest.pages.length)
+    manifest.progress.currentPage >=
+      Math.max(manifest.expectedPageCount ?? 0, manifest.pages.length)
   ) {
     return err(
       stateError(
@@ -276,7 +288,10 @@ export function validatePdfManifestInvariants(
   }
 
   if (manifest.outputPlan === undefined) {
-    if (manifest.progress.outputPages !== 0 || ["writing", "verifying", "completed"].includes(manifest.outputState)) {
+    if (
+      manifest.progress.outputPages !== 0 ||
+      ["writing", "verifying", "completed"].includes(manifest.outputState)
+    ) {
       return err(
         stateError("PDF output progress requires a verified output plan.", "PdfOutputPlanMissing", {
           outputPages: manifest.progress.outputPages,
@@ -288,20 +303,31 @@ export function validatePdfManifestInvariants(
     if (!planValidation.ok) return planValidation;
     if (manifest.progress.outputPages > manifest.outputPlan.sourcePageIndexes.length) {
       return err(
-        stateError("PDF output progress exceeds the verified output plan.", "PdfOutputProgressOverflow", {
-          outputPages: manifest.progress.outputPages,
-          plannedPages: manifest.outputPlan.sourcePageIndexes.length,
-        }),
+        stateError(
+          "PDF output progress exceeds the verified output plan.",
+          "PdfOutputProgressOverflow",
+          {
+            outputPages: manifest.progress.outputPages,
+            plannedPages: manifest.outputPlan.sourcePageIndexes.length,
+          },
+        ),
       );
     }
-    for (const pageIndex of manifest.outputPlan.sourcePageIndexes.slice(0, manifest.progress.outputPages)) {
+    for (const pageIndex of manifest.outputPlan.sourcePageIndexes.slice(
+      0,
+      manifest.progress.outputPages,
+    )) {
       const page = manifest.pages[pageIndex];
       if (page === undefined || !atLeast(page, "written")) {
         return err(
-          stateError("Written PDF output progress must correspond to written source pages.", "PdfWrittenPageMissing", {
-            pageIndex,
-            outputPages: manifest.progress.outputPages,
-          }),
+          stateError(
+            "Written PDF output progress must correspond to written source pages.",
+            "PdfWrittenPageMissing",
+            {
+              pageIndex,
+              outputPages: manifest.progress.outputPages,
+            },
+          ),
         );
       }
     }
