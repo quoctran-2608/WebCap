@@ -2,7 +2,7 @@ import { PdfDocumentManifestSchema, type PdfDocumentManifest } from "@shared/con
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 
 import { requestResult, storageError, transactionDone } from "./indexeddb-helpers";
-import { openWebCapDatabase, WEBCAP_STORES } from "./webcap-database";
+import { openPdfDocumentDatabase, PDF_DOCUMENT_STORE } from "./pdf-document-database";
 
 export interface PdfDocumentManifestRepositoryPort {
   create(manifest: PdfDocumentManifest): Promise<void>;
@@ -57,16 +57,16 @@ export class IndexedDbPdfDocumentManifestRepository implements PdfDocumentManife
   private readonly openDatabase: () => Promise<IDBDatabase>;
 
   constructor(options: IndexedDbPdfDocumentManifestRepositoryOptions = {}) {
-    this.openDatabase = options.openDatabase ?? (() => openWebCapDatabase());
+    this.openDatabase = options.openDatabase ?? (() => openPdfDocumentDatabase());
   }
 
   async create(manifest: PdfDocumentManifest): Promise<void> {
     const validated = PdfDocumentManifestSchema.parse(manifest);
     try {
       const database = await this.openDatabase();
-      const transaction = database.transaction(WEBCAP_STORES.pdfDocuments, "readwrite");
+      const transaction = database.transaction(PDF_DOCUMENT_STORE, "readwrite");
       const completed = transactionDone(transaction);
-      const store = transaction.objectStore(WEBCAP_STORES.pdfDocuments);
+      const store = transaction.objectStore(PDF_DOCUMENT_STORE);
       const existing = await requestResult<unknown>(store.get(validated.jobId));
       if (existing !== undefined) {
         throw revisionConflict(validated.jobId, 0, parseManifest(existing).revision);
@@ -81,10 +81,8 @@ export class IndexedDbPdfDocumentManifestRepository implements PdfDocumentManife
   async get(jobId: string): Promise<PdfDocumentManifest | undefined> {
     try {
       const database = await this.openDatabase();
-      const transaction = database.transaction(WEBCAP_STORES.pdfDocuments, "readonly");
-      const value = await requestResult<unknown>(
-        transaction.objectStore(WEBCAP_STORES.pdfDocuments).get(jobId),
-      );
+      const transaction = database.transaction(PDF_DOCUMENT_STORE, "readonly");
+      const value = await requestResult<unknown>(transaction.objectStore(PDF_DOCUMENT_STORE).get(jobId));
       return value === undefined ? undefined : parseManifest(value);
     } catch (error) {
       throw storageError("read", error);
@@ -95,9 +93,9 @@ export class IndexedDbPdfDocumentManifestRepository implements PdfDocumentManife
     const validated = PdfDocumentManifestSchema.parse(manifest);
     try {
       const database = await this.openDatabase();
-      const transaction = database.transaction(WEBCAP_STORES.pdfDocuments, "readwrite");
+      const transaction = database.transaction(PDF_DOCUMENT_STORE, "readwrite");
       const completed = transactionDone(transaction);
-      const store = transaction.objectStore(WEBCAP_STORES.pdfDocuments);
+      const store = transaction.objectStore(PDF_DOCUMENT_STORE);
       const value = await requestResult<unknown>(store.get(validated.jobId));
       if (value === undefined) {
         throw revisionConflict(validated.jobId, expectedRevision, "missing");
@@ -119,9 +117,9 @@ export class IndexedDbPdfDocumentManifestRepository implements PdfDocumentManife
   async delete(jobId: string): Promise<boolean> {
     try {
       const database = await this.openDatabase();
-      const transaction = database.transaction(WEBCAP_STORES.pdfDocuments, "readwrite");
+      const transaction = database.transaction(PDF_DOCUMENT_STORE, "readwrite");
       const completed = transactionDone(transaction);
-      const store = transaction.objectStore(WEBCAP_STORES.pdfDocuments);
+      const store = transaction.objectStore(PDF_DOCUMENT_STORE);
       const existing = await requestResult<unknown>(store.get(jobId));
       if (existing === undefined) {
         await completed;
@@ -138,9 +136,9 @@ export class IndexedDbPdfDocumentManifestRepository implements PdfDocumentManife
   async listExpired(nowIso: string): Promise<PdfDocumentManifest[]> {
     try {
       const database = await this.openDatabase();
-      const transaction = database.transaction(WEBCAP_STORES.pdfDocuments, "readonly");
+      const transaction = database.transaction(PDF_DOCUMENT_STORE, "readonly");
       const values = await requestResult<unknown[]>(
-        transaction.objectStore(WEBCAP_STORES.pdfDocuments).getAll(),
+        transaction.objectStore(PDF_DOCUMENT_STORE).getAll(),
       );
       return values
         .map(parseManifest)
