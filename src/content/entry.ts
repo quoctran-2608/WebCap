@@ -1625,8 +1625,11 @@ function positiveIntegerAttribute(element: Element, names: readonly string[]): n
 }
 
 function documentPageIndex(element: Element): number | undefined {
-  const directIndex = positiveIntegerAttribute(element, ["data-page-index", "page-index"]);
-  if (directIndex !== undefined) return directIndex;
+  const directRaw = element.getAttribute("data-page-index") ?? element.getAttribute("page-index");
+  if (directRaw !== null) {
+    const directIndex = Number.parseInt(directRaw, 10);
+    if (Number.isInteger(directIndex) && directIndex >= 0) return directIndex;
+  }
   const pageNumber = positiveIntegerAttribute(element, ["data-page-number", "page-number"]);
   if (pageNumber !== undefined) return pageNumber - 1;
   const label = element.getAttribute("aria-label") ?? "";

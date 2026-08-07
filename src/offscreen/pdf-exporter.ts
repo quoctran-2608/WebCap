@@ -392,7 +392,7 @@ export class PdfExporter {
     const initialHeap = readHeapSnapshot(this.environment);
     const memoryEstimate = assertPdfExportMemorySafe({
       widthCss: Math.max(...pages.map((page) => page.sourceRectCss.width)),
-      heightCss: payload.targetRect.height,
+      heightCss: Math.max(...pages.map((page) => page.sourceRectCss.height)),
       renderScaleX,
       renderScaleY,
       tileCount: payload.tiles.length,

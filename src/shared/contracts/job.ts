@@ -105,18 +105,28 @@ export type StoredTileRecord = z.infer<typeof StoredTileRecordSchema>;
 export type StoredDedupeRecord = z.infer<typeof StoredDedupeRecordSchema>;
 
 export function summarizeJob(job: CaptureJob): JobSummary {
-  const storedBottom = Math.max(
-    0,
-    ...job.tilePlan
-      .filter((tile) => tile.status === "stored")
-      .map((tile) => {
-        const rect = tile.outputRectCss ?? tile.sourceRectCss;
-        return rect.y + rect.height;
-      }),
-  );
-  const completedDocumentPages = job.documentPageMap?.pages.filter(
-    (page) => page.sourceRectCss.y + page.sourceRectCss.height <= storedBottom + 0.01,
-  ).length;
+  const storedRects = job.tilePlan
+    .filter((tile) => tile.status === "stored")
+    .map((tile) => tile.outputRectCss ?? tile.sourceRectCss);
+  const completedDocumentPages = job.documentPageMap?.pages.filter((page) => {
+    const rect = page.sourceRectCss;
+    const epsilon = 0.01;
+    const points = [
+      { x: rect.x + epsilon, y: rect.y + epsilon },
+      { x: rect.x + rect.width - epsilon, y: rect.y + epsilon },
+      { x: rect.x + epsilon, y: rect.y + rect.height - epsilon },
+      { x: rect.x + rect.width - epsilon, y: rect.y + rect.height - epsilon },
+    ];
+    return points.every((point) =>
+      storedRects.some(
+        (stored) =>
+          point.x >= stored.x - epsilon &&
+          point.y >= stored.y - epsilon &&
+          point.x <= stored.x + stored.width + epsilon &&
+          point.y <= stored.y + stored.height + epsilon,
+      ),
+    );
+  }).length;
   return JobSummarySchema.parse({
     schemaVersion: 1,
     jobId: job.id,
