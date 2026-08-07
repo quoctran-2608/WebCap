@@ -56,3 +56,5 @@ jobs:
           git add src/content/pdf-viewer-discovery-runtime.ts src/content/pdf-viewer-discovery.ts src/shared/contracts/pdf-viewer-discovery.ts
           git commit -m "Format S30 content discovery files"
           git push origin HEAD:agent/s30-viewer-intelligence-v2
+
+# Trigger after workflow registration.
