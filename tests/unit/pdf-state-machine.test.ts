@@ -86,11 +86,13 @@ describe("PDF state machine", () => {
   });
 
   it("allows a verified editor subset without pretending source verification is partial", () => {
-    const source = manifest();
+    const source: PdfDocumentManifest = {
+      ...manifest(),
+      outputPlan: { kind: "editor", sourcePageIndexes: [1], editRevision: 3 },
+    };
     const editedPages = [source.pages[0]!, { ...source.pages[1]!, state: "written" as const }];
     const complete = transitionPdfManifest(source, "completed", nextTimestamp, {
       pages: editedPages,
-      outputPlan: { kind: "editor", sourcePageIndexes: [1], editRevision: 3 },
       progress: derivePdfPageProgress(editedPages, 2, 0, undefined, 1),
       outputState: "completed",
     });
