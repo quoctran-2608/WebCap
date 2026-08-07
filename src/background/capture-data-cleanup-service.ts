@@ -3,6 +3,7 @@ import { createWebCapError, type WebCapErrorData } from "@shared/errors/error";
 import type { JobArtifactCleanupPort } from "@storage/job-artifact-cleanup-repository";
 import type { JobRepositoryPort } from "@storage/job-repository";
 import type { JobSessionRepositoryPort } from "@storage/job-session-repository";
+import type { PdfDocumentManifestRepositoryPort } from "@storage/pdf-document-manifest-repository";
 import type { PdfEditManifestRepositoryPort } from "@storage/pdf-edit-manifest-repository";
 import type { TileRepositoryPort } from "@storage/tile-repository";
 
@@ -25,6 +26,7 @@ export interface CaptureOwnedDataCleanupServiceOptions {
   tiles: Pick<TileRepositoryPort, "deleteByJob">;
   artifacts: JobArtifactCleanupPort;
   manifests: Pick<PdfEditManifestRepositoryPort, "load" | "delete">;
+  pdfDocuments?: Pick<PdfDocumentManifestRepositoryPort, "get" | "delete">;
 }
 
 function cleanupWarning(jobId: string, failedOperations: string[]): WebCapErrorData | undefined {
@@ -63,6 +65,16 @@ export class CaptureOwnedDataCleanupService implements CaptureOwnedDataCleanupPo
       report.deletedManifests = manifest === undefined ? 0 : 1;
     } catch {
       failedOperations.push("manifest");
+    }
+
+    if (this.options.pdfDocuments !== undefined) {
+      try {
+        const document = await this.options.pdfDocuments.get(jobId);
+        await this.options.pdfDocuments.delete(jobId);
+        if (document !== undefined) report.deletedManifests += 1;
+      } catch {
+        failedOperations.push("pdf-document");
+      }
     }
 
     try {
