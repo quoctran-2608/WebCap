@@ -22,8 +22,12 @@ interface IoReadResult {
   eof?: boolean;
 }
 
+export interface RecoveredPdfSource extends StreamedPdfSource {
+  cleanup(): Promise<void>;
+}
+
 export interface PdfSourceCdpRecoveryPort {
-  recover(tabId: number, url: string, spoolId: string): Promise<StreamedPdfSource | undefined>;
+  recover(tabId: number, url: string, spoolId: string): Promise<RecoveredPdfSource | undefined>;
 }
 
 function bytesFromIoRead(result: IoReadResult): Uint8Array {
@@ -75,7 +79,7 @@ export class CdpPdfSourceRecovery implements PdfSourceCdpRecoveryPort {
     private readonly spool: PdfSourceSpoolPort,
   ) {}
 
-  recover(tabId: number, url: string, spoolId: string): Promise<StreamedPdfSource | undefined> {
+  recover(tabId: number, url: string, spoolId: string): Promise<RecoveredPdfSource | undefined> {
     return this.debuggerClient.withSession(tabId, async (session) => {
       const frameTree = await session.sendCommand<FrameTreeResult>(
         "Page.getFrameTree",
@@ -90,10 +94,7 @@ export class CdpPdfSourceRecovery implements PdfSourceCdpRecoveryPort {
         {
           frameId,
           url,
-          options: {
-            disableCache: true,
-            includeCredentials: true,
-          },
+          options: { disableCache: true, includeCredentials: true },
         },
         { stage: "export", retryable: true, fallbackAllowed: true },
       );
@@ -110,7 +111,8 @@ export class CdpPdfSourceRecovery implements PdfSourceCdpRecoveryPort {
       const handle = resource.stream;
       const writer = await this.spool.create(spoolId);
       try {
-        return await spoolPdfReadableStream(cdpReadableStream(session, handle), writer);
+        const streamed = await spoolPdfReadableStream(cdpReadableStream(session, handle), writer);
+        return { ...streamed, cleanup: () => writer.cleanup() };
       } finally {
         await session
           .sendCommand("IO.close", { handle }, { stage: "cleanup", fallbackAllowed: true })
