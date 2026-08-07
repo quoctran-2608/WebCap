@@ -91,7 +91,7 @@ describe("PDF state machine", () => {
       pages: regressed,
       progress: derivePdfPageProgress(regressed, 2, 0),
       lastVerifiedPage: undefined,
-    } as never);
+    });
 
     expect(result).toMatchObject({
       ok: false,
