@@ -5,6 +5,7 @@ import iconData from "../../assets/icons.json";
 import { FOUNDATION_CAPABILITIES, type CaptureCapabilities } from "@shared/capabilities";
 import { copyText } from "@shared/clipboard";
 import { serializeSafeDiagnostics } from "@shared/diagnostics";
+import { documentPageProgress } from "@shared/contracts/job";
 import type {
   CaptureJob,
   CaptureMode,
@@ -884,10 +885,12 @@ export function App(): React.JSX.Element {
     session?.source === undefined
       ? undefined
       : estimateOutputBytes(session.source.byteLength, selectedFormat);
+  const documentProgress =
+    fullPageJob === undefined ? undefined : documentPageProgress(fullPageJob);
+  const progressCompleted = documentProgress?.completed ?? fullPageJob?.completedTiles ?? 0;
+  const progressTotal = documentProgress?.total ?? fullPageJob?.totalTiles ?? 0;
   const fullPageProgress =
-    fullPageJob === undefined || fullPageJob.totalTiles === 0
-      ? 0
-      : Math.round((fullPageJob.completedTiles / fullPageJob.totalTiles) * 100);
+    progressTotal === 0 ? 0 : Math.round((progressCompleted / progressTotal) * 100);
 
   const diagnosticsJson = useMemo(
     () =>
@@ -910,6 +913,15 @@ export function App(): React.JSX.Element {
                   : { engine: fullPageJob.activeEngine }),
                 completedTiles: fullPageJob.completedTiles,
                 totalTiles: fullPageJob.totalTiles,
+                ...(documentProgress === undefined
+                  ? {}
+                  : {
+                      completedDocumentPages: documentProgress.completed,
+                      totalDocumentPages: documentProgress.total,
+                    }),
+                ...(fullPageJob.partialCapture === undefined
+                  ? {}
+                  : { partialCaptureReason: fullPageJob.partialCapture.reason }),
                 ...(fullPageJob.error === undefined ? {} : { errorCode: fullPageJob.error.code }),
               },
             }),
@@ -1254,8 +1266,8 @@ export function App(): React.JSX.Element {
               <strong>{tiledStatusCopy(locale, fullPageJob)}</strong>
               <small>{fullPageProgress}%</small>
               <progress
-                value={fullPageJob.completedTiles}
-                max={Math.max(1, fullPageJob.totalTiles)}
+                value={progressCompleted}
+                max={Math.max(1, progressTotal)}
                 aria-label={t(locale, `popup.progress.${selectedMode}` as MessageKey)}
               />
             </div>

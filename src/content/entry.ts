@@ -7,7 +7,13 @@ import {
   type ElementSelectorController,
 } from "./element-selector";
 import { openRegionSelector, type RegionSelectorController } from "./region-selector";
-import type { ElementTargetDescriptor, FixedElementMode, Rect } from "@shared/contracts/domain";
+import type {
+  DocumentPageMap,
+  ElementTargetDescriptor,
+  FixedElementMode,
+  Rect,
+} from "@shared/contracts/domain";
+import { buildDocumentPageMap, type DocumentPageCandidate } from "@capture/document-page-map";
 import { loadUiLocale } from "@shared/ui-locale";
 import type {
   ScrollAreaCleanupMessage,
@@ -1597,6 +1603,126 @@ function requireScrollAreaTarget(
   return stored;
 }
 
+const DOCUMENT_PAGE_SELECTOR = [
+  "[data-page-number]",
+  "[data-page-index]",
+  ".pageContainer",
+  ".page-container",
+  ".pdf-page",
+  "viewer-pdf-page",
+  "pdf-viewer-page",
+].join(",");
+const DOCUMENT_PAGE_SCAN_LIMIT = 50_000;
+
+function positiveIntegerAttribute(element: Element, names: readonly string[]): number | undefined {
+  for (const name of names) {
+    const raw = element.getAttribute(name);
+    if (raw === null) continue;
+    const value = Number.parseInt(raw, 10);
+    if (Number.isInteger(value) && value > 0) return value;
+  }
+  return undefined;
+}
+
+function documentPageIndex(element: Element): number | undefined {
+  const directRaw = element.getAttribute("data-page-index") ?? element.getAttribute("page-index");
+  if (directRaw !== null) {
+    const directIndex = Number.parseInt(directRaw, 10);
+    if (Number.isInteger(directIndex) && directIndex >= 0) return directIndex;
+  }
+  const pageNumber = positiveIntegerAttribute(element, ["data-page-number", "page-number"]);
+  if (pageNumber !== undefined) return pageNumber - 1;
+  const label = element.getAttribute("aria-label") ?? "";
+  const match = /(?:page|trang)\s*(\d+)/iu.exec(label)?.[1];
+  if (match === undefined) return undefined;
+  const parsed = Number.parseInt(match, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed - 1 : undefined;
+}
+
+function pageRectInsideTarget(target: HTMLElement, element: Element): Rect | undefined {
+  const targetRect = target.getBoundingClientRect();
+  const pageRect = element.getBoundingClientRect();
+  if (pageRect.width < 96 || pageRect.height < 96) return undefined;
+  return {
+    x: pageRect.left - targetRect.left - target.clientLeft + target.scrollLeft,
+    y: pageRect.top - targetRect.top - target.clientTop + target.scrollTop,
+    width: pageRect.width,
+    height: pageRect.height,
+  };
+}
+
+function collectDocumentPageElements(target: HTMLElement): Element[] {
+  const selected = new Set<Element>();
+  const roots: Array<Element | ShadowRoot> = [target];
+  let scanned = 0;
+  while (roots.length > 0 && scanned < DOCUMENT_PAGE_SCAN_LIMIT) {
+    const root = roots.pop();
+    if (root === undefined) break;
+    if (root instanceof Element && root !== target && root.matches(DOCUMENT_PAGE_SELECTOR)) {
+      selected.add(root);
+    }
+    for (const candidate of Array.from(root.querySelectorAll(DOCUMENT_PAGE_SELECTOR))) {
+      selected.add(candidate);
+    }
+    for (const element of Array.from(root.querySelectorAll("*"))) {
+      scanned += 1;
+      if (scanned >= DOCUMENT_PAGE_SCAN_LIMIT) break;
+      if (element.shadowRoot?.mode === "open") roots.push(element.shadowRoot);
+    }
+  }
+
+  if (selected.size < 2) {
+    const canvasRoots: Array<Element | ShadowRoot> = [target];
+    while (canvasRoots.length > 0 && selected.size < 10_000) {
+      const root = canvasRoots.pop();
+      if (root === undefined) break;
+      for (const canvas of Array.from(root.querySelectorAll("canvas"))) selected.add(canvas);
+      for (const element of Array.from(root.querySelectorAll("*"))) {
+        if (element.shadowRoot?.mode === "open") canvasRoots.push(element.shadowRoot);
+      }
+    }
+  }
+  return [...selected];
+}
+
+function declaredDocumentPageCount(
+  target: HTMLElement,
+  pages: readonly Element[],
+): number | undefined {
+  let pageCount = 0;
+  const attributes = ["data-page-count", "data-pages-count", "page-count", "aria-setsize"];
+  const inspect = (element: Element | null) => {
+    if (element === null) return;
+    pageCount = Math.max(pageCount, positiveIntegerAttribute(element, attributes) ?? 0);
+  };
+  inspect(target);
+  for (const page of pages) inspect(page);
+  let ancestor: Element | null = target;
+  for (let depth = 0; depth < 8 && ancestor !== null; depth += 1) {
+    inspect(ancestor);
+    const root = ancestor.getRootNode();
+    ancestor = ancestor.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
+  }
+  return pageCount > 0 ? pageCount : undefined;
+}
+
+function detectDocumentPageMap(target: HTMLElement): DocumentPageMap | undefined {
+  const elements = collectDocumentPageElements(target);
+  const candidates: DocumentPageCandidate[] = elements.flatMap((element) => {
+    const rect = pageRectInsideTarget(target, element);
+    if (rect === undefined) return [];
+    const declaredIndex = documentPageIndex(element);
+    return [{ rect, ...(declaredIndex === undefined ? {} : { declaredIndex }) }];
+  });
+  const declaredPageCount = declaredDocumentPageCount(target, elements);
+  return buildDocumentPageMap({
+    candidates,
+    scrollWidth: Math.max(1, target.scrollWidth),
+    scrollHeight: Math.max(1, target.scrollHeight),
+    ...(declaredPageCount === undefined ? {} : { declaredPageCount }),
+  });
+}
+
 async function handleScrollAreaScroll(
   state: ElementSelectionRuntimeState,
   request: ScrollAreaScrollMessage,
@@ -1692,6 +1818,13 @@ async function handleScrollAreaScroll(
   const clientHeight = Math.max(1, target.clientHeight);
   const actualScrollLeft = Math.max(0, target.scrollLeft);
   const actualScrollTop = Math.max(0, target.scrollTop);
+  const documentPageMap =
+    request.payload.row === 0 &&
+    request.payload.column === 0 &&
+    request.payload.rows === 1 &&
+    request.payload.columns === 1
+      ? detectDocumentPageMap(target)
+      : undefined;
   const scrollSnapped =
     Math.abs(actualScrollLeft - request.payload.scrollLeft) > 1 ||
     Math.abs(actualScrollTop - request.payload.scrollTop) > 1;
@@ -1725,6 +1858,7 @@ async function handleScrollAreaScroll(
     mutationCount,
     scrollSnapped,
     layoutChanged,
+    ...(documentPageMap === undefined ? {} : { documentPageMap }),
   });
 }
 

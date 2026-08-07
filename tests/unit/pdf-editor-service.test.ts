@@ -99,6 +99,48 @@ describe("PdfEditorService", () => {
     expect(first.estimate.estimatedBytes).toBeGreaterThan(0);
   });
 
+  it("keeps detected scroll-area PDF pages intact in the editor and after settings changes", async () => {
+    const base = readyJob();
+    const job: CaptureJob = {
+      ...base,
+      mode: "scroll-area",
+      preferredEngine: "scroll",
+      activeEngine: "scroll",
+      targetRect: { x: 0, y: 0, width: 900, height: 2_400 },
+      documentPageMap: {
+        schemaVersion: 1,
+        strategy: "dom",
+        confidence: 1,
+        complete: true,
+        sourcePageCount: 2,
+        pages: [
+          { index: 0, sourceRectCss: { x: 100, y: 20, width: 700, height: 1_000 } },
+          { index: 1, sourceRectCss: { x: 100, y: 1_220, width: 700, height: 1_000 } },
+        ],
+      },
+    };
+    const manifests = manifestRepository();
+    const service = new PdfEditorService({ jobs: jobReader(job), manifests, now: () => now });
+
+    const initial = await service.get(job.id);
+    const updated = await service.update(job.id, initial.manifest.revision, {
+      kind: "settings",
+      settings: { ...initial.manifest.settings, pageSize: "letter" },
+    });
+
+    expect(initial.manifest.pages.map((page) => page.id)).toEqual([
+      "document-page-1",
+      "document-page-2",
+    ]);
+    expect(initial.manifest.pages.map((page) => page.sourceRectCss)).toEqual(
+      job.documentPageMap?.pages.map((page) => page.sourceRectCss),
+    );
+    expect(updated.manifest.pages).toHaveLength(2);
+    expect(updated.manifest.pages.map((page) => page.sourceRectCss)).toEqual(
+      initial.manifest.pages.map((page) => page.sourceRectCss),
+    );
+  });
+
   it("recomputes pages for settings and persists non-destructive remove/reorder edits", async () => {
     const job = readyJob();
     const manifests = manifestRepository();

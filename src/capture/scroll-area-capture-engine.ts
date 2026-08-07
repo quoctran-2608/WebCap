@@ -9,8 +9,12 @@ import type {
   CaptureEngineResult,
 } from "@capture/capture-engine";
 import { planScrollCaptureTiles } from "@capture/overlap-resolver";
-import { FALLBACK_OVERLAP_CSS, VISIBLE_CAPTURE_MIN_INTERVAL_MS } from "@shared/constants";
-import type { CaptureTile, PageMetrics } from "@shared/contracts/domain";
+import {
+  FALLBACK_OVERLAP_CSS,
+  PDF_VIEWER_MAX_DOCUMENT_TILES,
+  VISIBLE_CAPTURE_MIN_INTERVAL_MS,
+} from "@shared/constants";
+import type { CaptureTile, DocumentPageMap, PageMetrics } from "@shared/contracts/domain";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
 
@@ -201,6 +205,10 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
       });
     }
     const metrics = metricsFromContainer(initial);
+    const documentPageMap: DocumentPageMap | undefined =
+      initial.documentPageMap?.complete === true && initial.documentPageMap.confidence >= 0.8
+        ? initial.documentPageMap
+        : undefined;
 
     context.cancellation.throwIfCancelled("plan");
     await context.reportProgress({
@@ -210,6 +218,10 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
       completed: 0,
       total: 0,
     });
+    const planningTileLimit =
+      documentPageMap === undefined
+        ? context.settings.limits.maxTiles
+        : PDF_VIEWER_MAX_DOCUMENT_TILES;
     const plan = planScrollCaptureTiles({
       jobId: context.jobId,
       targetRect,
@@ -217,166 +229,170 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
       viewportHeightCss: initial.clientHeight,
       pixelScale: 1,
       overlapCss: this.overlapCss,
-      maxTiles: context.settings.limits.maxTiles,
+      maxTiles: planningTileLimit,
     });
     const partialCapture = plan.limitedByMaxTiles
       ? {
           reason: "max-tiles" as const,
           capturedRect: plan.targetRect,
-          limitValue: context.settings.limits.maxTiles,
+          limitValue: planningTileLimit,
         }
       : undefined;
-    await context.onPlan(metrics, plan.targetRect, plan.tiles, partialCapture);
+    await context.onPlan(metrics, plan.targetRect, plan.tiles, partialCapture, documentPageMap);
 
     const storedTiles: CaptureTile[] = [];
     let captureScale: CapturePixelScale | undefined;
-    for (const planned of plan.tiles) {
-      context.cancellation.throwIfCancelled("capture");
-      await this.ensureActiveTab(context.tabId, windowId);
-      await context.reportProgress({
-        jobId: context.jobId,
-        state: "capturing",
-        stage: "scrolling",
-        completed: storedTiles.length,
-        total: plan.tiles.length,
-        tileIndex: planned.index,
-      });
-      const page = await this.pages.scrollAndSettle({
-        tabId: context.tabId,
-        jobId: context.jobId,
-        descriptor,
-        scrollLeft: planned.scrollXCss ?? planned.sourceRectCss.x,
-        scrollTop: planned.scrollYCss ?? planned.sourceRectCss.y,
-        row: planned.row,
-        column: planned.column,
-        rows: plan.rows,
-        columns: plan.columns,
-        fixedElementMode: context.settings.fixedElementMode,
-        settleMs: context.settings.lazyLoad.settleMs,
-        expectedScrollWidth: initial.scrollWidth,
-        expectedScrollHeight: initial.scrollHeight,
-        expectedClientWidth: initial.clientWidth,
-        expectedClientHeight: initial.clientHeight,
-      });
-      if (page.scrollSnapped) {
-        throw captureError({
-          code: "E_LAYOUT_UNSTABLE",
-          message: "The container changed the requested internal scroll position.",
-          userMessageKey: "errors.scrollSnap",
-          causeCode: "ScrollAreaPositionMismatch",
-          safeContext: {
-            tileIndex: planned.index,
-            requestedX: planned.scrollXCss ?? planned.sourceRectCss.x,
-            requestedY: planned.scrollYCss ?? planned.sourceRectCss.y,
-            actualX: page.actualScrollLeft,
-            actualY: page.actualScrollTop,
-          },
+    const batchSize = Math.max(1, context.settings.limits.maxTiles);
+    for (let batchStart = 0; batchStart < plan.tiles.length; batchStart += batchSize) {
+      const batch = plan.tiles.slice(batchStart, batchStart + batchSize);
+      for (const planned of batch) {
+        context.cancellation.throwIfCancelled("capture");
+        await this.ensureActiveTab(context.tabId, windowId);
+        await context.reportProgress({
+          jobId: context.jobId,
+          state: "capturing",
+          stage: "scrolling",
+          completed: storedTiles.length,
+          total: plan.tiles.length,
+          tileIndex: planned.index,
         });
-      }
-      const boundedHeightOnlyDrift =
-        page.layoutChanged &&
-        plan.limitedByMaxTiles &&
-        Math.abs(page.scrollWidth - initial.scrollWidth) <= 2 &&
-        Math.abs(page.clientWidth - initial.clientWidth) <= 2 &&
-        Math.abs(page.clientHeight - initial.clientHeight) <= 2 &&
-        Math.abs(page.scrollHeight - initial.scrollHeight) > 2;
-      if (page.layoutChanged && !boundedHeightOnlyDrift) {
-        throw captureError({
-          code: "E_LAYOUT_UNSTABLE",
-          message: "The selected container dimensions changed during capture.",
-          userMessageKey: "errors.layoutChanged",
-          causeCode: "ScrollAreaLayoutChanged",
-          safeContext: {
-            tileIndex: planned.index,
-            scrollWidth: page.scrollWidth,
-            scrollHeight: page.scrollHeight,
-            clientWidth: page.clientWidth,
-            clientHeight: page.clientHeight,
-            expectedScrollWidth: initial.scrollWidth,
-            expectedScrollHeight: initial.scrollHeight,
-            expectedClientWidth: initial.clientWidth,
-            expectedClientHeight: initial.clientHeight,
-            limitedByMaxTiles: plan.limitedByMaxTiles,
-          },
+        const page = await this.pages.scrollAndSettle({
+          tabId: context.tabId,
+          jobId: context.jobId,
+          descriptor,
+          scrollLeft: planned.scrollXCss ?? planned.sourceRectCss.x,
+          scrollTop: planned.scrollYCss ?? planned.sourceRectCss.y,
+          row: planned.row,
+          column: planned.column,
+          rows: plan.rows,
+          columns: plan.columns,
+          fixedElementMode: context.settings.fixedElementMode,
+          settleMs: context.settings.lazyLoad.settleMs,
+          expectedScrollWidth: initial.scrollWidth,
+          ...(documentPageMap === undefined ? { expectedScrollHeight: initial.scrollHeight } : {}),
+          expectedClientWidth: initial.clientWidth,
+          expectedClientHeight: initial.clientHeight,
         });
-      }
+        if (page.scrollSnapped) {
+          throw captureError({
+            code: "E_LAYOUT_UNSTABLE",
+            message: "The container changed the requested internal scroll position.",
+            userMessageKey: "errors.scrollSnap",
+            causeCode: "ScrollAreaPositionMismatch",
+            safeContext: {
+              tileIndex: planned.index,
+              requestedX: planned.scrollXCss ?? planned.sourceRectCss.x,
+              requestedY: planned.scrollYCss ?? planned.sourceRectCss.y,
+              actualX: page.actualScrollLeft,
+              actualY: page.actualScrollTop,
+            },
+          });
+        }
+        const boundedHeightOnlyDrift =
+          page.layoutChanged &&
+          (documentPageMap !== undefined || plan.limitedByMaxTiles) &&
+          Math.abs(page.scrollWidth - initial.scrollWidth) <= 2 &&
+          Math.abs(page.clientWidth - initial.clientWidth) <= 2 &&
+          Math.abs(page.clientHeight - initial.clientHeight) <= 2 &&
+          Math.abs(page.scrollHeight - initial.scrollHeight) > 2;
+        if (page.layoutChanged && !boundedHeightOnlyDrift) {
+          throw captureError({
+            code: "E_LAYOUT_UNSTABLE",
+            message: "The selected container dimensions changed during capture.",
+            userMessageKey: "errors.layoutChanged",
+            causeCode: "ScrollAreaLayoutChanged",
+            safeContext: {
+              tileIndex: planned.index,
+              scrollWidth: page.scrollWidth,
+              scrollHeight: page.scrollHeight,
+              clientWidth: page.clientWidth,
+              clientHeight: page.clientHeight,
+              expectedScrollWidth: initial.scrollWidth,
+              expectedScrollHeight: initial.scrollHeight,
+              expectedClientWidth: initial.clientWidth,
+              expectedClientHeight: initial.clientHeight,
+              limitedByMaxTiles: plan.limitedByMaxTiles,
+            },
+          });
+        }
 
-      context.cancellation.throwIfCancelled("capture");
-      await this.ensureActiveTab(context.tabId, windowId);
-      await context.reportProgress({
-        jobId: context.jobId,
-        state: "capturing",
-        stage: "capturing",
-        completed: storedTiles.length,
-        total: plan.tiles.length,
-        tileIndex: planned.index,
-      });
-      let dataUrl: string;
-      try {
-        dataUrl = await this.limiter.run(() => this.tabs.captureVisibleTab(windowId));
-      } catch (error) {
-        throw createWebCapRuntimeError(
-          normalizeError(error, {
-            code: "E_CAPTURE_RATE_LIMIT",
-            stage: "capture",
-            userMessageKey: "errors.scrollAreaCapture",
-            retryable: true,
-            fallbackAllowed: false,
-            safeContext: { tabId: context.tabId, tileIndex: planned.index },
-          }),
+        context.cancellation.throwIfCancelled("capture");
+        await this.ensureActiveTab(context.tabId, windowId);
+        await context.reportProgress({
+          jobId: context.jobId,
+          state: "capturing",
+          stage: "capturing",
+          completed: storedTiles.length,
+          total: plan.tiles.length,
+          tileIndex: planned.index,
+        });
+        let dataUrl: string;
+        try {
+          dataUrl = await this.limiter.run(() => this.tabs.captureVisibleTab(windowId));
+        } catch (error) {
+          throw createWebCapRuntimeError(
+            normalizeError(error, {
+              code: "E_CAPTURE_RATE_LIMIT",
+              stage: "capture",
+              userMessageKey: "errors.scrollAreaCapture",
+              retryable: true,
+              fallbackAllowed: false,
+              safeContext: { tabId: context.tabId, tileIndex: planned.index },
+            }),
+          );
+        }
+        const metadata = parsePngDataUrl(dataUrl);
+        if (!metadata.ok) throw createWebCapRuntimeError(metadata.error);
+        captureScale = validatePixelDimensions(
+          {
+            width: page.viewportWidth,
+            height: page.viewportHeight,
+            devicePixelRatio: page.devicePixelRatio,
+          },
+          metadata.value,
+          planned.index,
+          captureScale,
         );
-      }
-      const metadata = parsePngDataUrl(dataUrl);
-      if (!metadata.ok) throw createWebCapRuntimeError(metadata.error);
-      captureScale = validatePixelDimensions(
-        {
-          width: page.viewportWidth,
-          height: page.viewportHeight,
-          devicePixelRatio: page.devicePixelRatio,
-        },
-        metadata.value,
-        planned.index,
-        captureScale,
-      );
-      const blob = dataUrlToBlob(dataUrl);
-      if (blob.size <= 0) {
-        throw captureError({
-          code: "E_CAPTURE_EMPTY",
-          message: "Scrollable-area capture returned an empty screenshot.",
-          userMessageKey: "errors.captureEmpty",
-          causeCode: "EmptyScrollAreaScreenshot",
-          safeContext: { tileIndex: planned.index },
-        });
-      }
+        const blob = dataUrlToBlob(dataUrl);
+        if (blob.size <= 0) {
+          throw captureError({
+            code: "E_CAPTURE_EMPTY",
+            message: "Scrollable-area capture returned an empty screenshot.",
+            userMessageKey: "errors.captureEmpty",
+            causeCode: "EmptyScrollAreaScreenshot",
+            safeContext: { tileIndex: planned.index },
+          });
+        }
 
-      const captured: CaptureTile = {
-        ...planned,
-        captureViewportCss: {
-          x: 0,
-          y: 0,
-          width: page.viewportWidth,
-          height: page.viewportHeight,
-        },
-        captureCropCss: page.captureCropCss,
-        expectedPixelWidth: metadata.value.width,
-        expectedPixelHeight: metadata.value.height,
-        fixedElementsHidden: page.hiddenStickyElements,
-        status: "stored",
-        attempts: 1,
-        byteLength: blob.size,
-        mimeType: metadata.value.mimeType,
-      };
-      await context.reportProgress({
-        jobId: context.jobId,
-        state: "capturing",
-        stage: "storing",
-        completed: storedTiles.length,
-        total: plan.tiles.length,
-        tileIndex: planned.index,
-      });
-      context.cancellation.throwIfCancelled("capture");
-      await context.storeTile(captured, blob);
-      storedTiles.push(captured);
+        const captured: CaptureTile = {
+          ...planned,
+          captureViewportCss: {
+            x: 0,
+            y: 0,
+            width: page.viewportWidth,
+            height: page.viewportHeight,
+          },
+          captureCropCss: page.captureCropCss,
+          expectedPixelWidth: metadata.value.width,
+          expectedPixelHeight: metadata.value.height,
+          fixedElementsHidden: page.hiddenStickyElements,
+          status: "stored",
+          attempts: 1,
+          byteLength: blob.size,
+          mimeType: metadata.value.mimeType,
+        };
+        await context.reportProgress({
+          jobId: context.jobId,
+          state: "capturing",
+          stage: "storing",
+          completed: storedTiles.length,
+          total: plan.tiles.length,
+          tileIndex: planned.index,
+        });
+        context.cancellation.throwIfCancelled("capture");
+        await context.storeTile(captured, blob);
+        storedTiles.push(captured);
+      }
     }
 
     return {
@@ -384,6 +400,7 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
       targetRect: plan.targetRect,
       tiles: storedTiles,
       ...(partialCapture === undefined ? {} : { partialCapture }),
+      ...(documentPageMap === undefined ? {} : { documentPageMap }),
     };
   }
 

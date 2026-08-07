@@ -225,6 +225,50 @@ describe("PdfExporter", () => {
     expect(progress).toEqual([1, 2, 3]);
   });
 
+  it("uses the largest logical page rather than total document height for the memory guard", async () => {
+    const source = storedTile();
+    const repository = repositories([source.record]);
+    const exporter = new PdfExporter({
+      tiles: repository.tiles,
+      artifacts: repository.artifacts,
+      environment: pageEnvironment(),
+    });
+
+    const result = await exporter.export({
+      jobId: "job-1",
+      outputArtifactId: "pdf-streamed-pages",
+      targetRect: { x: 0, y: 0, width: 100, height: 20_000_000 },
+      tiles: [source.tile],
+      pages: [
+        {
+          id: "document-page-1",
+          originalIndex: 0,
+          sourceRectCss: { x: 0, y: 0, width: 100, height: 150 },
+          pageWidthPt: 100,
+          pageHeightPt: 150,
+          imageRectPt: { x: 0, y: 0, width: 100, height: 150 },
+        },
+        {
+          id: "document-page-2",
+          originalIndex: 1,
+          sourceRectCss: { x: 0, y: 150, width: 100, height: 150 },
+          pageWidthPt: 100,
+          pageHeightPt: 150,
+          imageRectPt: { x: 0, y: 0, width: 100, height: 150 },
+        },
+      ],
+      settings: DEFAULT_CAPTURE_SETTINGS.pdf,
+      filename: "streamed-pages.pdf",
+      createdAt: "2026-08-03T11:01:00.000Z",
+      expiresAt: "2026-08-03T11:31:00.000Z",
+    });
+
+    expect(result.diagnostics.pageCount).toBe(2);
+    expect(result.diagnostics.memoryEstimate.shouldBlock).toBe(false);
+    expect(result.diagnostics.memoryEstimate.totalPixels).toBe(15_000);
+    expect(repository.stored()?.pageCount).toBe(2);
+  });
+
   it("fails before allocating a page when a stored source tile is missing", async () => {
     const source = storedTile();
     const repository = repositories([]);
