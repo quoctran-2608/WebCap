@@ -117,10 +117,14 @@ export function validatePdfManifestInvariants(
   for (const [position, page] of manifest.pages.entries()) {
     if (page.index !== position) {
       return err(
-        stateError("PDF manifest pages must form a contiguous zero-based sequence.", "PdfPageIndexGap", {
-          expectedIndex: position,
-          actualIndex: page.index,
-        }),
+        stateError(
+          "PDF manifest pages must form a contiguous zero-based sequence.",
+          "PdfPageIndexGap",
+          {
+            expectedIndex: position,
+            actualIndex: page.index,
+          },
+        ),
       );
     }
     if (identities.has(page.identity)) {
@@ -170,12 +174,16 @@ export function validatePdfManifestInvariants(
   );
   if (!sameProgress(manifest.progress, derivedProgress)) {
     return err(
-      stateError("PDF manifest progress must be derived from page lifecycle state.", "PdfProgressDrift", {
-        discoveredPages: manifest.progress.discoveredPages,
-        capturedPages: manifest.progress.capturedPages,
-        verifiedPages: manifest.progress.verifiedPages,
-        outputPages: manifest.progress.outputPages,
-      }),
+      stateError(
+        "PDF manifest progress must be derived from page lifecycle state.",
+        "PdfProgressDrift",
+        {
+          discoveredPages: manifest.progress.discoveredPages,
+          capturedPages: manifest.progress.capturedPages,
+          verifiedPages: manifest.progress.verifiedPages,
+          outputPages: manifest.progress.outputPages,
+        },
+      ),
     );
   }
 
@@ -191,13 +199,18 @@ export function validatePdfManifestInvariants(
 
   if (
     manifest.progress.currentPage !== undefined &&
-    manifest.progress.currentPage >= Math.max(manifest.expectedPageCount ?? 0, manifest.pages.length)
+    manifest.progress.currentPage >=
+      Math.max(manifest.expectedPageCount ?? 0, manifest.pages.length)
   ) {
     return err(
-      stateError("PDF current page is outside the known document range.", "PdfCurrentPageOutOfRange", {
-        currentPage: manifest.progress.currentPage,
-        knownPages: Math.max(manifest.expectedPageCount ?? 0, manifest.pages.length),
-      }),
+      stateError(
+        "PDF current page is outside the known document range.",
+        "PdfCurrentPageOutOfRange",
+        {
+          currentPage: manifest.progress.currentPage,
+          knownPages: Math.max(manifest.expectedPageCount ?? 0, manifest.pages.length),
+        },
+      ),
     );
   }
 
@@ -304,9 +317,13 @@ function buildMutation(
   });
   if (!candidate.success) {
     return err(
-      stateError("PDF manifest mutation does not match the domain schema.", "InvalidPdfManifestMutation", {
-        revision: manifest.revision,
-      }),
+      stateError(
+        "PDF manifest mutation does not match the domain schema.",
+        "InvalidPdfManifestMutation",
+        {
+          revision: manifest.revision,
+        },
+      ),
     );
   }
   const monotonic = validateMonotonicPages(manifest, candidate.data);
