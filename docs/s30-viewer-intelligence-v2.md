@@ -23,17 +23,17 @@ scroll-area initial probe
         ↓
 PDF/page evidence gate
         ↓
-PdfViewerDiscovery
+typed PDF_VIEWER_DISCOVERY request
+        ↓
+content runtime resolves its owned opaque target
         ↓
 scroll viewer incrementally
         ↓
 collect semantic / canvas page candidates
         ↓
-identity by declared page index when available
+return metadata-only discovery snapshot
         ↓
-geometry identity when no stable DOM identity exists
-        ↓
-terminal proof: stable document end
+background verifies identity + completion evidence
         ↓
 strict DocumentPageMap
         ↓
@@ -43,6 +43,8 @@ expand capture extent from verified pages if lazy rendering grew the viewer
         ↓
 existing S27 page-aware capture/export
 ```
+
+The selected DOM node never crosses the runtime boundary. The content runtime that already owns the opaque element target performs the scan, while background receives only typed metadata and applies completion verification. This avoids relying on a separately executed isolated-world function to recover private content-runtime state.
 
 The discovery pass does not capture screenshots and does not allocate a full-document canvas. It only records bounded page geometry metadata. Ordinary scroll containers without page evidence or a PDF/document/viewer descriptor skip this pass entirely.
 
@@ -91,6 +93,8 @@ After a complete page map is proven, the scroll-area adapter expands the planned
 ## Restoration and safety
 
 - discovery preserves and restores the selected container's original `scrollLeft` and `scrollTop`;
+- discovery uses a typed background ↔ content contract and metadata-only response;
+- the content runtime resolves only the exact stored `jobId` + `selectionId` target and rejects stale/disconnected replacements;
 - discovery is gated to the initial measurement probe and only for targets with PDF/page evidence;
 - camelCase and tokenized viewer descriptors such as `pdfViewer`, `pdf-viewer` and `documentViewer` are recognized;
 - no new Chrome permission is added;
@@ -111,6 +115,8 @@ S30 adds deterministic tests for:
 - lazy viewer height growth expanding capture planning from the verified page-map extent;
 - ordinary scroll containers skipping the expensive discovery pass;
 - rejection of the legacy projection-only page map when incremental discovery has no completion proof.
+
+The browser regression uses the real extension content runtime and requires all 500 logical page identities to be observed while the fixture keeps only a small moving page window in the DOM.
 
 ## Exit target
 
