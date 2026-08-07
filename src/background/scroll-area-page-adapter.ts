@@ -100,6 +100,32 @@ function isInitialDiscoveryProbe(request: ScrollAreaPageRequest): boolean {
   );
 }
 
+function descriptorSuggestsPdf(descriptor: ElementTargetDescriptor): boolean {
+  const hint = [descriptor.tagName, ...descriptor.classNames].join(" ");
+  return /(?:^|[-_\s])(pdf|document|viewer)(?:$|[-_\s])/iu.test(hint);
+}
+
+function shouldDiscoverPdfViewer(
+  request: ScrollAreaPageRequest,
+  legacyPageMap: DocumentPageMap | undefined,
+): boolean {
+  return (
+    isInitialDiscoveryProbe(request) &&
+    (legacyPageMap !== undefined || descriptorSuggestsPdf(request.descriptor))
+  );
+}
+
+function pageMapExtent(pageMap: DocumentPageMap | undefined): { right: number; bottom: number } {
+  if (pageMap === undefined) return { right: 0, bottom: 0 };
+  return pageMap.pages.reduce(
+    (extent, page) => ({
+      right: Math.max(extent.right, page.sourceRectCss.x + page.sourceRectCss.width),
+      bottom: Math.max(extent.bottom, page.sourceRectCss.y + page.sourceRectCss.height),
+    }),
+    { right: 0, bottom: 0 },
+  );
+}
+
 export class ChromeScrollAreaPageAdapter implements ScrollAreaPageAdapter {
   constructor(
     private readonly browser: ScrollAreaBrowserAdapter = createChromeScrollAreaBrowserAdapter(),
@@ -149,7 +175,8 @@ export class ChromeScrollAreaPageAdapter implements ScrollAreaPageAdapter {
       throw new Error("Scrollable container response did not match the selected target.");
     }
     const payload = parsed.value.payload;
-    const discoveredPageMap = isInitialDiscoveryProbe(request)
+    const discoveryRan = shouldDiscoverPdfViewer(request, payload.documentPageMap);
+    const discoveredPageMap = discoveryRan
       ? await this.viewerDiscovery.discover({
           tabId: request.tabId,
           descriptor: request.descriptor,
@@ -158,14 +185,18 @@ export class ChromeScrollAreaPageAdapter implements ScrollAreaPageAdapter {
       : undefined;
     const legacyDomPageMap =
       payload.documentPageMap?.strategy === "dom" ? payload.documentPageMap : undefined;
-    const documentPageMap = discoveredPageMap ?? legacyDomPageMap;
+    const documentPageMap = discoveryRan ? discoveredPageMap : legacyDomPageMap;
+    const extent = pageMapExtent(documentPageMap);
+    const scrollWidth = Math.max(payload.scrollWidth, extent.right);
+    const scrollHeight = Math.max(payload.scrollHeight, extent.bottom);
+    const discoveredWidthDrift = extent.right > payload.scrollWidth + 2;
     return {
       requestedScrollLeft: payload.requestedScrollLeft,
       requestedScrollTop: payload.requestedScrollTop,
       actualScrollLeft: payload.actualScrollLeft,
       actualScrollTop: payload.actualScrollTop,
-      scrollWidth: payload.scrollWidth,
-      scrollHeight: payload.scrollHeight,
+      scrollWidth,
+      scrollHeight,
       clientWidth: payload.clientWidth,
       clientHeight: payload.clientHeight,
       viewportWidth: payload.viewportWidth,
@@ -176,7 +207,7 @@ export class ChromeScrollAreaPageAdapter implements ScrollAreaPageAdapter {
       stableSamples: payload.stableSamples,
       mutationCount: payload.mutationCount,
       scrollSnapped: payload.scrollSnapped,
-      layoutChanged: payload.layoutChanged,
+      layoutChanged: payload.layoutChanged || discoveredWidthDrift,
       ...(documentPageMap === undefined ? {} : { documentPageMap }),
     };
   }
