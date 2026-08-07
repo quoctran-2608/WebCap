@@ -72,6 +72,14 @@ export const PdfPageProgressSchema = z
   })
   .strict();
 
+export const PdfOutputPlanSchema = z
+  .object({
+    kind: z.enum(["source-order", "editor"]),
+    sourcePageIndexes: z.array(NonNegativeIntegerSchema).min(1),
+    editRevision: NonNegativeIntegerSchema.optional(),
+  })
+  .strict();
+
 export const PdfStrategyReasonSchema = z.enum([
   "original-available",
   "viewer-visible",
@@ -105,6 +113,7 @@ export const PdfDocumentManifestSchema = z
     pages: z.array(PdfPageManifestSchema),
     state: PdfManifestStateSchema,
     progress: PdfPageProgressSchema,
+    outputPlan: PdfOutputPlanSchema.optional(),
     outputState: PdfOutputStateSchema,
     lastVerifiedPage: NonNegativeIntegerSchema.optional(),
     error: WebCapErrorDataSchema.optional(),
@@ -119,7 +128,8 @@ export const PdfCompletionEvidenceSchema = z
     schemaVersion: z.literal(1),
     jobId: z.string().min(1).max(160),
     manifestRevision: NonNegativeIntegerSchema,
-    expectedPageCount: PositiveIntegerSchema,
+    sourcePageCount: PositiveIntegerSchema,
+    expectedOutputPageCount: PositiveIntegerSchema,
     outputPageCount: PositiveIntegerSchema,
     verified: z.literal(true),
   })
@@ -132,6 +142,7 @@ export type PdfOutputState = z.infer<typeof PdfOutputStateSchema>;
 export type PdfPageOrientation = z.infer<typeof PdfPageOrientationSchema>;
 export type PdfPageManifest = z.infer<typeof PdfPageManifestSchema>;
 export type PdfPageProgress = z.infer<typeof PdfPageProgressSchema>;
+export type PdfOutputPlan = z.infer<typeof PdfOutputPlanSchema>;
 export type PdfStrategyReason = z.infer<typeof PdfStrategyReasonSchema>;
 export type PdfStrategyDecision = z.infer<typeof PdfStrategyDecisionSchema>;
 export type PdfDocumentManifest = z.infer<typeof PdfDocumentManifestSchema>;
