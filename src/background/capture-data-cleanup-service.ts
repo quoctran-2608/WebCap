@@ -3,8 +3,11 @@ import { createWebCapError, type WebCapErrorData } from "@shared/errors/error";
 import type { JobArtifactCleanupPort } from "@storage/job-artifact-cleanup-repository";
 import type { JobRepositoryPort } from "@storage/job-repository";
 import type { JobSessionRepositoryPort } from "@storage/job-session-repository";
+import type { PdfDocumentManifestRepositoryPort } from "@storage/pdf-document-manifest-repository";
 import type { PdfEditManifestRepositoryPort } from "@storage/pdf-edit-manifest-repository";
 import type { TileRepositoryPort } from "@storage/tile-repository";
+
+import { getPdfDocumentManifestRepository } from "./pdf-capture-runtime";
 
 export interface CaptureOwnedDataCleanupReport {
   deletedJobs: number;
@@ -25,6 +28,7 @@ export interface CaptureOwnedDataCleanupServiceOptions {
   tiles: Pick<TileRepositoryPort, "deleteByJob">;
   artifacts: JobArtifactCleanupPort;
   manifests: Pick<PdfEditManifestRepositoryPort, "load" | "delete">;
+  pdfDocuments?: Pick<PdfDocumentManifestRepositoryPort, "get" | "delete">;
 }
 
 function cleanupWarning(jobId: string, failedOperations: string[]): WebCapErrorData | undefined {
@@ -45,7 +49,12 @@ function cleanupWarning(jobId: string, failedOperations: string[]): WebCapErrorD
 }
 
 export class CaptureOwnedDataCleanupService implements CaptureOwnedDataCleanupPort {
-  constructor(private readonly options: CaptureOwnedDataCleanupServiceOptions) {}
+  private readonly pdfDocuments:
+    Pick<PdfDocumentManifestRepositoryPort, "get" | "delete"> | undefined;
+
+  constructor(private readonly options: CaptureOwnedDataCleanupServiceOptions) {
+    this.pdfDocuments = options.pdfDocuments ?? getPdfDocumentManifestRepository();
+  }
 
   async cleanupJob(jobId: string, tabId?: number): Promise<CaptureOwnedDataCleanupReport> {
     const report: CaptureOwnedDataCleanupReport = {
@@ -63,6 +72,16 @@ export class CaptureOwnedDataCleanupService implements CaptureOwnedDataCleanupPo
       report.deletedManifests = manifest === undefined ? 0 : 1;
     } catch {
       failedOperations.push("manifest");
+    }
+
+    if (this.pdfDocuments !== undefined) {
+      try {
+        const document = await this.pdfDocuments.get(jobId);
+        await this.pdfDocuments.delete(jobId);
+        if (document !== undefined) report.deletedManifests += 1;
+      } catch {
+        failedOperations.push("pdf-document");
+      }
     }
 
     try {
