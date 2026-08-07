@@ -183,9 +183,7 @@ export class CaptureCompletionService {
     if (artifact === undefined) return undefined;
     const totalPages = artifact.format === "pdf" ? (artifact.pageCount ?? 1) : 1;
     const dedicated =
-      artifact.format === "pdf" &&
-      isDedicatedViewerPdfJob(job) &&
-      job.partialCapture === undefined;
+      artifact.format === "pdf" && isDedicatedViewerPdfJob(job) && job.partialCapture === undefined;
     const evidence = dedicated
       ? await this.pdfDocuments?.completeViewerOutput(job, totalPages)
       : undefined;
