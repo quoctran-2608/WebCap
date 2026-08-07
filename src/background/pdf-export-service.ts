@@ -3,6 +3,7 @@ import { planPdfDocument, planPdfDocumentPages } from "@offscreen/pdf-layout";
 import type { PdfExportPayload, PdfExportProgress } from "@offscreen/pdf-exporter";
 import type { ArtifactMetadata } from "@shared/contracts/artifact";
 import type { CaptureJob, CaptureSettings } from "@shared/contracts/domain";
+import type { PdfOutputPlan } from "@shared/contracts/pdf-capture";
 import type { PdfEditorPage } from "@shared/contracts/pdf-editor";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
@@ -159,20 +160,27 @@ export class PdfExportService {
       throw exportSourceError(jobId, "PdfExportTilesMissing");
     }
 
-    const manifest = settings === undefined ? await this.manifests?.load(jobId) : undefined;
-    const pdfSettings = settings ?? manifest?.settings ?? current.settings.pdf;
-    const pages = manifest?.pages ?? mappedEditorPages(current, pdfSettings);
+    const editManifest = settings === undefined ? await this.manifests?.load(jobId) : undefined;
+    const pdfSettings = settings ?? editManifest?.settings ?? current.settings.pdf;
+    const pages = editManifest?.pages ?? mappedEditorPages(current, pdfSettings);
     if (pages !== undefined && pages.length === 0) {
       throw exportSourceError(jobId, "PdfDocumentPagesUnavailable");
     }
-    const totalPages =
-      pages?.length ?? planPdfDocument(current.targetRect, pdfSettings).pages.length;
+    const totalPages = pages?.length ?? planPdfDocument(current.targetRect, pdfSettings).pages.length;
 
     if (isDedicatedViewerPdfJob(current) && current.partialCapture === undefined) {
       if (this.pdfDocuments === undefined) {
         throw exportSourceError(jobId, "PdfDocumentOrchestratorUnavailable");
       }
-      await this.pdfDocuments.prepareViewerExport(current);
+      const outputPlan: PdfOutputPlan | undefined =
+        editManifest === undefined
+          ? undefined
+          : {
+              kind: "editor",
+              sourcePageIndexes: editManifest.pages.map((page) => page.originalIndex),
+              editRevision: editManifest.revision,
+            };
+      await this.pdfDocuments.prepareViewerExport(current, outputPlan);
     }
 
     this.cancelledJobs.delete(jobId);
@@ -300,7 +308,7 @@ export class PdfExportService {
           },
         },
         {
-          ...(completionEvidence?.verified === true ? { pdfCompletionVerified: true } : {}),
+          ...(completionEvidence === undefined ? {} : { pdfCompletionEvidence: completionEvidence }),
         },
       );
     } catch (error) {
