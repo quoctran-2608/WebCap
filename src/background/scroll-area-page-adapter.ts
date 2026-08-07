@@ -179,6 +179,7 @@ export class ChromeScrollAreaPageAdapter implements ScrollAreaPageAdapter {
     const discoveredPageMap = discoveryRan
       ? await this.viewerDiscovery.discover({
           tabId: request.tabId,
+          jobId: request.jobId,
           descriptor: request.descriptor,
           settleMs: request.settleMs,
         })
