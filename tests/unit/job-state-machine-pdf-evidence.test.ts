@@ -15,10 +15,10 @@ function storedTile(): CaptureTile {
     index: 0,
     row: 0,
     column: 0,
-    sourceRectCss: { x: 0, y: 0, width: 100, height: 140 },
-    outputRectCss: { x: 0, y: 0, width: 100, height: 140 },
+    sourceRectCss: { x: 0, y: 0, width: 100, height: 300 },
+    outputRectCss: { x: 0, y: 0, width: 100, height: 300 },
     expectedPixelWidth: 100,
-    expectedPixelHeight: 140,
+    expectedPixelHeight: 300,
     overlapTopCss: 0,
     overlapLeftCss: 0,
     status: "stored",
@@ -26,7 +26,7 @@ function storedTile(): CaptureTile {
   };
 }
 
-function exportingPdfJob(): CaptureJob {
+function exportingPdfJob(sourcePageCount = 1, outputPageCount = 1): CaptureJob {
   const tile = storedTile();
   return {
     schemaVersion: 1,
@@ -39,21 +39,24 @@ function exportingPdfJob(): CaptureJob {
     activeEngine: "scroll",
     state: "exporting",
     stateRevision: 5,
-    targetRect: { x: 0, y: 0, width: 100, height: 140 },
+    targetRect: { x: 0, y: 0, width: 100, height: 300 },
     documentPageMap: {
       schemaVersion: 1,
       strategy: "dom",
       confidence: 1,
       complete: true,
-      sourcePageCount: 1,
-      pages: [{ index: 0, sourceRectCss: { x: 0, y: 0, width: 100, height: 140 } }],
+      sourcePageCount,
+      pages: Array.from({ length: sourcePageCount }, (_, index) => ({
+        index,
+        sourceRectCss: { x: 0, y: index * 150, width: 100, height: 140 },
+      })),
     },
     tilePlan: [tile],
     completedTiles: 1,
     totalTiles: 1,
     settings: DEFAULT_CAPTURE_SETTINGS,
     activeOutputFormat: "pdf",
-    exportProgress: { completedPages: 0, totalPages: 1 },
+    exportProgress: { completedPages: 0, totalPages: outputPageCount },
     cleanup: { attempted: true, completed: true },
     createdAt,
     updatedAt: createdAt,
@@ -89,7 +92,7 @@ describe("dedicated PDF completion evidence", () => {
     });
   });
 
-  it("accepts completion only when page count and verified evidence agree", () => {
+  it("accepts completion only when structured verified evidence agrees", () => {
     const result = transitionJob(
       exportingPdfJob(),
       "completed",
@@ -99,15 +102,48 @@ describe("dedicated PDF completion evidence", () => {
         outputArtifactId: output.artifactId,
         exportProgress: { completedPages: 1, totalPages: 1 },
       },
-      { pdfCompletionVerified: true },
+      {
+        pdfCompletionEvidence: {
+          schemaVersion: 1,
+          jobId: "job-1",
+          manifestRevision: 4,
+          sourcePageCount: 1,
+          expectedOutputPageCount: 1,
+          outputPageCount: 1,
+          verified: true,
+        },
+      },
     );
 
     expect(result).toMatchObject({
       ok: true,
-      value: {
-        state: "completed",
-        output: { pageCount: 1 },
-      },
+      value: { state: "completed", output: { pageCount: 1 } },
     });
+  });
+
+  it("allows an explicitly verified edited output count after all source pages are verified", () => {
+    const result = transitionJob(
+      exportingPdfJob(2, 1),
+      "completed",
+      updatedAt,
+      {
+        output,
+        outputArtifactId: output.artifactId,
+        exportProgress: { completedPages: 1, totalPages: 1 },
+      },
+      {
+        pdfCompletionEvidence: {
+          schemaVersion: 1,
+          jobId: "job-1",
+          manifestRevision: 9,
+          sourcePageCount: 2,
+          expectedOutputPageCount: 1,
+          outputPageCount: 1,
+          verified: true,
+        },
+      },
+    );
+
+    expect(result).toMatchObject({ ok: true, value: { state: "completed" } });
   });
 });
