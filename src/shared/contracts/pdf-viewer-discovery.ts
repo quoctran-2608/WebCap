@@ -1,7 +1,11 @@
 import { z } from "zod";
 
 import { PROTOCOL_VERSION } from "@shared/constants";
-import { ElementTargetDescriptorSchema, RectSchema, type ElementTargetDescriptor } from "@shared/contracts/domain";
+import {
+  ElementTargetDescriptorSchema,
+  RectSchema,
+  type ElementTargetDescriptor,
+} from "@shared/contracts/domain";
 import {
   WebCapErrorDataSchema,
   createWebCapError,
@@ -98,7 +102,9 @@ export const PdfViewerDiscoveryErrorMessageSchema = ContentToBackgroundSchema.ex
 export type PdfViewerAdapterKind = z.infer<typeof PdfViewerAdapterKindSchema>;
 export type PdfViewerPageCandidate = z.infer<typeof PdfViewerPageCandidateSchema>;
 export type PdfViewerDiscoverySnapshot = z.infer<typeof PdfViewerDiscoverySnapshotSchema>;
-export type PdfViewerDiscoveryRequestMessage = z.infer<typeof PdfViewerDiscoveryRequestMessageSchema>;
+export type PdfViewerDiscoveryRequestMessage = z.infer<
+  typeof PdfViewerDiscoveryRequestMessageSchema
+>;
 export type PdfViewerDiscoveryResponseMessage = z.infer<
   typeof PdfViewerDiscoveryResponseMessageSchema
 >;

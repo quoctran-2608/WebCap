@@ -85,7 +85,8 @@ function discoveryError(
     code: options.code,
     stage: "capture",
     message: options.message,
-    userMessageKey: options.code === "E_TARGET_STALE" ? "errors.targetStale" : "errors.scrollAreaCapture",
+    userMessageKey:
+      options.code === "E_TARGET_STALE" ? "errors.targetStale" : "errors.scrollAreaCapture",
     retryable: true,
     fallbackAllowed: false,
     causeCode: options.causeCode,

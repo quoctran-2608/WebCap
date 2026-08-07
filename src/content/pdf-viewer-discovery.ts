@@ -163,7 +163,8 @@ export async function discoverPdfViewerSnapshot(
     let sawShadow = false;
     for (const root of roots) {
       if (root instanceof ShadowRoot) sawShadow = true;
-      if (root instanceof Element && root !== target && root.matches(PAGE_SELECTOR)) selected.add(root);
+      if (root instanceof Element && root !== target && root.matches(PAGE_SELECTOR))
+        selected.add(root);
       for (const element of Array.from(root.querySelectorAll(PAGE_SELECTOR))) selected.add(element);
     }
     observedPageCount = Math.max(
