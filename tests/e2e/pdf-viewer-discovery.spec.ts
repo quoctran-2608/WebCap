@@ -85,9 +85,12 @@ test("@smoke discovers all 500 virtualized PDF pages without simultaneous DOM no
   await selectScrollableViewer(targetPage);
 
   await expect
-    .poll(async () => (await readDiscoveryState(serviceWorker)).documentPageMap?.sourcePageCount ?? 0, {
-      timeout: 60_000,
-    })
+    .poll(
+      async () => (await readDiscoveryState(serviceWorker)).documentPageMap?.sourcePageCount ?? 0,
+      {
+        timeout: 60_000,
+      },
+    )
     .toBe(500);
 
   const state = await readDiscoveryState(serviceWorker);
@@ -121,6 +124,8 @@ test("@smoke discovers all 500 virtualized PDF pages without simultaneous DOM no
   const cancelPopup = await openPopup();
   await cancelPopup.getByRole("button", { name: /^Hủy/ }).click();
   await expect
-    .poll(async () => (await readDiscoveryState(serviceWorker)).state ?? "missing", { timeout: 15_000 })
+    .poll(async () => (await readDiscoveryState(serviceWorker)).state ?? "missing", {
+      timeout: 15_000,
+    })
     .toBe("cancelled");
 });
