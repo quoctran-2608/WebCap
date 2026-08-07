@@ -7,6 +7,7 @@ import {
   type ElementSelectorController,
 } from "./element-selector";
 import { openRegionSelector, type RegionSelectorController } from "./region-selector";
+import { installPdfViewerDiscoveryRuntime } from "./pdf-viewer-discovery-runtime";
 import type {
   DocumentPageMap,
   ElementTargetDescriptor,
@@ -2131,4 +2132,5 @@ export function registerPagePreparationContentScript(): {
 if (typeof chrome !== "undefined" && typeof document !== "undefined") {
   registerPagePreparationContentScript();
   installElementSelectionRuntime();
+  installPdfViewerDiscoveryRuntime();
 }
