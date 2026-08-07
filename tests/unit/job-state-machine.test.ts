@@ -150,7 +150,7 @@ describe("job state machine", () => {
     });
   });
 
-  it("rejects dedicated PDF export progress that omits detected source pages", () => {
+  it("defers dedicated PDF source/output count agreement to manifest completion evidence", () => {
     const current: CaptureJob = {
       ...job("ready"),
       mode: "scroll-area",
@@ -171,7 +171,7 @@ describe("job state machine", () => {
         })),
       },
     };
-    const result = transitionJob(
+    const exporting = transitionJob(
       current,
       "exporting",
       updatedAt,
@@ -182,9 +182,36 @@ describe("job state machine", () => {
       { sourceArtifactExists: true },
     );
 
-    expect(result).toMatchObject({
+    expect(exporting).toMatchObject({
+      ok: true,
+      value: {
+        state: "exporting",
+        exportProgress: { completedPages: 0, totalPages: 63 },
+      },
+    });
+    if (!exporting.ok) return;
+
+    const completed = transitionJob(exporting.value, "completed", updatedAt, {
+      output: {
+        artifactId: "pdf-1",
+        sourceArtifactId: "job-1",
+        format: "pdf",
+        mimeType: "application/pdf",
+        filename: "document.pdf",
+        byteLength: 500,
+        width: 595,
+        height: 842,
+        pageCount: 63,
+        createdAt,
+        expiresAt,
+      },
+      outputArtifactId: "pdf-1",
+      exportProgress: { completedPages: 63, totalPages: 63 },
+    });
+
+    expect(completed).toMatchObject({
       ok: false,
-      error: { causeCode: "PdfSourcePageCountMismatch" },
+      error: { causeCode: "PdfCompletionEvidenceMissing" },
     });
   });
 
