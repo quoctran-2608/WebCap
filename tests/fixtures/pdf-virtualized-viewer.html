@@ -5,10 +5,23 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>WebCap virtualized PDF viewer fixture</title>
     <style>
-      * { box-sizing: border-box; }
-      html, body { margin: 0; min-height: 100%; background: #eef1f4; font-family: system-ui, sans-serif; }
-      main { padding: 32px; }
-      h1 { margin: 0 0 16px; font-size: 22px; }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #eef1f4;
+        font-family: system-ui, sans-serif;
+      }
+      main {
+        padding: 32px;
+      }
+      h1 {
+        margin: 0 0 16px;
+        font-size: 22px;
+      }
       #pdf-scroll {
         position: relative;
         width: 940px;
@@ -18,7 +31,10 @@
         background: #3c4148;
         overscroll-behavior: contain;
       }
-      #pdf-spacer { position: relative; width: 100%; }
+      #pdf-spacer {
+        position: relative;
+        width: 100%;
+      }
       .page {
         position: absolute;
         left: 50%;
@@ -31,7 +47,9 @@
         place-items: center;
         font-size: 18px;
       }
-      .page > span { opacity: 0.72; }
+      .page > span {
+        opacity: 0.72;
+      }
     </style>
   </head>
   <body>
@@ -50,8 +68,8 @@
       (() => {
         const PAGE_COUNT = 500;
         const GAP = 14;
-        const viewer = document.querySelector('#pdf-scroll');
-        const spacer = document.querySelector('#pdf-spacer');
+        const viewer = document.querySelector("#pdf-scroll");
+        const spacer = document.querySelector("#pdf-spacer");
         const pages = Array.from({ length: PAGE_COUNT }, (_, index) => {
           const landscape = index % 9 === 4;
           const compact = index % 11 === 6;
@@ -91,29 +109,29 @@
           let last = first;
           while (last < pages.length - 1 && offsets[last] < visibleBottom) last += 1;
           last = Math.min(pages.length - 1, last + 2);
-          spacer.querySelectorAll('.page').forEach((element) => element.remove());
+          spacer.querySelectorAll(".page").forEach((element) => element.remove());
           for (let index = first; index <= last; index += 1) {
             const page = pages[index];
-            const element = document.createElement('section');
-            element.className = 'page';
+            const element = document.createElement("section");
+            element.className = "page";
             element.dataset.pageNumber = String(index + 1);
-            element.setAttribute('aria-label', `Page ${index + 1}`);
+            element.setAttribute("aria-label", `Page ${index + 1}`);
             element.style.top = `${offsets[index]}px`;
             element.style.width = `${page.width}px`;
             element.style.height = `${page.height}px`;
             element.innerHTML = `<span>Page ${index + 1}</span>`;
             spacer.append(element);
           }
-          maxLivePages = Math.max(maxLivePages, spacer.querySelectorAll('.page').length);
+          maxLivePages = Math.max(maxLivePages, spacer.querySelectorAll(".page").length);
           window.__webcapVirtualPdfFixture = {
             pageCount: PAGE_COUNT,
-            livePages: spacer.querySelectorAll('.page').length,
+            livePages: spacer.querySelectorAll(".page").length,
             maxLivePages,
             renderCount,
             totalHeight,
           };
         }
-        viewer.addEventListener('scroll', () => requestAnimationFrame(render), { passive: true });
+        viewer.addEventListener("scroll", () => requestAnimationFrame(render), { passive: true });
         render();
       })();
     </script>
