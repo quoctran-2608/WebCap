@@ -1,4 +1,9 @@
-import type { CaptureEngineKind, CaptureMode, JobState } from "@shared/contracts/domain";
+import type {
+  CaptureEngineKind,
+  CaptureMode,
+  JobState,
+  PartialCaptureReason,
+} from "@shared/contracts/domain";
 import type { UiLocale } from "@shared/i18n";
 import type { WebCapErrorCode } from "@shared/errors/error";
 
@@ -15,6 +20,9 @@ export interface SafeDiagnosticsInput {
     engine?: CaptureEngineKind;
     completedTiles?: number;
     totalTiles?: number;
+    completedDocumentPages?: number;
+    totalDocumentPages?: number;
+    partialCaptureReason?: PartialCaptureReason;
     errorCode?: WebCapErrorCode;
   };
   visible?: {
@@ -49,6 +57,9 @@ export interface SafeDiagnosticsDocument {
     engine?: CaptureEngineKind;
     completedTiles?: number;
     totalTiles?: number;
+    completedDocumentPages?: number;
+    totalDocumentPages?: number;
+    partialCaptureReason?: PartialCaptureReason;
     errorCode?: WebCapErrorCode;
   };
   visible?: {
@@ -83,6 +94,8 @@ export function createSafeDiagnostics(input: SafeDiagnosticsInput): SafeDiagnost
   const compactJobId = compactId(input.job?.id);
   const completedTiles = finiteCount(input.job?.completedTiles);
   const totalTiles = finiteCount(input.job?.totalTiles);
+  const completedDocumentPages = finiteCount(input.job?.completedDocumentPages);
+  const totalDocumentPages = finiteCount(input.job?.totalDocumentPages);
   const versionBucket = chromeVersionBucket(input.chromeVersion);
 
   return {
@@ -106,6 +119,11 @@ export function createSafeDiagnostics(input: SafeDiagnosticsInput): SafeDiagnost
             ...(input.job.engine === undefined ? {} : { engine: input.job.engine }),
             ...(completedTiles === undefined ? {} : { completedTiles }),
             ...(totalTiles === undefined ? {} : { totalTiles }),
+            ...(completedDocumentPages === undefined ? {} : { completedDocumentPages }),
+            ...(totalDocumentPages === undefined ? {} : { totalDocumentPages }),
+            ...(input.job.partialCaptureReason === undefined
+              ? {}
+              : { partialCaptureReason: input.job.partialCaptureReason }),
             ...(input.job.errorCode === undefined ? {} : { errorCode: input.job.errorCode }),
           },
         }),

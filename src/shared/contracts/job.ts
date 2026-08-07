@@ -104,11 +104,18 @@ export type JobSessionState = z.infer<typeof JobSessionStateSchema>;
 export type StoredTileRecord = z.infer<typeof StoredTileRecordSchema>;
 export type StoredDedupeRecord = z.infer<typeof StoredDedupeRecordSchema>;
 
-export function summarizeJob(job: CaptureJob): JobSummary {
+export interface DocumentPageProgress {
+  completed: number;
+  total: number;
+}
+
+export function documentPageProgress(job: CaptureJob): DocumentPageProgress | undefined {
+  const pageMap = job.documentPageMap;
+  if (pageMap === undefined) return undefined;
   const storedRects = job.tilePlan
     .filter((tile) => tile.status === "stored")
     .map((tile) => tile.outputRectCss ?? tile.sourceRectCss);
-  const completedDocumentPages = job.documentPageMap?.pages.filter((page) => {
+  const completed = pageMap.pages.filter((page) => {
     const rect = page.sourceRectCss;
     const epsilon = 0.01;
     const points = [
@@ -127,6 +134,11 @@ export function summarizeJob(job: CaptureJob): JobSummary {
       ),
     );
   }).length;
+  return { completed, total: pageMap.sourcePageCount };
+}
+
+export function summarizeJob(job: CaptureJob): JobSummary {
+  const pageProgress = documentPageProgress(job);
   return JobSummarySchema.parse({
     schemaVersion: 1,
     jobId: job.id,
@@ -136,10 +148,12 @@ export function summarizeJob(job: CaptureJob): JobSummary {
     stateRevision: job.stateRevision,
     completedTiles: job.completedTiles,
     totalTiles: job.totalTiles,
-    ...(completedDocumentPages === undefined ? {} : { completedDocumentPages }),
-    ...(job.documentPageMap === undefined
+    ...(pageProgress === undefined
       ? {}
-      : { totalDocumentPages: job.documentPageMap.sourcePageCount }),
+      : {
+          completedDocumentPages: pageProgress.completed,
+          totalDocumentPages: pageProgress.total,
+        }),
     updatedAt: job.updatedAt,
     expiresAt: job.expiresAt,
     ...(job.activeEngine === undefined ? {} : { activeEngine: job.activeEngine }),
