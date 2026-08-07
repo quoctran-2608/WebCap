@@ -2,6 +2,7 @@ import {
   PdfDocumentManifestSchema,
   type PdfDocumentManifest,
   type PdfManifestState,
+  type PdfOutputPlan,
   type PdfPageLifecycleState,
   type PdfPageManifest,
   type PdfPageProgress,
@@ -26,7 +27,7 @@ const ALLOWED_TRANSITIONS: Readonly<Record<PdfManifestState, readonly PdfManifes
     verifying: ["writing", "paused", "failed", "cancelled"],
     writing: ["completed", "paused", "failed", "cancelled"],
     paused: ["discovering", "capturing", "verifying", "writing", "failed", "cancelled"],
-    completed: [],
+    completed: ["writing"],
     failed: ["negotiating", "discovering", "capturing", "verifying", "writing", "cancelled"],
     cancelled: [],
   });
@@ -41,6 +42,7 @@ export type PdfManifestPatch = Partial<
     | "discoveryComplete"
     | "pages"
     | "progress"
+    | "outputPlan"
     | "outputState"
     | "lastVerifiedPage"
     | "error"
@@ -78,13 +80,14 @@ export function derivePdfPageProgress(
   expectedPageCount: number | undefined,
   currentBatch: number,
   currentPage?: number,
+  outputPages = 0,
 ): PdfPageProgress {
   return {
     ...(expectedPageCount === undefined ? {} : { expectedPages: expectedPageCount }),
     discoveredPages: pages.length,
     capturedPages: pages.filter((page) => atLeast(page, "captured")).length,
     verifiedPages: pages.filter((page) => atLeast(page, "verified")).length,
-    outputPages: pages.filter((page) => atLeast(page, "written")).length,
+    outputPages,
     ...(currentPage === undefined ? {} : { currentPage }),
     currentBatch,
   };
@@ -110,6 +113,67 @@ function sameProgress(left: PdfPageProgress, right: PdfPageProgress): boolean {
   );
 }
 
+function validateOutputPlan(
+  manifest: PdfDocumentManifest,
+  plan: PdfOutputPlan,
+): Result<void, WebCapErrorData> {
+  const unique = new Set(plan.sourcePageIndexes);
+  if (unique.size !== plan.sourcePageIndexes.length) {
+    return err(
+      stateError("PDF output plan cannot contain duplicate source pages.", "PdfOutputPlanDuplicate", {
+        outputPages: plan.sourcePageIndexes.length,
+      }),
+    );
+  }
+  for (const pageIndex of plan.sourcePageIndexes) {
+    if (pageIndex >= manifest.pages.length) {
+      return err(
+        stateError("PDF output plan references an unknown source page.", "PdfOutputPlanPageMissing", {
+          pageIndex,
+          discoveredPages: manifest.pages.length,
+        }),
+      );
+    }
+  }
+  if (plan.kind === "source-order") {
+    const expected = manifest.expectedPageCount;
+    const exactSourceOrder =
+      expected !== undefined &&
+      plan.sourcePageIndexes.length === expected &&
+      plan.sourcePageIndexes.every((pageIndex, position) => pageIndex === position);
+    if (!exactSourceOrder) {
+      return err(
+        stateError(
+          "The default PDF output plan must contain every source page in source order.",
+          "PdfSourceOutputPlanMismatch",
+          {
+            expectedPages: expected ?? 0,
+            outputPages: plan.sourcePageIndexes.length,
+          },
+        ),
+      );
+    }
+  }
+  if (plan.kind === "editor" && plan.editRevision === undefined) {
+    return err(
+      stateError("Edited PDF output requires a durable edit revision.", "PdfEditRevisionMissing", {
+        outputPages: plan.sourcePageIndexes.length,
+      }),
+    );
+  }
+  return ok(undefined);
+}
+
+function sameOutputPlan(left: PdfOutputPlan | undefined, right: PdfOutputPlan | undefined): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return (
+    left.kind === right.kind &&
+    left.editRevision === right.editRevision &&
+    left.sourcePageIndexes.length === right.sourcePageIndexes.length &&
+    left.sourcePageIndexes.every((value, index) => value === right.sourcePageIndexes[index])
+  );
+}
+
 export function validatePdfManifestInvariants(
   manifest: PdfDocumentManifest,
 ): Result<void, WebCapErrorData> {
@@ -120,10 +184,7 @@ export function validatePdfManifestInvariants(
         stateError(
           "PDF manifest pages must form a contiguous zero-based sequence.",
           "PdfPageIndexGap",
-          {
-            expectedIndex: position,
-            actualIndex: page.index,
-          },
+          { expectedIndex: position, actualIndex: page.index },
         ),
       );
     }
@@ -171,11 +232,12 @@ export function validatePdfManifestInvariants(
     manifest.expectedPageCount,
     manifest.progress.currentBatch,
     manifest.progress.currentPage,
+    manifest.progress.outputPages,
   );
   if (!sameProgress(manifest.progress, derivedProgress)) {
     return err(
       stateError(
-        "PDF manifest progress must be derived from page lifecycle state.",
+        "PDF manifest progress must be derived from source page lifecycle state.",
         "PdfProgressDrift",
         {
           discoveredPages: manifest.progress.discoveredPages,
@@ -199,8 +261,7 @@ export function validatePdfManifestInvariants(
 
   if (
     manifest.progress.currentPage !== undefined &&
-    manifest.progress.currentPage >=
-      Math.max(manifest.expectedPageCount ?? 0, manifest.pages.length)
+    manifest.progress.currentPage >= Math.max(manifest.expectedPageCount ?? 0, manifest.pages.length)
   ) {
     return err(
       stateError(
@@ -214,6 +275,38 @@ export function validatePdfManifestInvariants(
     );
   }
 
+  if (manifest.outputPlan === undefined) {
+    if (manifest.progress.outputPages !== 0 || ["writing", "verifying", "completed"].includes(manifest.outputState)) {
+      return err(
+        stateError("PDF output progress requires a verified output plan.", "PdfOutputPlanMissing", {
+          outputPages: manifest.progress.outputPages,
+        }),
+      );
+    }
+  } else {
+    const planValidation = validateOutputPlan(manifest, manifest.outputPlan);
+    if (!planValidation.ok) return planValidation;
+    if (manifest.progress.outputPages > manifest.outputPlan.sourcePageIndexes.length) {
+      return err(
+        stateError("PDF output progress exceeds the verified output plan.", "PdfOutputProgressOverflow", {
+          outputPages: manifest.progress.outputPages,
+          plannedPages: manifest.outputPlan.sourcePageIndexes.length,
+        }),
+      );
+    }
+    for (const pageIndex of manifest.outputPlan.sourcePageIndexes.slice(0, manifest.progress.outputPages)) {
+      const page = manifest.pages[pageIndex];
+      if (page === undefined || !atLeast(page, "written")) {
+        return err(
+          stateError("Written PDF output progress must correspond to written source pages.", "PdfWrittenPageMissing", {
+            pageIndex,
+            outputPages: manifest.progress.outputPages,
+          }),
+        );
+      }
+    }
+  }
+
   if (manifest.state === "failed" && manifest.error === undefined) {
     return err(
       stateError("Failed PDF manifests require a normalized error.", "PdfFailureErrorMissing", {
@@ -224,28 +317,30 @@ export function validatePdfManifestInvariants(
 
   if (manifest.state === "completed") {
     const expected = manifest.expectedPageCount;
+    const plannedOutputPages = manifest.outputPlan?.sourcePageIndexes.length ?? 0;
     const complete =
       manifest.discoveryComplete &&
       expected !== undefined &&
       expected > 0 &&
       manifest.pages.length === expected &&
-      manifest.pages.every((page) => page.state === "written") &&
+      manifest.pages.every((page) => atLeast(page, "verified")) &&
       manifest.progress.discoveredPages === expected &&
       manifest.progress.capturedPages === expected &&
       manifest.progress.verifiedPages === expected &&
-      manifest.progress.outputPages === expected &&
+      manifest.outputPlan !== undefined &&
+      plannedOutputPages > 0 &&
+      manifest.progress.outputPages === plannedOutputPages &&
       manifest.outputState === "completed" &&
       manifest.error === undefined;
     if (!complete) {
       return err(
         stateError(
-          "A completed PDF manifest requires exact discovered/captured/verified/output agreement.",
+          "A completed PDF manifest requires verified source pages and exact output-plan agreement.",
           "PdfCompletionUnverified",
           {
             expectedPages: expected ?? 0,
-            discoveredPages: manifest.progress.discoveredPages,
-            capturedPages: manifest.progress.capturedPages,
             verifiedPages: manifest.progress.verifiedPages,
+            plannedOutputPages,
             outputPages: manifest.progress.outputPages,
           },
         ),
@@ -299,6 +394,17 @@ function validateMonotonicPages(
       );
     }
   }
+  if (
+    previous.outputPlan !== undefined &&
+    previous.state !== "completed" &&
+    !sameOutputPlan(previous.outputPlan, candidate.outputPlan)
+  ) {
+    return err(
+      stateError("An active PDF output plan cannot change while writing.", "PdfOutputPlanChanged", {
+        revision: previous.revision,
+      }),
+    );
+  }
   return ok(undefined);
 }
 
@@ -320,9 +426,7 @@ function buildMutation(
       stateError(
         "PDF manifest mutation does not match the domain schema.",
         "InvalidPdfManifestMutation",
-        {
-          revision: manifest.revision,
-        },
+        { revision: manifest.revision },
       ),
     );
   }
