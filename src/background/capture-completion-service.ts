@@ -11,6 +11,10 @@ import type { JobArtifactLookupPort } from "@storage/artifact-repository";
 import { completionPolicyForJob } from "./capture-completion-policy";
 import { captureOutputFromArtifact } from "./capture-output";
 import type { PersistentJobCoordinatorPort } from "./job-coordinator";
+import {
+  isDedicatedViewerPdfJob,
+  type PdfCaptureOrchestratorPort,
+} from "./pdf-capture-orchestrator";
 
 export interface CompletionPdfExportPort {
   start(jobId: string, settings?: CaptureSettings["pdf"]): Promise<CaptureJob>;
@@ -36,6 +40,7 @@ export interface CaptureCompletionServiceOptions {
   pdf: CompletionPdfExportPort;
   images: CompletionImageExportPort;
   artifacts: JobArtifactLookupPort;
+  pdfDocuments?: PdfCaptureOrchestratorPort;
 }
 
 function jobMissingError(jobId: string): Error {
@@ -67,6 +72,21 @@ function partialConfirmationError(job: CaptureJob): Error {
         jobId: job.id.slice(0, 24),
         reason: job.partialCapture?.reason ?? "unknown",
       },
+    }),
+  );
+}
+
+function completionEvidenceError(jobId: string): Error {
+  return createWebCapRuntimeError(
+    createWebCapError({
+      code: "E_EXPORT_FAILED",
+      stage: "export",
+      message: "Dedicated PDF completion evidence is unavailable.",
+      userMessageKey: "errors.exportFailed",
+      retryable: true,
+      fallbackAllowed: false,
+      causeCode: "PdfDocumentCompletionEvidenceUnavailable",
+      safeContext: { jobId: jobId.slice(0, 24) },
     }),
   );
 }
@@ -157,6 +177,15 @@ export class CaptureCompletionService {
     const artifact = newestOutput(await this.options.artifacts.listByJob(job.id));
     if (artifact === undefined) return undefined;
     const totalPages = artifact.format === "pdf" ? (artifact.pageCount ?? 1) : 1;
+    const dedicated =
+      artifact.format === "pdf" &&
+      isDedicatedViewerPdfJob(job) &&
+      job.partialCapture === undefined;
+    const evidence = dedicated
+      ? await this.options.pdfDocuments?.completeViewerOutput(job, totalPages)
+      : undefined;
+    if (dedicated && evidence === undefined) throw completionEvidenceError(job.id);
+
     let exporting = job;
     if (job.state !== "exporting") {
       exporting = await this.options.jobs.transition(
@@ -169,11 +198,18 @@ export class CaptureCompletionService {
         { sourceArtifactExists: true },
       );
     }
-    return this.options.jobs.transition(exporting.id, "completed", {
-      activeOutputFormat: artifact.format,
-      outputArtifactId: artifact.artifactId,
-      output: captureOutputFromArtifact(artifact),
-      exportProgress: { completedPages: totalPages, totalPages },
-    });
+    return this.options.jobs.transition(
+      exporting.id,
+      "completed",
+      {
+        activeOutputFormat: artifact.format,
+        outputArtifactId: artifact.artifactId,
+        output: captureOutputFromArtifact(artifact),
+        exportProgress: { completedPages: totalPages, totalPages },
+      },
+      {
+        ...(evidence?.verified === true ? { pdfCompletionVerified: true } : {}),
+      },
+    );
   }
 }
