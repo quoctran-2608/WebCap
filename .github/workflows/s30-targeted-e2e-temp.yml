@@ -36,3 +36,5 @@ jobs:
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm exec playwright test tests/e2e/pdf-viewer-discovery.spec.ts --reporter=line
+
+# Trigger after workflow registration.
