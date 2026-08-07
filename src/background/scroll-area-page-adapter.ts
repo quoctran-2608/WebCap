@@ -1,3 +1,4 @@
+import { ChromePdfViewerDiscovery, type PdfViewerDiscoveryPort } from "@background/pdf-viewer-discovery";
 import type {
   DocumentPageMap,
   ElementTargetDescriptor,
@@ -85,11 +86,23 @@ export function createChromeScrollAreaBrowserAdapter(): ScrollAreaBrowserAdapter
   };
 }
 
+function isInitialDiscoveryProbe(request: ScrollAreaPageRequest): boolean {
+  return (
+    request.scrollLeft === 0 &&
+    request.scrollTop === 0 &&
+    request.row === 0 &&
+    request.column === 0 &&
+    request.rows === 1 &&
+    request.columns === 1
+  );
+}
+
 export class ChromeScrollAreaPageAdapter implements ScrollAreaPageAdapter {
   constructor(
     private readonly browser: ScrollAreaBrowserAdapter = createChromeScrollAreaBrowserAdapter(),
     private readonly now: () => Date = () => new Date(),
     private readonly requestId: () => string = () => crypto.randomUUID(),
+    private readonly viewerDiscovery: PdfViewerDiscoveryPort = new ChromePdfViewerDiscovery(),
   ) {}
 
   async scrollAndSettle(request: ScrollAreaPageRequest): Promise<ScrollAreaPageResult> {
@@ -133,6 +146,14 @@ export class ChromeScrollAreaPageAdapter implements ScrollAreaPageAdapter {
       throw new Error("Scrollable container response did not match the selected target.");
     }
     const payload = parsed.value.payload;
+    const discoveredPageMap = isInitialDiscoveryProbe(request)
+      ? await this.viewerDiscovery.discover({
+          tabId: request.tabId,
+          descriptor: request.descriptor,
+          settleMs: request.settleMs,
+        })
+      : undefined;
+    const documentPageMap = discoveredPageMap ?? payload.documentPageMap;
     return {
       requestedScrollLeft: payload.requestedScrollLeft,
       requestedScrollTop: payload.requestedScrollTop,
@@ -151,9 +172,7 @@ export class ChromeScrollAreaPageAdapter implements ScrollAreaPageAdapter {
       mutationCount: payload.mutationCount,
       scrollSnapped: payload.scrollSnapped,
       layoutChanged: payload.layoutChanged,
-      ...(payload.documentPageMap === undefined
-        ? {}
-        : { documentPageMap: payload.documentPageMap }),
+      ...(documentPageMap === undefined ? {} : { documentPageMap }),
     };
   }
 
