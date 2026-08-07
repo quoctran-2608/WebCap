@@ -102,7 +102,7 @@ function isInitialDiscoveryProbe(request: ScrollAreaPageRequest): boolean {
 
 function descriptorSuggestsPdf(descriptor: ElementTargetDescriptor): boolean {
   const hint = [descriptor.tagName, ...descriptor.classNames].join(" ");
-  return /(?:^|[-_\s])(pdf|document|viewer)(?:$|[-_\s])/iu.test(hint);
+  return /(pdf|document|viewer)/iu.test(hint);
 }
 
 function shouldDiscoverPdfViewer(
