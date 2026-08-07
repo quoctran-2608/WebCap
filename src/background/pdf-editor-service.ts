@@ -1,4 +1,4 @@
-import { planPdfDocument } from "@offscreen/pdf-layout";
+import { planPdfDocument, planPdfDocumentPages } from "@offscreen/pdf-layout";
 import type { CaptureJob } from "@shared/contracts/domain";
 import {
   type PdfEditManifest,
@@ -50,7 +50,7 @@ function assertEditableSource(job: CaptureJob | undefined, jobId: string): Captu
     );
   }
   if (
-    !["full-page", "region", "element"].includes(job.mode) ||
+    !["full-page", "region", "element", "scroll-area"].includes(job.mode) ||
     job.targetRect === undefined ||
     job.tilePlan.length === 0 ||
     job.completedTiles !== job.totalTiles ||
@@ -82,6 +82,44 @@ function createPages(job: CaptureJob, settings: CaptureJob["settings"]["pdf"]): 
       "PdfEditorTargetMissing",
       job.id,
     );
+  }
+  const pageMap = job.documentPageMap;
+  if (pageMap !== undefined) {
+    const right = targetRect.x + targetRect.width;
+    const bottom = targetRect.y + targetRect.height;
+    const sourcePages = pageMap.pages.filter((page) => {
+      const rect = page.sourceRectCss;
+      return (
+        rect.x >= targetRect.x - 0.01 &&
+        rect.y >= targetRect.y - 0.01 &&
+        rect.x + rect.width <= right + 0.01 &&
+        rect.y + rect.height <= bottom + 0.01
+      );
+    });
+    if (sourcePages.length === 0) {
+      throw editorError(
+        "The detected document does not contain a fully captured page.",
+        "PdfEditorDocumentPagesUnavailable",
+        job.id,
+        true,
+      );
+    }
+    return planPdfDocumentPages(
+      {
+        ...pageMap,
+        complete: sourcePages.length === pageMap.sourcePageCount,
+        sourcePageCount: sourcePages.length,
+        pages: sourcePages.map((page, index) => ({ ...page, index })),
+      },
+      settings,
+    ).map((page) => ({
+      id: `document-page-${page.index + 1}`,
+      originalIndex: page.index,
+      sourceRectCss: page.sourceRectCss,
+      pageWidthPt: page.pageWidthPt,
+      pageHeightPt: page.pageHeightPt,
+      imageRectPt: page.imageRectPt,
+    }));
   }
   return planPdfDocument(targetRect, settings).pages.map((page) => ({
     id: `page-${page.index + 1}`,

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { PROTOCOL_VERSION } from "@shared/constants";
 import {
+  DocumentPageMapSchema,
   ElementTargetDescriptorSchema,
   FixedElementModeSchema,
   RectSchema,
@@ -88,6 +89,7 @@ export const ScrollAreaScrolledMessageSchema = ContentToBackgroundSchema.extend(
       mutationCount: NonNegativeIntegerSchema,
       scrollSnapped: z.boolean(),
       layoutChanged: z.boolean(),
+      documentPageMap: DocumentPageMapSchema.optional(),
     })
     .strict(),
 }).strict();

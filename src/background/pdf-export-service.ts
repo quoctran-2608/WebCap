@@ -1,5 +1,5 @@
 import { buildCaptureFilename } from "@background/filename";
-import { planPdfDocument } from "@offscreen/pdf-layout";
+import { planPdfDocument, planPdfDocumentPages } from "@offscreen/pdf-layout";
 import type { PdfExportPayload, PdfExportProgress } from "@offscreen/pdf-exporter";
 import type { ArtifactMetadata } from "@shared/contracts/artifact";
 import type { CaptureJob, CaptureSettings } from "@shared/contracts/domain";
@@ -69,6 +69,43 @@ function domainFromOrigin(origin: string | undefined): string | undefined {
   }
 }
 
+function mappedEditorPages(
+  job: CaptureJob,
+  settings: CaptureSettings["pdf"],
+): PdfEditorPage[] | undefined {
+  const pageMap = job.documentPageMap;
+  const target = job.targetRect;
+  if (pageMap === undefined || target === undefined) return undefined;
+  const right = target.x + target.width;
+  const bottom = target.y + target.height;
+  const pages = pageMap.pages.filter((page) => {
+    const rect = page.sourceRectCss;
+    return (
+      rect.x >= target.x - 0.01 &&
+      rect.y >= target.y - 0.01 &&
+      rect.x + rect.width <= right + 0.01 &&
+      rect.y + rect.height <= bottom + 0.01
+    );
+  });
+  if (pages.length === 0) return [];
+  return planPdfDocumentPages(
+    {
+      ...pageMap,
+      complete: pages.length === pageMap.sourcePageCount,
+      sourcePageCount: pages.length,
+      pages: pages.map((page, index) => ({ ...page, index })),
+    },
+    settings,
+  ).map((page) => ({
+    id: `document-page-${page.index + 1}`,
+    originalIndex: page.index,
+    sourceRectCss: page.sourceRectCss,
+    pageWidthPt: page.pageWidthPt,
+    pageHeightPt: page.pageHeightPt,
+    imageRectPt: page.imageRectPt,
+  }));
+}
+
 export class PdfExportService {
   private readonly jobs: PersistentJobCoordinatorPort;
   private readonly tiles: TileRepositoryPort;
@@ -116,7 +153,10 @@ export class PdfExportService {
 
     const manifest = settings === undefined ? await this.manifests?.load(jobId) : undefined;
     const pdfSettings = settings ?? manifest?.settings ?? current.settings.pdf;
-    const pages = manifest?.pages;
+    const pages = manifest?.pages ?? mappedEditorPages(current, pdfSettings);
+    if (pages !== undefined && pages.length === 0) {
+      throw exportSourceError(jobId, "PdfDocumentPagesUnavailable");
+    }
     const totalPages =
       pages?.length ?? planPdfDocument(current.targetRect, pdfSettings).pages.length;
     this.cancelledJobs.delete(jobId);

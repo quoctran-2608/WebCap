@@ -161,6 +161,7 @@ describe("ScrollAreaCaptureEngine", () => {
         expect.objectContaining({ index: 1 }),
       ]),
       result.partialCapture,
+      undefined,
     );
   });
 
@@ -203,6 +204,51 @@ describe("ScrollAreaCaptureEngine", () => {
     });
     expect(harness.stored).toHaveLength(1);
   });
+
+  it("captures a detected 126-page PDF in automatic batches beyond maxTiles", async () => {
+    const harness = setup();
+    const sourcePageCount = 126;
+    const scrollHeight = sourcePageCount * 200;
+    const documentPageMap = {
+      schemaVersion: 1 as const,
+      strategy: "dom" as const,
+      confidence: 1,
+      complete: true,
+      sourcePageCount,
+      pages: Array.from({ length: sourcePageCount }, (_, index) => ({
+        index,
+        sourceRectCss: { x: 0, y: index * 200, width: 100, height: 180 },
+      })),
+    };
+    harness.context.settings = {
+      ...harness.context.settings,
+      limits: { ...harness.context.settings.limits, maxTiles: 256 },
+    };
+    harness.scrollAndSettle.mockImplementation((request: ScrollAreaPageRequest) =>
+      Promise.resolve({
+        ...pageResult(request),
+        scrollHeight,
+        ...(request.rows === 1 && request.columns === 1 ? { documentPageMap } : {}),
+      }),
+    );
+
+    const result = await harness.engine.capture(harness.context);
+
+    expect(result.tiles.length).toBeGreaterThan(256);
+    expect(result.tiles).toHaveLength(harness.stored.length);
+    expect(result.partialCapture).toBeUndefined();
+    expect(result.documentPageMap?.sourcePageCount).toBe(126);
+    expect(harness.onPlan).toHaveBeenCalledWith(
+      expect.any(Object),
+      { x: 0, y: 0, width: 100, height: scrollHeight },
+      expect.arrayContaining([
+        expect.objectContaining({ index: 0 }),
+        expect.objectContaining({ index: 256 }),
+      ]),
+      undefined,
+      documentPageMap,
+    );
+  }, 30_000);
 
   it("restores the container and document scroll state", async () => {
     const harness = setup();

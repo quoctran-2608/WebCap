@@ -150,6 +150,44 @@ describe("job state machine", () => {
     });
   });
 
+  it("rejects dedicated PDF export progress that omits detected source pages", () => {
+    const current: CaptureJob = {
+      ...job("ready"),
+      mode: "scroll-area",
+      preferredEngine: "scroll",
+      activeEngine: "scroll",
+      tilePlan: [tile("stored")],
+      completedTiles: 1,
+      totalTiles: 1,
+      documentPageMap: {
+        schemaVersion: 1,
+        strategy: "dom",
+        confidence: 1,
+        complete: true,
+        sourcePageCount: 126,
+        pages: Array.from({ length: 126 }, (_, index) => ({
+          index,
+          sourceRectCss: { x: 0, y: index * 100, width: 100, height: 90 },
+        })),
+      },
+    };
+    const result = transitionJob(
+      current,
+      "exporting",
+      updatedAt,
+      {
+        activeOutputFormat: "pdf",
+        exportProgress: { completedPages: 0, totalPages: 63 },
+      },
+      { sourceArtifactExists: true },
+    );
+
+    expect(result).toMatchObject({
+      ok: false,
+      error: { causeCode: "PdfSourcePageCountMismatch" },
+    });
+  });
+
   it("requires normalized error and settled cleanup for failed jobs", () => {
     const current = job("preparing");
     const result = transitionJob(current, "failed", updatedAt);

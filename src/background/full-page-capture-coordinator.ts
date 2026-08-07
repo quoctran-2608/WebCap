@@ -9,6 +9,7 @@ import { JOB_PROGRESS_THROTTLE_MS, TILE_RECORD_SCHEMA_VERSION } from "@shared/co
 import type {
   CaptureJob,
   CaptureTile,
+  DocumentPageMap,
   PageMetrics,
   PartialCapture,
   Rect,
@@ -372,7 +373,7 @@ export class FullPageCaptureCoordinator {
           ...(job.targetDescriptor === undefined ? {} : { targetDescriptor: job.targetDescriptor }),
           ...(preparation === undefined ? {} : { preparation }),
           cancellation,
-          onPlan: (metrics, targetRect, tiles, enginePartialCapture) => {
+          onPlan: (metrics, targetRect, tiles, enginePartialCapture, documentPageMap) => {
             const preparationPartialCapture: PartialCapture | undefined =
               preparation?.completionReason === "max-css-height"
                 ? {
@@ -394,6 +395,7 @@ export class FullPageCaptureCoordinator {
               targetRect,
               tiles,
               enginePartialCapture ?? preparationPartialCapture,
+              documentPageMap,
             );
           },
           storeTile: (tile, blob) => this.storeTile(job.id, tile, blob),
@@ -509,6 +511,7 @@ export class FullPageCaptureCoordinator {
     targetRect: Rect,
     tiles: CaptureTile[],
     partialCapture?: PartialCapture,
+    documentPageMap?: DocumentPageMap,
   ): Promise<void> {
     const job = await this.requireJob(jobId);
     const patch = {
@@ -519,6 +522,7 @@ export class FullPageCaptureCoordinator {
       completedTiles: 0,
       totalTiles: tiles.length,
       ...(partialCapture === undefined ? {} : { partialCapture }),
+      ...(documentPageMap === undefined ? {} : { documentPageMap }),
     };
     if (job.state === "preparing") {
       await this.jobs.transition(job.id, "capturing", patch);

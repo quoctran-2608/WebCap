@@ -29,6 +29,8 @@ export const JobSummarySchema = z
     stateRevision: NonNegativeIntegerSchema,
     completedTiles: NonNegativeIntegerSchema,
     totalTiles: NonNegativeIntegerSchema,
+    completedDocumentPages: NonNegativeIntegerSchema.optional(),
+    totalDocumentPages: NonNegativeIntegerSchema.optional(),
     updatedAt: IsoDateTimeSchema,
     expiresAt: IsoDateTimeSchema,
     activeEngine: CaptureEngineKindSchema.optional(),
@@ -103,6 +105,28 @@ export type StoredTileRecord = z.infer<typeof StoredTileRecordSchema>;
 export type StoredDedupeRecord = z.infer<typeof StoredDedupeRecordSchema>;
 
 export function summarizeJob(job: CaptureJob): JobSummary {
+  const storedRects = job.tilePlan
+    .filter((tile) => tile.status === "stored")
+    .map((tile) => tile.outputRectCss ?? tile.sourceRectCss);
+  const completedDocumentPages = job.documentPageMap?.pages.filter((page) => {
+    const rect = page.sourceRectCss;
+    const epsilon = 0.01;
+    const points = [
+      { x: rect.x + epsilon, y: rect.y + epsilon },
+      { x: rect.x + rect.width - epsilon, y: rect.y + epsilon },
+      { x: rect.x + epsilon, y: rect.y + rect.height - epsilon },
+      { x: rect.x + rect.width - epsilon, y: rect.y + rect.height - epsilon },
+    ];
+    return points.every((point) =>
+      storedRects.some(
+        (stored) =>
+          point.x >= stored.x - epsilon &&
+          point.y >= stored.y - epsilon &&
+          point.x <= stored.x + stored.width + epsilon &&
+          point.y <= stored.y + stored.height + epsilon,
+      ),
+    );
+  }).length;
   return JobSummarySchema.parse({
     schemaVersion: 1,
     jobId: job.id,
@@ -112,6 +136,10 @@ export function summarizeJob(job: CaptureJob): JobSummary {
     stateRevision: job.stateRevision,
     completedTiles: job.completedTiles,
     totalTiles: job.totalTiles,
+    ...(completedDocumentPages === undefined ? {} : { completedDocumentPages }),
+    ...(job.documentPageMap === undefined
+      ? {}
+      : { totalDocumentPages: job.documentPageMap.sourcePageCount }),
     updatedAt: job.updatedAt,
     expiresAt: job.expiresAt,
     ...(job.activeEngine === undefined ? {} : { activeEngine: job.activeEngine }),

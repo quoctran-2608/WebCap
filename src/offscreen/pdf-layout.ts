@@ -1,4 +1,4 @@
-import type { CaptureSettings, Rect } from "@shared/contracts/domain";
+import type { CaptureSettings, DocumentPageMap, Rect } from "@shared/contracts/domain";
 
 export const PDF_POINTS_PER_INCH = 72;
 export const PDF_MILLIMETERS_PER_INCH = 25.4;
@@ -182,6 +182,38 @@ export function planPdfDocument(
   }
 
   return { pageBox, scalePtPerCss, sourceHeightCssPerPage, pages };
+}
+
+export function planPdfDocumentPages(
+  pageMap: DocumentPageMap,
+  settings: CaptureSettings["pdf"],
+): PdfPageSlice[] {
+  if (pageMap.pages.length === 0 || pageMap.pages.length !== pageMap.sourcePageCount) {
+    throw new RangeError("Document page map must contain every source page.");
+  }
+  return pageMap.pages.map((documentPage, index) => {
+    const source = documentPage.sourceRectCss;
+    const orientation = source.width > source.height ? "landscape" : "portrait";
+    const pageBox = resolvePdfPageBox({ ...settings, orientation }, source.width);
+    const scalePtPerCss = Math.min(
+      pageBox.printableWidthPt / positive(source.width, "PDF source page width"),
+      pageBox.printableHeightPt / positive(source.height, "PDF source page height"),
+    );
+    const imageWidthPt = source.width * scalePtPerCss;
+    const imageHeightPt = source.height * scalePtPerCss;
+    return {
+      index,
+      sourceRectCss: source,
+      pageWidthPt: pageBox.widthPt,
+      pageHeightPt: pageBox.heightPt,
+      imageRectPt: {
+        x: pageBox.marginLeftPt + (pageBox.printableWidthPt - imageWidthPt) / 2,
+        y: pageBox.marginBottomPt + (pageBox.printableHeightPt - imageHeightPt) / 2,
+        width: imageWidthPt,
+        height: imageHeightPt,
+      },
+    };
+  });
 }
 
 export function createRunningPixelRanges(
