@@ -50,8 +50,7 @@ function cleanupWarning(jobId: string, failedOperations: string[]): WebCapErrorD
 
 export class CaptureOwnedDataCleanupService implements CaptureOwnedDataCleanupPort {
   private readonly pdfDocuments:
-    | Pick<PdfDocumentManifestRepositoryPort, "get" | "delete">
-    | undefined;
+    Pick<PdfDocumentManifestRepositoryPort, "get" | "delete"> | undefined;
 
   constructor(private readonly options: CaptureOwnedDataCleanupServiceOptions) {
     this.pdfDocuments = options.pdfDocuments ?? getPdfDocumentManifestRepository();
