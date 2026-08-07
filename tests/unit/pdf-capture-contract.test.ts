@@ -83,10 +83,17 @@ describe("PDF capture contracts", () => {
   });
 
   it("rejects zero-size logical page geometry", () => {
-    const candidate = validManifest();
-    candidate.pages[0] = {
-      ...candidate.pages[0],
-      sourceRectCss: { x: 0, y: 0, width: 0, height: 140 },
+    const source = validManifest();
+    const candidate = {
+      ...source,
+      pages: source.pages.map((page, index) =>
+        index === 0
+          ? {
+              ...page,
+              sourceRectCss: { x: 0, y: 0, width: 0, height: 140 },
+            }
+          : page,
+      ),
     };
     expect(PdfDocumentManifestSchema.safeParse(candidate).success).toBe(false);
   });
