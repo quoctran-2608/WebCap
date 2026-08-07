@@ -81,11 +81,11 @@ export class CdpPdfSourceRecovery implements PdfSourceCdpRecoveryPort {
 
   recover(tabId: number, url: string, spoolId: string): Promise<RecoveredPdfSource | undefined> {
     return this.debuggerClient.withSession(tabId, async (session) => {
-      const frameTree = await session.sendCommand<FrameTreeResult>(
-        "Page.getFrameTree",
-        undefined,
-        { stage: "export", retryable: true, fallbackAllowed: true },
-      );
+      const frameTree = await session.sendCommand<FrameTreeResult>("Page.getFrameTree", undefined, {
+        stage: "export",
+        retryable: true,
+        fallbackAllowed: true,
+      });
       const frameId = frameTree.frameTree?.frame?.id;
       if (frameId === undefined) return undefined;
 
