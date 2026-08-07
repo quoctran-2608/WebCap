@@ -422,7 +422,7 @@ function validateMonotonicPages(
   }
   if (
     previous.outputPlan !== undefined &&
-    previous.state !== "completed" &&
+    previous.state === "writing" &&
     !sameOutputPlan(previous.outputPlan, candidate.outputPlan)
   ) {
     return err(
