@@ -1,7 +1,12 @@
 import type { DocumentPageMap, ElementTargetDescriptor, Rect } from "@shared/contracts/domain";
-
-export type PdfViewerAdapterKind =
-  "pdfjs" | "generic-semantic" | "shadow-root" | "virtualized" | "canvas-visual";
+import {
+  createPdfViewerDiscoveryRequest,
+  parsePdfViewerDiscoveryResponse,
+  type PdfViewerAdapterKind,
+  type PdfViewerDiscoverySnapshot,
+  type PdfViewerPageCandidate,
+} from "@shared/contracts/pdf-viewer-discovery";
+import { createWebCapRuntimeError } from "@shared/errors/error";
 
 export interface PdfViewerAdapter {
   readonly kind: PdfViewerAdapterKind;
@@ -17,32 +22,19 @@ export const PDF_VIEWER_ADAPTERS: readonly PdfViewerAdapter[] = Object.freeze([
   { kind: "canvas-visual", baseConfidence: 0.76, semantic: false },
 ]);
 
-export interface PdfViewerPageCandidate {
-  rect: Rect;
-  adapter: PdfViewerAdapterKind;
-  confidence: number;
-  sampleIndex: number;
-  declaredIndex?: number;
-}
-
-export interface PdfViewerDiscoverySnapshot {
-  adapter: PdfViewerAdapterKind;
-  declaredPageCount?: number;
-  scrollWidth: number;
-  scrollHeight: number;
-  clientHeight: number;
-  reachedStart: boolean;
-  reachedEnd: boolean;
-  stableEndRounds: number;
-  candidates: PdfViewerPageCandidate[];
-}
+export type { PdfViewerAdapterKind, PdfViewerDiscoverySnapshot, PdfViewerPageCandidate };
 
 export interface PdfViewerDiscoveryPort {
   discover(options: {
     tabId: number;
+    jobId: string;
     descriptor: ElementTargetDescriptor;
     settleMs: number;
   }): Promise<DocumentPageMap | undefined>;
+}
+
+export interface PdfViewerDiscoveryBrowserAdapter {
+  sendMessage(tabId: number, message: unknown): Promise<unknown>;
 }
 
 const PAGE_EDGE_MIN_CSS = 96;
@@ -250,273 +242,40 @@ export function finalizePdfViewerDiscovery(
   return declaredCompletion(snapshot, candidates) ?? geometryCompletion(snapshot, candidates);
 }
 
-async function discoverPdfViewerInContent(
-  selectionId: string,
-  settleMs: number,
-): Promise<PdfViewerDiscoverySnapshot | undefined> {
-  interface StoredTarget {
-    element: Element;
-  }
-  interface ElementRuntimeState {
-    targets?: Map<string, StoredTarget>;
-  }
-  interface StateCarrier {
-    __webcapElementSelectionV1__?: ElementRuntimeState;
-  }
-
-  const runtime = (globalThis as typeof globalThis & StateCarrier).__webcapElementSelectionV1__;
-  const stored = runtime?.targets?.get(selectionId);
-  if (
-    stored === undefined ||
-    !(stored.element instanceof HTMLElement) ||
-    !stored.element.isConnected
-  ) {
-    return undefined;
-  }
-  const target = stored.element;
-  const originalLeft = target.scrollLeft;
-  const originalTop = target.scrollTop;
-  const candidates: PdfViewerPageCandidate[] = [];
-  let declaredPageCount = 0;
-  let sampleIndex = 0;
-  let stableEndRounds = 0;
-  let lastHeight = Math.max(1, target.scrollHeight);
-  let adapter: PdfViewerAdapterKind = "generic-semantic";
-
-  const frame = () =>
-    new Promise<void>((resolve) => {
-      requestAnimationFrame(() => resolve());
-    });
-  const frames = async () => {
-    await frame();
-    await frame();
-  };
-  const delay = (milliseconds: number) =>
-    new Promise<void>((resolve) => {
-      globalThis.setTimeout(resolve, Math.max(0, milliseconds));
-    });
-  const positiveAttribute = (element: Element, names: readonly string[]): number | undefined => {
-    for (const name of names) {
-      const raw = element.getAttribute(name);
-      if (raw === null) continue;
-      const parsed = Number.parseInt(raw, 10);
-      if (Number.isInteger(parsed) && parsed > 0) return parsed;
-    }
-    return undefined;
-  };
-  const pageIndex = (element: Element): number | undefined => {
-    const direct = element.getAttribute("data-page-index") ?? element.getAttribute("page-index");
-    if (direct !== null) {
-      const parsed = Number.parseInt(direct, 10);
-      if (Number.isInteger(parsed) && parsed >= 0) return parsed;
-    }
-    const numbered = positiveAttribute(element, ["data-page-number", "page-number"]);
-    if (numbered !== undefined) return numbered - 1;
-    const label = element.getAttribute("aria-label") ?? "";
-    const match = /(?:page|trang)\s*(\d+)/iu.exec(label)?.[1];
-    if (match === undefined) return undefined;
-    const parsed = Number.parseInt(match, 10);
-    return Number.isInteger(parsed) && parsed > 0 ? parsed - 1 : undefined;
-  };
-  const rectInsideTarget = (element: Element): Rect | undefined => {
-    const targetRect = target.getBoundingClientRect();
-    const rect = element.getBoundingClientRect();
-    if (rect.width < 96 || rect.height < 96) return undefined;
-    const absolute: Rect = {
-      x: rect.left - targetRect.left - target.clientLeft + target.scrollLeft,
-      y: rect.top - targetRect.top - target.clientTop + target.scrollTop,
-      width: rect.width,
-      height: rect.height,
-    };
-    if (
-      absolute.x + absolute.width < 0 ||
-      absolute.y + absolute.height < 0 ||
-      absolute.x > target.scrollWidth ||
-      absolute.y > target.scrollHeight
-    ) {
-      return undefined;
-    }
-    return absolute;
-  };
-  const collectRoots = (): Array<Element | ShadowRoot> => {
-    const roots: Array<Element | ShadowRoot> = [target];
-    let cursor = 0;
-    let scanned = 0;
-    while (cursor < roots.length && scanned < 20_000) {
-      const root = roots[cursor];
-      cursor += 1;
-      if (root === undefined) break;
-      for (const element of Array.from(root.querySelectorAll("*"))) {
-        scanned += 1;
-        if (scanned >= 20_000) break;
-        if (element.shadowRoot?.mode === "open") roots.push(element.shadowRoot);
-      }
-    }
-    return roots;
-  };
-  const inspectPageCount = (elements: readonly Element[]) => {
-    const attributes = ["data-page-count", "data-pages-count", "page-count", "aria-setsize"];
-    const inspect = (element: Element | null) => {
-      if (element === null) return;
-      declaredPageCount = Math.max(declaredPageCount, positiveAttribute(element, attributes) ?? 0);
-    };
-    inspect(target);
-    for (const element of elements) inspect(element);
-    let ancestor: Element | null = target;
-    for (let depth = 0; depth < 8 && ancestor !== null; depth += 1) {
-      inspect(ancestor);
-      const root = ancestor.getRootNode();
-      ancestor = ancestor.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
-    }
-  };
-  const pdfContextSignal = (): boolean => {
-    if (document.contentType.toLowerCase().includes("pdf")) return true;
-    if (/\.pdf(?:$|[?#])/iu.test(globalThis.location.href)) return true;
-    for (const root of collectRoots()) {
-      if (
-        root.querySelector(
-          'embed[type="application/pdf"], object[type="application/pdf"], source[type="application/pdf"]',
-        ) !== null
-      ) {
-        return true;
-      }
-    }
-    return false;
-  };
-  const sample = () => {
-    const selectors = [
-      ".page[data-page-number]",
-      "[data-page-number]",
-      "[data-page-index]",
-      ".pageContainer",
-      ".page-container",
-      ".pdf-page",
-      "viewer-pdf-page",
-      "pdf-viewer-page",
-    ].join(",");
-    const roots = collectRoots();
-    const selected = new Set<Element>();
-    let sawShadow = false;
-    for (const root of roots) {
-      if (root instanceof ShadowRoot) sawShadow = true;
-      if (root instanceof Element && root !== target && root.matches(selectors)) selected.add(root);
-      for (const element of Array.from(root.querySelectorAll(selectors))) selected.add(element);
-    }
-
-    inspectPageCount([...selected]);
-    let sampleAdapter: PdfViewerAdapterKind = "generic-semantic";
-    if ([...selected].some((element) => element.matches(".page[data-page-number]"))) {
-      sampleAdapter = "pdfjs";
-    } else if (sawShadow && selected.size > 0) {
-      sampleAdapter = "shadow-root";
-    }
-    if (selected.size === 0) {
-      inspectPageCount([]);
-      if (declaredPageCount > 0 || pdfContextSignal()) {
-        for (const root of roots) {
-          for (const canvas of Array.from(root.querySelectorAll("canvas"))) selected.add(canvas);
-        }
-      }
-      if (selected.size > 0) sampleAdapter = "canvas-visual";
-    }
-
-    if (
-      declaredPageCount > selected.size &&
-      selected.size > 0 &&
-      sampleAdapter !== "canvas-visual"
-    ) {
-      sampleAdapter = "virtualized";
-    }
-    adapter = sampleAdapter;
-    const baseConfidence =
-      sampleAdapter === "pdfjs"
-        ? 0.99
-        : sampleAdapter === "shadow-root"
-          ? 0.92
-          : sampleAdapter === "virtualized"
-            ? 0.9
-            : sampleAdapter === "canvas-visual"
-              ? 0.76
-              : 0.94;
-    for (const element of selected) {
-      const rect = rectInsideTarget(element);
-      if (rect === undefined) continue;
-      const declaredIndex = pageIndex(element);
-      candidates.push({
-        rect,
-        adapter: sampleAdapter,
-        confidence: declaredIndex === undefined ? baseConfidence - 0.04 : baseConfidence,
-        sampleIndex,
-        ...(declaredIndex === undefined ? {} : { declaredIndex }),
-      });
-    }
-    sampleIndex += 1;
-  };
-
-  try {
-    target.scrollLeft = 0;
-    target.scrollTop = 0;
-    await frames();
-    sample();
-    const boundedSettleMs = Math.min(250, Math.max(0, Math.round(settleMs)));
-    const step = Math.max(128, Math.round(Math.max(1, target.clientHeight) * 0.8));
-    const maxSamples = 10_000;
-    let nextTop = 0;
-    while (sampleIndex < maxSamples) {
-      const height = Math.max(1, target.scrollHeight);
-      const maxTop = Math.max(0, height - Math.max(1, target.clientHeight));
-      nextTop = Math.min(maxTop, nextTop + step);
-      target.scrollTop = nextTop;
-      await frames();
-      if (boundedSettleMs > 0) await delay(boundedSettleMs);
-      await frames();
-      sample();
-
-      const currentHeight = Math.max(1, target.scrollHeight);
-      const currentMaxTop = Math.max(0, currentHeight - Math.max(1, target.clientHeight));
-      const atEnd = target.scrollTop >= currentMaxTop - 1;
-      if (atEnd && Math.abs(currentHeight - lastHeight) <= 1) stableEndRounds += 1;
-      else stableEndRounds = 0;
-      lastHeight = currentHeight;
-      if (atEnd && stableEndRounds >= 3) break;
-      if (nextTop >= currentMaxTop - 1 && !atEnd) nextTop = target.scrollTop;
-    }
-
-    const reachedEnd = stableEndRounds >= 2;
-    return {
-      adapter,
-      ...(declaredPageCount > 0 ? { declaredPageCount } : {}),
-      scrollWidth: Math.max(1, target.scrollWidth),
-      scrollHeight: Math.max(1, target.scrollHeight),
-      clientHeight: Math.max(1, target.clientHeight),
-      reachedStart: true,
-      reachedEnd,
-      stableEndRounds,
-      candidates,
-    };
-  } finally {
-    target.scrollLeft = originalLeft;
-    target.scrollTop = originalTop;
-    await frames().catch(() => undefined);
-  }
-}
-
 export class ChromePdfViewerDiscovery implements PdfViewerDiscoveryPort {
+  constructor(
+    private readonly browser: PdfViewerDiscoveryBrowserAdapter = {
+      sendMessage: (tabId, message) => chrome.tabs.sendMessage(tabId, message),
+    },
+    private readonly now: () => Date = () => new Date(),
+    private readonly requestId: () => string = () => crypto.randomUUID(),
+  ) {}
+
   async discover(options: {
     tabId: number;
+    jobId: string;
     descriptor: ElementTargetDescriptor;
     settleMs: number;
   }): Promise<DocumentPageMap | undefined> {
-    try {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: options.tabId },
-        func: discoverPdfViewerInContent,
-        args: [options.descriptor.selectionId, options.settleMs],
-      });
-      const snapshot = results[0]?.result;
-      return snapshot === undefined ? undefined : finalizePdfViewerDiscovery(snapshot);
-    } catch {
-      return undefined;
+    const requestId = this.requestId();
+    const response = await this.browser.sendMessage(
+      options.tabId,
+      createPdfViewerDiscoveryRequest({
+        requestId,
+        sentAt: this.now().toISOString(),
+        jobId: options.jobId,
+        descriptor: options.descriptor,
+        settleMs: options.settleMs,
+      }),
+    );
+    const parsed = parsePdfViewerDiscoveryResponse(response, requestId);
+    if (!parsed.ok) throw createWebCapRuntimeError(parsed.error);
+    if (
+      parsed.value.payload.jobId !== options.jobId ||
+      parsed.value.payload.descriptor.selectionId !== options.descriptor.selectionId
+    ) {
+      throw new Error("PDF viewer discovery response did not match the selected target.");
     }
+    return finalizePdfViewerDiscovery(parsed.value.payload.snapshot);
   }
 }
