@@ -32,9 +32,7 @@ async function selectScrollableViewer(targetPage: Page): Promise<void> {
   const selector = targetPage.locator("[data-webcap-element-selector]");
   await targetPage.mouse.move(box.x + box.width / 2, box.y + 120);
   await targetPage.mouse.click(box.x + box.width / 2, box.y + 120);
-  await expect(selector).toBeVisible();
-  await targetPage.keyboard.press("ArrowUp");
-  await targetPage.keyboard.press("ArrowUp");
+  await expect(selector.locator("[data-label]")).toContainText("nội dung");
   await targetPage.keyboard.press("Enter");
   await expect(selector).toHaveCount(0);
 }
