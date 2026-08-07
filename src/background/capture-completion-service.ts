@@ -211,7 +211,7 @@ export class CaptureCompletionService {
         exportProgress: { completedPages: totalPages, totalPages },
       },
       {
-        ...(evidence?.verified === true ? { pdfCompletionVerified: true } : {}),
+        ...(evidence === undefined ? {} : { pdfCompletionEvidence: evidence }),
       },
     );
   }
