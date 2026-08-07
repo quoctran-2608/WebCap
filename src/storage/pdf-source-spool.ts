@@ -43,6 +43,12 @@ function safeSpoolName(spoolId: string): string {
   return `${safe.length > 0 ? safe : "pdf-source"}.pdf.part`;
 }
 
+function ownedArrayBuffer(chunk: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(chunk.byteLength);
+  copy.set(chunk);
+  return copy.buffer;
+}
+
 export class OpfsPdfSourceSpool implements PdfSourceSpoolPort {
   private readonly getRoot: () => Promise<FileSystemDirectoryHandle>;
   private readonly estimate: () => Promise<StorageEstimate>;
@@ -83,7 +89,7 @@ export class OpfsPdfSourceSpool implements PdfSourceSpoolPort {
         write: async (chunk) => {
           if (closed) throw new Error("PDF source spool writer is already closed.");
           try {
-            await writable.write(chunk);
+            await writable.write(ownedArrayBuffer(chunk));
           } catch (error) {
             throw spoolError(error);
           }
