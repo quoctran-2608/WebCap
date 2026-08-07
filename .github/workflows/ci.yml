@@ -38,16 +38,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check formatting
-        run: |
-          pnpm exec prettier --write \
-            src/background/pdf-export-service.ts \
-            src/background/pdf-state-machine.ts
-          mkdir -p artifacts/s28-final-format
-          cp --parents \
-            src/background/pdf-export-service.ts \
-            src/background/pdf-state-machine.ts \
-            artifacts/s28-final-format/
-          git diff --exit-code
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint
