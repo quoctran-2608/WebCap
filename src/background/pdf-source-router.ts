@@ -1,6 +1,10 @@
+import { createChromeDebuggerAdapter } from "./chrome-debugger-adapter";
 import { createChromeTabsAdapter } from "./chrome-tabs-adapter";
+import { DebuggerClient } from "./debugger-client";
 import { DownloadService } from "./download-service";
 import { OffscreenService } from "./offscreen-service";
+import { CdpPdfSourceRecovery } from "./pdf-source-cdp-recovery";
+import { browserPdfSourceDiscovery } from "./pdf-source-discovery";
 import {
   PdfSourceService,
   browserPdfSourceFetcher,
@@ -16,6 +20,7 @@ import {
 } from "@shared/contracts/pdf-source";
 import { normalizeError } from "@shared/errors/normalize-error";
 import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
+import { OpfsPdfSourceSpool } from "@storage/pdf-source-spool";
 
 export interface PdfSourceRouterDependencies {
   service: Pick<PdfSourceService, "inspect" | "downloadOriginal">;
@@ -29,11 +34,19 @@ function defaultDependencies(): PdfSourceRouterDependencies {
   const artifacts = new IndexedDbArtifactRepository();
   const offscreen = new OffscreenService();
   const downloads = new DownloadService({ artifacts, objectUrls: offscreen });
+  const spool = new OpfsPdfSourceSpool();
+  const cdpRecovery = new CdpPdfSourceRecovery(
+    new DebuggerClient(createChromeDebuggerAdapter()),
+    spool,
+  );
   sharedDependencies = {
     service: new PdfSourceService({
       tabs: createChromeTabsAdapter(),
       permissions: chromePdfSourcePermissions,
       fetcher: browserPdfSourceFetcher,
+      discovery: browserPdfSourceDiscovery,
+      cdpRecovery,
+      spool,
       artifacts,
       downloads,
     }),
