@@ -1,11 +1,7 @@
 import type { DocumentPageMap, ElementTargetDescriptor, Rect } from "@shared/contracts/domain";
 
 export type PdfViewerAdapterKind =
-  | "pdfjs"
-  | "generic-semantic"
-  | "shadow-root"
-  | "virtualized"
-  | "canvas-visual";
+  "pdfjs" | "generic-semantic" | "shadow-root" | "virtualized" | "canvas-visual";
 
 export interface PdfViewerAdapter {
   readonly kind: PdfViewerAdapterKind;
