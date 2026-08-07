@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -17,8 +17,10 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Check out repository
+      - name: Check out S29 branch
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -35,7 +37,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Format S29 files
+      - name: Format only S29 files
         run: >-
           pnpm exec prettier --write
           src/background/pdf-source-cdp-recovery.ts
@@ -43,13 +45,21 @@ jobs:
           src/shared/crypto/sha256-stream.ts
           tests/unit/pdf-source-service.test.ts
 
-      - name: Upload formatted S29 files
-        uses: actions/upload-artifact@v4
-        with:
-          name: s29-formatted-${{ github.sha }}
-          path: |
-            src/background/pdf-source-cdp-recovery.ts
-            src/background/pdf-source-service.ts
-            src/shared/crypto/sha256-stream.ts
+      - name: Commit exact formatter output
+        run: |
+          if git diff --quiet -- \
+            src/background/pdf-source-cdp-recovery.ts \
+            src/background/pdf-source-service.ts \
+            src/shared/crypto/sha256-stream.ts \
+            tests/unit/pdf-source-service.test.ts; then
+            exit 0
+          fi
+          git config user.name "webcap-ci"
+          git config user.email "webcap-ci@users.noreply.github.com"
+          git add -- \
+            src/background/pdf-source-cdp-recovery.ts \
+            src/background/pdf-source-service.ts \
+            src/shared/crypto/sha256-stream.ts \
             tests/unit/pdf-source-service.test.ts
-          retention-days: 1
+          git commit -m "Format S29 source acquisition"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
