@@ -196,12 +196,20 @@ function pageCoveredByTiles(page: Rect, tiles: readonly CaptureTile[]): boolean 
 
 function viewerPagesFromJob(job: CaptureJob): PdfPageManifest[] {
   const pageMap = job.documentPageMap;
-  if (pageMap === undefined || !pageMap.complete || pageMap.pages.length !== pageMap.sourcePageCount) {
-    throw pdfError("The viewer does not have a complete logical PDF page map.", "PdfPageMapIncomplete", {
-      jobId: job.id.slice(0, 24),
-      mappedPages: pageMap?.pages.length ?? 0,
-      expectedPages: pageMap?.sourcePageCount ?? 0,
-    });
+  if (
+    pageMap === undefined ||
+    !pageMap.complete ||
+    pageMap.pages.length !== pageMap.sourcePageCount
+  ) {
+    throw pdfError(
+      "The viewer does not have a complete logical PDF page map.",
+      "PdfPageMapIncomplete",
+      {
+        jobId: job.id.slice(0, 24),
+        mappedPages: pageMap?.pages.length ?? 0,
+        expectedPages: pageMap?.sourcePageCount ?? 0,
+      },
+    );
   }
   const target = job.targetRect;
   if (target === undefined) {
@@ -222,11 +230,18 @@ function viewerPagesFromJob(job: CaptureJob): PdfPageManifest[] {
   }
 
   return pageMap.pages.map((page) => {
-    if (!containsRect(target, page.sourceRectCss) || !pageCoveredByTiles(page.sourceRectCss, job.tilePlan)) {
-      throw pdfError("A logical PDF page is not completely covered by captured pixels.", "PdfPageCoverageGap", {
-        jobId: job.id.slice(0, 24),
-        pageIndex: page.index,
-      });
+    if (
+      !containsRect(target, page.sourceRectCss) ||
+      !pageCoveredByTiles(page.sourceRectCss, job.tilePlan)
+    ) {
+      throw pdfError(
+        "A logical PDF page is not completely covered by captured pixels.",
+        "PdfPageCoverageGap",
+        {
+          jobId: job.id.slice(0, 24),
+          pageIndex: page.index,
+        },
+      );
     }
     return {
       index: page.index,
@@ -234,8 +249,7 @@ function viewerPagesFromJob(job: CaptureJob): PdfPageManifest[] {
       sourceRectCss: page.sourceRectCss,
       widthCss: page.sourceRectCss.width,
       heightCss: page.sourceRectCss.height,
-      orientation:
-        page.sourceRectCss.width > page.sourceRectCss.height ? "landscape" : "portrait",
+      orientation: page.sourceRectCss.width > page.sourceRectCss.height ? "landscape" : "portrait",
       discoveryConfidence: pageMap.confidence,
       state: "captured",
     };
@@ -299,11 +313,15 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
 
   async prepareViewerExport(job: CaptureJob): Promise<PdfDocumentManifest> {
     if (!isDedicatedViewerPdfJob(job) || job.partialCapture !== undefined) {
-      throw pdfError("The capture job is not a complete dedicated viewer PDF.", "PdfViewerJobNotDedicated", {
-        jobId: job.id.slice(0, 24),
-        mode: job.mode,
-        partial: job.partialCapture !== undefined,
-      });
+      throw pdfError(
+        "The capture job is not a complete dedicated viewer PDF.",
+        "PdfViewerJobNotDedicated",
+        {
+          jobId: job.id.slice(0, 24),
+          mode: job.mode,
+          partial: job.partialCapture !== undefined,
+        },
+      );
     }
 
     const pages = viewerPagesFromJob(job);
@@ -313,11 +331,15 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
       await this.manifests.create(manifest);
     }
     if (manifest.jobId !== job.id || manifest.expectedPageCount !== pages.length) {
-      throw pdfError("The PDF manifest does not match the captured viewer document.", "PdfManifestJobMismatch", {
-        jobId: job.id.slice(0, 24),
-        manifestPages: manifest.expectedPageCount ?? 0,
-        capturedPages: pages.length,
-      });
+      throw pdfError(
+        "The PDF manifest does not match the captured viewer document.",
+        "PdfManifestJobMismatch",
+        {
+          jobId: job.id.slice(0, 24),
+          manifestPages: manifest.expectedPageCount ?? 0,
+          capturedPages: pages.length,
+        },
+      );
     }
     if (manifest.state === "completed" || manifest.state === "writing") return manifest;
 
@@ -325,7 +347,11 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
     const now = this.now();
     const verifying = transitionPdfManifest(manifest, "verifying", now.toISOString(), {
       pages: verifiedPages,
-      progress: derivePdfPageProgress(verifiedPages, manifest.expectedPageCount, manifest.progress.currentBatch),
+      progress: derivePdfPageProgress(
+        verifiedPages,
+        manifest.expectedPageCount,
+        manifest.progress.currentBatch,
+      ),
       lastVerifiedPage: verifiedPages.at(-1)?.index,
       error: undefined,
       expiresAt: addMilliseconds(now, this.manifestTtlMs),
@@ -353,19 +379,27 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
       if (manifest === undefined) return undefined;
       const expected = manifest.expectedPageCount;
       if (expected === undefined || totalPages !== expected || completedPages > expected) {
-        throw pdfError("PDF writer progress does not match the document manifest.", "PdfOutputProgressMismatch", {
-          jobId: jobId.slice(0, 24),
-          expectedPages: expected ?? 0,
-          completedPages,
-          totalPages,
-        });
+        throw pdfError(
+          "PDF writer progress does not match the document manifest.",
+          "PdfOutputProgressMismatch",
+          {
+            jobId: jobId.slice(0, 24),
+            expectedPages: expected ?? 0,
+            completedPages,
+            totalPages,
+          },
+        );
       }
       if (manifest.state === "completed") return manifest;
       if (manifest.state !== "writing") {
-        throw pdfError("PDF output progress arrived outside the writing state.", "PdfOutputProgressState", {
-          jobId: jobId.slice(0, 24),
-          state: manifest.state,
-        });
+        throw pdfError(
+          "PDF output progress arrived outside the writing state.",
+          "PdfOutputProgressState",
+          {
+            jobId: jobId.slice(0, 24),
+            state: manifest.state,
+          },
+        );
       }
       if (completedPages < manifest.progress.outputPages) return manifest;
 
@@ -405,11 +439,15 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
     }
     const expected = manifest.expectedPageCount;
     if (expected === undefined || outputPageCount !== expected) {
-      throw pdfError("Generated PDF page count does not match the verified source document.", "PdfOutputPageCountMismatch", {
-        jobId: job.id.slice(0, 24),
-        expectedPages: expected ?? 0,
-        outputPages: outputPageCount,
-      });
+      throw pdfError(
+        "Generated PDF page count does not match the verified source document.",
+        "PdfOutputPageCountMismatch",
+        {
+          jobId: job.id.slice(0, 24),
+          expectedPages: expected ?? 0,
+          outputPages: outputPageCount,
+        },
+      );
     }
     if (manifest.state === "completed") {
       return PdfCompletionEvidenceSchema.parse({
@@ -425,11 +463,15 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
       manifest = await this.prepareViewerExport(job);
     }
     if (manifest.pages.some((page) => page.state !== "verified" && page.state !== "written")) {
-      throw pdfError("Not every source PDF page has been verified before completion.", "PdfPagesUnverified", {
-        jobId: job.id.slice(0, 24),
-        verifiedPages: manifest.progress.verifiedPages,
-        expectedPages: expected,
-      });
+      throw pdfError(
+        "Not every source PDF page has been verified before completion.",
+        "PdfPagesUnverified",
+        {
+          jobId: job.id.slice(0, 24),
+          verifiedPages: manifest.progress.verifiedPages,
+          expectedPages: expected,
+        },
+      );
     }
 
     const writtenPages = manifest.pages.map((page) => ({ ...page, state: "written" as const }));
