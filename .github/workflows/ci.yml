@@ -41,8 +41,10 @@ jobs:
 
       - name: Detect S27 follow-up patch
         if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'agent/s27-dedicated-pdf-capture'
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          if [ "$(git log -1 --pretty=%s)" = "Apply S27 editor and memory follow-up" ]; then
+          if [ "$(git show -s --format=%s "$HEAD_SHA")" = "Apply S27 editor and memory follow-up" ]; then
             echo "S27_FOLLOWUP=1" >> "$GITHUB_ENV"
           fi
 
