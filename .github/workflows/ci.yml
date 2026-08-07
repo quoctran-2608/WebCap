@@ -38,26 +38,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check formatting
-        run: |
-          pnpm exec prettier --write \
-            src/background/capture-completion-service.ts \
-            src/background/capture-data-cleanup-service.ts \
-            src/background/pdf-capture-orchestrator.ts \
-            src/background/pdf-capture-runtime.ts \
-            src/background/pdf-state-machine.ts \
-            src/storage/pdf-document-manifest-repository.ts \
-            tests/unit/pdf-capture-orchestrator.test.ts
-          mkdir -p artifacts/s28-formatted
-          cp --parents \
-            src/background/capture-completion-service.ts \
-            src/background/capture-data-cleanup-service.ts \
-            src/background/pdf-capture-orchestrator.ts \
-            src/background/pdf-capture-runtime.ts \
-            src/background/pdf-state-machine.ts \
-            src/storage/pdf-document-manifest-repository.ts \
-            tests/unit/pdf-capture-orchestrator.test.ts \
-            artifacts/s28-formatted/
-          git diff --exit-code
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint
