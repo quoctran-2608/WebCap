@@ -7,7 +7,7 @@ export interface PdfSourceCandidate {
   tabId: number;
   sourceLabel: string;
   filename: string;
-  scheme: "http" | "https" | "file";
+  scheme: "http" | "https" | "file" | "blob";
   permissionOrigin: string;
   urlExtensionSignal: boolean;
   chromePdfViewerSignal: boolean;
@@ -27,19 +27,43 @@ function decodedViewerSource(url: URL): URL | undefined {
   }
 }
 
-function supportedSourceUrl(url: URL): url is URL & { protocol: "http:" | "https:" | "file:" } {
-  return url.protocol === "http:" || url.protocol === "https:" || url.protocol === "file:";
+function supportedSourceUrl(
+  url: URL,
+): url is URL & { protocol: "http:" | "https:" | "file:" | "blob:" } {
+  return (
+    url.protocol === "http:" ||
+    url.protocol === "https:" ||
+    url.protocol === "file:" ||
+    url.protocol === "blob:"
+  );
 }
 
 export function looksLikePdfUrl(url: URL): boolean {
   return /\.pdf$/iu.test(url.pathname);
 }
 
+function blobOrigin(url: URL): string | undefined {
+  if (url.protocol !== "blob:") return undefined;
+  if (url.origin !== "null" && url.origin.length > 0) return url.origin;
+  try {
+    const inner = new URL(url.pathname);
+    return inner.origin === "null" ? undefined : inner.origin;
+  } catch {
+    return undefined;
+  }
+}
+
 export function permissionOriginFor(url: URL): string {
-  return url.protocol === "file:" ? "file:///*" : `${url.origin}/*`;
+  if (url.protocol === "file:") return "file:///*";
+  if (url.protocol === "blob:") {
+    const origin = blobOrigin(url);
+    return origin === undefined ? "blob:*" : `${origin}/*`;
+  }
+  return `${url.origin}/*`;
 }
 
 export function filenameFromPdfUrl(url: URL): string {
+  if (url.protocol === "blob:") return "document.pdf";
   let pathname = url.pathname;
   try {
     pathname = decodeURIComponent(pathname);
@@ -54,37 +78,87 @@ export function filenameFromPdfUrl(url: URL): string {
 
 export function sourceLabelFor(url: URL): string {
   if (url.protocol === "file:") return filenameFromPdfUrl(url);
+  if (url.protocol === "blob:") {
+    const origin = blobOrigin(url);
+    if (origin !== undefined) {
+      try {
+        return new URL(origin).hostname || "PDF source";
+      } catch {
+        return "PDF source";
+      }
+    }
+    return "PDF source";
+  }
   return url.hostname || "PDF source";
+}
+
+function candidateFromUrl(
+  tabId: number,
+  url: URL,
+  chromePdfViewerSignal: boolean,
+): PdfSourceCandidate | undefined {
+  if (!supportedSourceUrl(url)) return undefined;
+  if (url.protocol === "blob:" && permissionOriginFor(url) === "blob:*") return undefined;
+  const scheme = url.protocol.slice(0, -1) as PdfSourceCandidate["scheme"];
+  return {
+    url,
+    tabId,
+    sourceLabel: sourceLabelFor(url),
+    filename: filenameFromPdfUrl(url),
+    scheme,
+    permissionOrigin: permissionOriginFor(url),
+    urlExtensionSignal: looksLikePdfUrl(url),
+    chromePdfViewerSignal,
+    canCaptureViewer: true,
+  };
+}
+
+export function resolvePdfSourceCandidates(options: {
+  tabId: number;
+  tabUrl?: string;
+  discoveredUrls?: readonly string[];
+}): PdfSourceCandidate[] {
+  const candidates: PdfSourceCandidate[] = [];
+  const seen = new Set<string>();
+  const add = (url: URL, chromePdfViewerSignal = false): void => {
+    if (seen.has(url.href)) return;
+    const candidate = candidateFromUrl(options.tabId, url, chromePdfViewerSignal);
+    if (candidate === undefined) return;
+    seen.add(url.href);
+    candidates.push(candidate);
+  };
+
+  let tabUrl: URL | undefined;
+  if (options.tabUrl !== undefined) {
+    try {
+      tabUrl = new URL(options.tabUrl);
+    } catch {
+      tabUrl = undefined;
+    }
+  }
+
+  if (tabUrl !== undefined) {
+    const viewerSource = decodedViewerSource(tabUrl);
+    if (viewerSource !== undefined) add(viewerSource, true);
+    else add(tabUrl);
+  }
+
+  for (const raw of options.discoveredUrls ?? []) {
+    try {
+      add(new URL(raw, tabUrl));
+    } catch {
+      // Ignore malformed discovery candidates.
+    }
+  }
+
+  return candidates;
 }
 
 export function resolvePdfSourceCandidate(options: {
   tabId: number;
   tabUrl?: string;
 }): PdfSourceCandidate | undefined {
-  if (options.tabUrl === undefined) return undefined;
-  let tabUrl: URL;
-  try {
-    tabUrl = new URL(options.tabUrl);
-  } catch {
-    return undefined;
-  }
-
-  const viewerSource = decodedViewerSource(tabUrl);
-  const sourceUrl = viewerSource ?? tabUrl;
-  if (!supportedSourceUrl(sourceUrl)) return undefined;
-
-  const scheme = sourceUrl.protocol.slice(0, -1) as "http" | "https" | "file";
-  return {
-    url: sourceUrl,
-    tabId: options.tabId,
-    sourceLabel: sourceLabelFor(sourceUrl),
-    filename: filenameFromPdfUrl(sourceUrl),
-    scheme,
-    permissionOrigin: permissionOriginFor(sourceUrl),
-    urlExtensionSignal: looksLikePdfUrl(sourceUrl),
-    chromePdfViewerSignal: viewerSource !== undefined,
-    canCaptureViewer: true,
-  };
+  return resolvePdfSourceCandidates(options)[0];
 }
 
 export function contentTypeIsPdf(contentType: string | null): boolean {
