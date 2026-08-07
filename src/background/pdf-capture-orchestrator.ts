@@ -5,6 +5,7 @@ import {
   PdfStrategyDecisionSchema,
   type PdfCompletionEvidence,
   type PdfDocumentManifest,
+  type PdfOutputPlan,
   type PdfPageManifest,
   type PdfStrategyDecision,
 } from "@shared/contracts/pdf-capture";
@@ -26,7 +27,7 @@ const PAGE_COVERAGE_EPSILON_CSS = 0.05;
 const DEFAULT_MANIFEST_TTL_MS = 30 * 60 * 1_000;
 
 export interface PdfCaptureOrchestratorPort {
-  prepareViewerExport(job: CaptureJob): Promise<PdfDocumentManifest>;
+  prepareViewerExport(job: CaptureJob, outputPlan?: PdfOutputPlan): Promise<PdfDocumentManifest>;
   recordOutputProgress(
     jobId: string,
     completedPages: number,
@@ -287,6 +288,27 @@ function createViewerManifest(
   });
 }
 
+function sourceOrderPlan(pages: readonly PdfPageManifest[]): PdfOutputPlan {
+  return {
+    kind: "source-order",
+    sourcePageIndexes: pages.map((page) => page.index),
+  };
+}
+
+function sameOutputPlan(left: PdfOutputPlan | undefined, right: PdfOutputPlan): boolean {
+  return (
+    left !== undefined &&
+    left.kind === right.kind &&
+    left.editRevision === right.editRevision &&
+    left.sourcePageIndexes.length === right.sourcePageIndexes.length &&
+    left.sourcePageIndexes.every((value, index) => value === right.sourcePageIndexes[index])
+  );
+}
+
+function atLeastVerified(page: PdfPageManifest): boolean {
+  return page.state === "verified" || page.state === "written";
+}
+
 function isRevisionConflict(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -311,7 +333,10 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
     return this.manifests.get(jobId);
   }
 
-  async prepareViewerExport(job: CaptureJob): Promise<PdfDocumentManifest> {
+  async prepareViewerExport(
+    job: CaptureJob,
+    requestedOutputPlan?: PdfOutputPlan,
+  ): Promise<PdfDocumentManifest> {
     if (!isDedicatedViewerPdfJob(job) || job.partialCapture !== undefined) {
       throw pdfError(
         "The capture job is not a complete dedicated viewer PDF.",
@@ -325,6 +350,7 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
     }
 
     const pages = viewerPagesFromJob(job);
+    const outputPlan = requestedOutputPlan ?? sourceOrderPlan(pages);
     let manifest = await this.manifests.get(job.id);
     if (manifest === undefined) {
       manifest = createViewerManifest(job, pages, this.now(), this.manifestTtlMs);
@@ -341,9 +367,41 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
         },
       );
     }
-    if (manifest.state === "completed" || manifest.state === "writing") return manifest;
 
-    const verifiedPages = manifest.pages.map((page) => ({ ...page, state: "verified" as const }));
+    if (manifest.state === "writing") {
+      if (!sameOutputPlan(manifest.outputPlan, outputPlan)) {
+        throw pdfError(
+          "A PDF export is already using a different verified output plan.",
+          "PdfOutputPlanChanged",
+          { jobId: job.id.slice(0, 24) },
+        );
+      }
+      return manifest;
+    }
+
+    if (manifest.state === "completed") {
+      const now = this.now();
+      const writing = transitionPdfManifest(manifest, "writing", now.toISOString(), {
+        outputPlan,
+        progress: derivePdfPageProgress(
+          manifest.pages,
+          manifest.expectedPageCount,
+          manifest.progress.currentBatch,
+          undefined,
+          0,
+        ),
+        outputState: "writing",
+        error: undefined,
+        expiresAt: addMilliseconds(now, this.manifestTtlMs),
+      });
+      if (!writing.ok) throw createWebCapRuntimeError(writing.error);
+      await this.manifests.save(writing.value, manifest.revision);
+      return writing.value;
+    }
+
+    const verifiedPages = manifest.pages.map((page) =>
+      atLeastVerified(page) ? page : { ...page, state: "verified" as const },
+    );
     const now = this.now();
     const verifying = transitionPdfManifest(manifest, "verifying", now.toISOString(), {
       pages: verifiedPages,
@@ -361,6 +419,14 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
 
     const writingAt = this.now();
     const writing = transitionPdfManifest(verifying.value, "writing", writingAt.toISOString(), {
+      outputPlan,
+      progress: derivePdfPageProgress(
+        verifying.value.pages,
+        verifying.value.expectedPageCount,
+        verifying.value.progress.currentBatch,
+        undefined,
+        0,
+      ),
       outputState: "writing",
       expiresAt: addMilliseconds(writingAt, this.manifestTtlMs),
     });
@@ -377,14 +443,15 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       const manifest = await this.manifests.get(jobId);
       if (manifest === undefined) return undefined;
-      const expected = manifest.expectedPageCount;
-      if (expected === undefined || totalPages !== expected || completedPages > expected) {
+      const plan = manifest.outputPlan;
+      const plannedPages = plan?.sourcePageIndexes.length ?? 0;
+      if (plan === undefined || totalPages !== plannedPages || completedPages > plannedPages) {
         throw pdfError(
-          "PDF writer progress does not match the document manifest.",
+          "PDF writer progress does not match the verified output plan.",
           "PdfOutputProgressMismatch",
           {
             jobId: jobId.slice(0, 24),
-            expectedPages: expected ?? 0,
+            plannedPages,
             completedPages,
             totalPages,
           },
@@ -395,27 +462,29 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
         throw pdfError(
           "PDF output progress arrived outside the writing state.",
           "PdfOutputProgressState",
-          {
-            jobId: jobId.slice(0, 24),
-            state: manifest.state,
-          },
+          { jobId: jobId.slice(0, 24), state: manifest.state },
         );
       }
       if (completedPages < manifest.progress.outputPages) return manifest;
 
+      const writtenIndexes = new Set(plan.sourcePageIndexes.slice(0, completedPages));
       const pages = manifest.pages.map((page) =>
-        page.index < completedPages ? { ...page, state: "written" as const } : page,
+        writtenIndexes.has(page.index) && page.state !== "written"
+          ? { ...page, state: "written" as const }
+          : page,
       );
+      const nextSourcePage = plan.sourcePageIndexes[completedPages];
       const now = this.now();
       const updated = updatePdfManifest(manifest, now.toISOString(), {
         pages,
         progress: derivePdfPageProgress(
           pages,
-          expected,
+          manifest.expectedPageCount,
           manifest.progress.currentBatch,
-          completedPages < expected ? completedPages : undefined,
+          nextSourcePage,
+          completedPages,
         ),
-        outputState: completedPages === expected ? "verifying" : "writing",
+        outputState: completedPages === plannedPages ? "verifying" : "writing",
         expiresAt: addMilliseconds(now, this.manifestTtlMs),
       });
       if (!updated.ok) throw createWebCapRuntimeError(updated.error);
@@ -437,15 +506,35 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
     if (manifest === undefined) {
       manifest = await this.prepareViewerExport(job);
     }
-    const expected = manifest.expectedPageCount;
-    if (expected === undefined || outputPageCount !== expected) {
+    if (manifest.state !== "writing" && manifest.state !== "completed") {
+      manifest = await this.prepareViewerExport(job, manifest.outputPlan);
+    }
+    const sourcePageCount = manifest.expectedPageCount;
+    const plannedOutputPageCount = manifest.outputPlan?.sourcePageIndexes.length;
+    if (
+      sourcePageCount === undefined ||
+      plannedOutputPageCount === undefined ||
+      outputPageCount !== plannedOutputPageCount
+    ) {
       throw pdfError(
-        "Generated PDF page count does not match the verified source document.",
+        "Generated PDF page count does not match the verified output plan.",
         "PdfOutputPageCountMismatch",
         {
           jobId: job.id.slice(0, 24),
-          expectedPages: expected ?? 0,
+          sourcePages: sourcePageCount ?? 0,
+          plannedOutputPages: plannedOutputPageCount ?? 0,
           outputPages: outputPageCount,
+        },
+      );
+    }
+    if (manifest.pages.some((page) => !atLeastVerified(page))) {
+      throw pdfError(
+        "Not every source PDF page has been verified before completion.",
+        "PdfPagesUnverified",
+        {
+          jobId: job.id.slice(0, 24),
+          verifiedPages: manifest.progress.verifiedPages,
+          sourcePages: sourcePageCount,
         },
       );
     }
@@ -454,31 +543,29 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
         schemaVersion: 1,
         jobId: job.id,
         manifestRevision: manifest.revision,
-        expectedPageCount: expected,
+        sourcePageCount,
+        expectedOutputPageCount: plannedOutputPageCount,
         outputPageCount,
         verified: true,
       });
     }
-    if (manifest.state !== "writing") {
-      manifest = await this.prepareViewerExport(job);
-    }
-    if (manifest.pages.some((page) => page.state !== "verified" && page.state !== "written")) {
-      throw pdfError(
-        "Not every source PDF page has been verified before completion.",
-        "PdfPagesUnverified",
-        {
-          jobId: job.id.slice(0, 24),
-          verifiedPages: manifest.progress.verifiedPages,
-          expectedPages: expected,
-        },
-      );
-    }
 
-    const writtenPages = manifest.pages.map((page) => ({ ...page, state: "written" as const }));
+    const writtenIndexes = new Set(manifest.outputPlan?.sourcePageIndexes ?? []);
+    const writtenPages = manifest.pages.map((page) =>
+      writtenIndexes.has(page.index) && page.state !== "written"
+        ? { ...page, state: "written" as const }
+        : page,
+    );
     const now = this.now();
     const completed = transitionPdfManifest(manifest, "completed", now.toISOString(), {
       pages: writtenPages,
-      progress: derivePdfPageProgress(writtenPages, expected, manifest.progress.currentBatch),
+      progress: derivePdfPageProgress(
+        writtenPages,
+        sourcePageCount,
+        manifest.progress.currentBatch,
+        undefined,
+        plannedOutputPageCount,
+      ),
       outputState: "completed",
       lastVerifiedPage: writtenPages.at(-1)?.index,
       error: undefined,
@@ -490,7 +577,8 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
       schemaVersion: 1,
       jobId: job.id,
       manifestRevision: completed.value.revision,
-      expectedPageCount: expected,
+      sourcePageCount,
+      expectedOutputPageCount: plannedOutputPageCount,
       outputPageCount,
       verified: true,
     });
