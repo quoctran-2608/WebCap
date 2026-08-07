@@ -153,7 +153,9 @@ export class ChromeScrollAreaPageAdapter implements ScrollAreaPageAdapter {
           settleMs: request.settleMs,
         })
       : undefined;
-    const documentPageMap = discoveredPageMap ?? payload.documentPageMap;
+    const legacyDomPageMap =
+      payload.documentPageMap?.strategy === "dom" ? payload.documentPageMap : undefined;
+    const documentPageMap = discoveredPageMap ?? legacyDomPageMap;
     return {
       requestedScrollLeft: payload.requestedScrollLeft,
       requestedScrollTop: payload.requestedScrollTop,
