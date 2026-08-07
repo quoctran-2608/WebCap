@@ -1,4 +1,5 @@
 import { CaptureJobSchema, type CaptureJob, type JobState } from "@shared/contracts/domain";
+import type { PdfCompletionEvidence } from "@shared/contracts/pdf-capture";
 import { createWebCapError, type WebCapErrorData } from "@shared/errors/error";
 import { err, ok, type Result } from "@shared/result";
 
@@ -21,7 +22,7 @@ const ALLOWED_TRANSITIONS: Readonly<Record<JobState, readonly JobState[]>> = Obj
 
 export interface JobInvariantContext {
   sourceArtifactExists?: boolean;
-  pdfCompletionVerified?: boolean;
+  pdfCompletionEvidence?: PdfCompletionEvidence;
 }
 
 export type JobTransitionPatch = Partial<
@@ -122,9 +123,7 @@ export function validateJobInvariants(
         stateError(
           "Only scroll-area jobs may persist a document page map.",
           "DocumentPageModeMismatch",
-          {
-            mode: job.mode,
-          },
+          { mode: job.mode },
         ),
       );
     }
@@ -194,60 +193,34 @@ export function validateJobInvariants(
   }
 
   if (
-    job.documentPageMap?.complete === true &&
-    job.partialCapture === undefined &&
-    job.activeOutputFormat === "pdf" &&
-    job.exportProgress !== undefined &&
-    job.exportProgress.totalPages !== job.documentPageMap.sourcePageCount
-  ) {
-    return err(
-      stateError(
-        "Dedicated PDF output progress must match the detected source page count.",
-        "PdfSourcePageCountMismatch",
-        {
-          sourcePageCount: job.documentPageMap.sourcePageCount,
-          outputPages: job.exportProgress.totalPages,
-        },
-      ),
-    );
-  }
-
-  if (
     job.state === "completed" &&
     job.documentPageMap?.complete === true &&
     job.partialCapture === undefined &&
-    job.activeOutputFormat === "pdf" &&
-    context.pdfCompletionVerified !== true
+    job.activeOutputFormat === "pdf"
   ) {
-    return err(
-      stateError(
-        "A dedicated PDF cannot complete without verified document-manifest evidence.",
-        "PdfCompletionEvidenceMissing",
-        {
-          sourcePageCount: job.documentPageMap.sourcePageCount,
-          outputPages: job.output?.pageCount ?? 0,
-        },
-      ),
-    );
-  }
-
-  if (
-    job.state === "completed" &&
-    job.documentPageMap?.complete === true &&
-    job.partialCapture === undefined &&
-    job.activeOutputFormat === "pdf" &&
-    job.output?.pageCount !== job.documentPageMap.sourcePageCount
-  ) {
-    return err(
-      stateError(
-        "A completed dedicated PDF must contain every detected source page.",
-        "PdfCompletedPageCountMismatch",
-        {
-          sourcePageCount: job.documentPageMap.sourcePageCount,
-          outputPages: job.output?.pageCount ?? 0,
-        },
-      ),
-    );
+    const evidence = context.pdfCompletionEvidence;
+    const outputPages = job.output?.pageCount ?? 0;
+    const expectedOutputPages = job.exportProgress?.totalPages ?? outputPages;
+    const validEvidence =
+      evidence?.verified === true &&
+      evidence.jobId === job.id &&
+      evidence.sourcePageCount === job.documentPageMap.sourcePageCount &&
+      evidence.expectedOutputPageCount === expectedOutputPages &&
+      evidence.outputPageCount === outputPages &&
+      outputPages === expectedOutputPages;
+    if (!validEvidence) {
+      return err(
+        stateError(
+          "A dedicated PDF cannot complete without matching verified document-manifest evidence.",
+          "PdfCompletionEvidenceMissing",
+          {
+            sourcePageCount: job.documentPageMap.sourcePageCount,
+            expectedOutputPages,
+            outputPages,
+          },
+        ),
+      );
+    }
   }
 
   if (
