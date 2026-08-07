@@ -22,9 +22,7 @@ class MemoryManifestRepository implements PdfDocumentManifestRepositoryPort {
   }
 
   get(jobId: string): Promise<PdfDocumentManifest | undefined> {
-    return Promise.resolve(
-      this.record?.jobId === jobId ? structuredClone(this.record) : undefined,
-    );
+    return Promise.resolve(this.record?.jobId === jobId ? structuredClone(this.record) : undefined);
   }
 
   save(manifest: PdfDocumentManifest, expectedRevision: number): Promise<void> {
@@ -110,9 +108,7 @@ function orchestrator() {
   };
 }
 
-function capability(
-  patch: Partial<PdfSourceCapability> = {},
-): PdfSourceCapability {
+function capability(patch: Partial<PdfSourceCapability> = {}): PdfSourceCapability {
   return {
     status: "original-passthrough",
     permission: "granted",
