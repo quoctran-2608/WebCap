@@ -6,8 +6,7 @@ let sharedRepository: IndexedDbPdfDocumentManifestRepository | undefined;
 let sharedOrchestrator: PdfCaptureOrchestrator | undefined;
 
 export function getPdfDocumentManifestRepository():
-  | IndexedDbPdfDocumentManifestRepository
-  | undefined {
+  IndexedDbPdfDocumentManifestRepository | undefined {
   if (typeof indexedDB === "undefined") return undefined;
   sharedRepository ??= new IndexedDbPdfDocumentManifestRepository();
   return sharedRepository;
