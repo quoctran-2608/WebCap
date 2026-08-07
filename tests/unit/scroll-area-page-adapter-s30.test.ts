@@ -18,7 +18,7 @@ const descriptor = {
   captureKind: "full-scroll-content" as const,
 };
 
-function response(requestId: string) {
+function response(requestId: string, documentPageMap?: DocumentPageMap) {
   return {
     protocolVersion: PROTOCOL_VERSION,
     requestId,
@@ -45,6 +45,7 @@ function response(requestId: string) {
       mutationCount: 0,
       scrollSnapped: false,
       layoutChanged: false,
+      ...(documentPageMap === undefined ? {} : { documentPageMap }),
     },
     sentAt: now.toISOString(),
   };
@@ -60,6 +61,12 @@ const discoveredMap: DocumentPageMap = {
     index,
     sourceRectCss: { x: 100, y: index * 1000, width: 600, height: 980 },
   })),
+};
+
+const projectedMap: DocumentPageMap = {
+  ...discoveredMap,
+  strategy: "projected",
+  confidence: 0.82,
 };
 
 describe("ChromeScrollAreaPageAdapter S30 discovery", () => {
@@ -111,5 +118,39 @@ describe("ChromeScrollAreaPageAdapter S30 discovery", () => {
       settleMs: 20,
     });
     expect(discover).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not promote the legacy projected map when incremental discovery has no proof", async () => {
+    const browser: ScrollAreaBrowserAdapter = {
+      injectContentScript: vi.fn(() => Promise.resolve()),
+      sendMessage: vi.fn((_tabId, message: unknown) => {
+        const requestId = (message as { requestId: string }).requestId;
+        return Promise.resolve(response(requestId, projectedMap));
+      }),
+    };
+    const discovery: PdfViewerDiscoveryPort = {
+      discover: vi.fn(() => Promise.resolve(undefined)),
+    };
+    const adapter = new ChromeScrollAreaPageAdapter(
+      browser,
+      () => now,
+      () => "request-projected",
+      discovery,
+    );
+
+    const result = await adapter.scrollAndSettle({
+      tabId: 7,
+      jobId: "job-1",
+      descriptor,
+      scrollLeft: 0,
+      scrollTop: 0,
+      row: 0,
+      column: 0,
+      rows: 1,
+      columns: 1,
+      fixedElementMode: "preserve",
+      settleMs: 0,
+    });
+    expect(result.documentPageMap).toBeUndefined();
   });
 });
