@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -21,8 +21,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -38,44 +36,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Detect S27 progress UI patch
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'agent/s27-dedicated-pdf-capture'
-        env:
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          if [ "$(git show -s --format=%s "$HEAD_SHA")" = "Apply S27 document progress UI" ]; then
-            echo "S27_PROGRESS_UI=1" >> "$GITHUB_ENV"
-          fi
-
-      - name: Apply S27 progress UI patch
-        if: env.S27_PROGRESS_UI == '1'
-        run: node scripts/apply-s27-progress-ui.mjs
-
-      - name: Format S27 progress UI
-        if: env.S27_PROGRESS_UI == '1'
-        run: >-
-          pnpm exec prettier --write
-          src/popup/App.tsx
-          src/shared/contracts/job.ts
-          src/shared/diagnostics.ts
-          tests/unit/diagnostics.test.ts
-
-      - name: Validate S27 progress UI
-        if: env.S27_PROGRESS_UI == '1'
-        run: >-
-          pnpm typecheck && pnpm exec vitest run
-          tests/unit/diagnostics.test.ts
-          tests/unit/job-summary-document-progress.test.ts
-
-      - name: Commit S27 progress UI
-        if: env.S27_PROGRESS_UI == '1'
-        run: |
-          git config user.name "webcap-agent"
-          git config user.email "webcap-agent@users.noreply.github.com"
-          git add src tests
-          git commit -m "Show honest document-page progress for PDF capture"
-          git push origin HEAD:agent/s27-dedicated-pdf-capture
 
       - name: Check formatting
         run: pnpm format:check
