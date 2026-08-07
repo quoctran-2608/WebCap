@@ -166,7 +166,8 @@ export class PdfExportService {
     if (pages !== undefined && pages.length === 0) {
       throw exportSourceError(jobId, "PdfDocumentPagesUnavailable");
     }
-    const totalPages = pages?.length ?? planPdfDocument(current.targetRect, pdfSettings).pages.length;
+    const totalPages =
+      pages?.length ?? planPdfDocument(current.targetRect, pdfSettings).pages.length;
 
     if (isDedicatedViewerPdfJob(current) && current.partialCapture === undefined) {
       if (this.pdfDocuments === undefined) {
@@ -308,7 +309,9 @@ export class PdfExportService {
           },
         },
         {
-          ...(completionEvidence === undefined ? {} : { pdfCompletionEvidence: completionEvidence }),
+          ...(completionEvidence === undefined
+            ? {}
+            : { pdfCompletionEvidence: completionEvidence }),
         },
       );
     } catch (error) {
