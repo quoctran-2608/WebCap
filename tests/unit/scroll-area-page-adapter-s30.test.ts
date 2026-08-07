@@ -6,7 +6,7 @@ import {
   type ScrollAreaBrowserAdapter,
 } from "@background/scroll-area-page-adapter";
 import { PROTOCOL_VERSION } from "@shared/constants";
-import type { DocumentPageMap } from "@shared/contracts/domain";
+import type { DocumentPageMap, ElementTargetDescriptor } from "@shared/contracts/domain";
 
 const now = new Date("2026-08-07T16:00:00.000Z");
 const descriptor = {
@@ -18,7 +18,11 @@ const descriptor = {
   captureKind: "full-scroll-content" as const,
 };
 
-function response(requestId: string, documentPageMap?: DocumentPageMap) {
+function response(
+  requestId: string,
+  documentPageMap?: DocumentPageMap,
+  responseDescriptor: ElementTargetDescriptor = descriptor,
+) {
   return {
     protocolVersion: PROTOCOL_VERSION,
     requestId,
@@ -27,7 +31,7 @@ function response(requestId: string, documentPageMap?: DocumentPageMap) {
     type: "SCROLL_AREA_SCROLLED",
     payload: {
       jobId: "job-1",
-      descriptor,
+      descriptor: responseDescriptor,
       requestedScrollLeft: 0,
       requestedScrollTop: 0,
       actualScrollLeft: 0,
@@ -67,6 +71,15 @@ const projectedMap: DocumentPageMap = {
   ...discoveredMap,
   strategy: "projected",
   confidence: 0.82,
+};
+
+const expandedMap: DocumentPageMap = {
+  ...discoveredMap,
+  pages: discoveredMap.pages.map((page) =>
+    page.index === 5
+      ? { ...page, sourceRectCss: { ...page.sourceRectCss, y: 6500 } }
+      : page,
+  ),
 };
 
 describe("ChromeScrollAreaPageAdapter S30 discovery", () => {
@@ -120,6 +133,42 @@ describe("ChromeScrollAreaPageAdapter S30 discovery", () => {
     expect(discover).toHaveBeenCalledTimes(1);
   });
 
+  it("uses the discovered page extent when lazy viewer growth exceeds the initial probe", async () => {
+    const browser: ScrollAreaBrowserAdapter = {
+      injectContentScript: vi.fn(() => Promise.resolve()),
+      sendMessage: vi.fn((_tabId, message: unknown) => {
+        const requestId = (message as { requestId: string }).requestId;
+        return Promise.resolve(response(requestId, projectedMap));
+      }),
+    };
+    const discovery: PdfViewerDiscoveryPort = {
+      discover: vi.fn(() => Promise.resolve(expandedMap)),
+    };
+    const adapter = new ChromeScrollAreaPageAdapter(
+      browser,
+      () => now,
+      () => "request-expanded",
+      discovery,
+    );
+
+    const result = await adapter.scrollAndSettle({
+      tabId: 7,
+      jobId: "job-1",
+      descriptor,
+      scrollLeft: 0,
+      scrollTop: 0,
+      row: 0,
+      column: 0,
+      rows: 1,
+      columns: 1,
+      fixedElementMode: "preserve",
+      settleMs: 0,
+    });
+    expect(result.scrollHeight).toBe(7480);
+    expect(result.layoutChanged).toBe(false);
+    expect(result.documentPageMap).toEqual(expandedMap);
+  });
+
   it("does not promote the legacy projected map when incremental discovery has no proof", async () => {
     const browser: ScrollAreaBrowserAdapter = {
       injectContentScript: vi.fn(() => Promise.resolve()),
@@ -151,6 +200,44 @@ describe("ChromeScrollAreaPageAdapter S30 discovery", () => {
       fixedElementMode: "preserve",
       settleMs: 0,
     });
+    expect(result.documentPageMap).toBeUndefined();
+  });
+
+  it("skips the expensive discovery pass for ordinary scroll containers without page evidence", async () => {
+    const ordinaryDescriptor: ElementTargetDescriptor = {
+      ...descriptor,
+      classNames: ["data-grid"],
+    };
+    const browser: ScrollAreaBrowserAdapter = {
+      injectContentScript: vi.fn(() => Promise.resolve()),
+      sendMessage: vi.fn((_tabId, message: unknown) => {
+        const requestId = (message as { requestId: string }).requestId;
+        return Promise.resolve(response(requestId, undefined, ordinaryDescriptor));
+      }),
+    };
+    const discover = vi.fn(() => Promise.resolve(discoveredMap));
+    const discovery: PdfViewerDiscoveryPort = { discover };
+    const adapter = new ChromeScrollAreaPageAdapter(
+      browser,
+      () => now,
+      () => "request-ordinary",
+      discovery,
+    );
+
+    const result = await adapter.scrollAndSettle({
+      tabId: 7,
+      jobId: "job-1",
+      descriptor: ordinaryDescriptor,
+      scrollLeft: 0,
+      scrollTop: 0,
+      row: 0,
+      column: 0,
+      rows: 1,
+      columns: 1,
+      fixedElementMode: "preserve",
+      settleMs: 0,
+    });
+    expect(discover).not.toHaveBeenCalled();
     expect(result.documentPageMap).toBeUndefined();
   });
 });
