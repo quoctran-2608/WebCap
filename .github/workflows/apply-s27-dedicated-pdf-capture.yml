@@ -40,6 +40,7 @@ jobs:
         run: |
           node scripts/apply-s27-dedicated-pdf-capture.mjs
           node scripts/apply-s27-typecheck-fix.mjs
+          node scripts/apply-s27-regression-fix.mjs
 
       - name: Format implementation
         run: >-
