@@ -21,6 +21,8 @@ The output-side recovery boundary is ordered deliberately: finish one logical pa
 
 A retryable storage/offscreen interruption keeps the stable output artifact identity and monotonic output progress, moves both the generic job and dedicated PDF manifest to `paused`, and can be resumed by the existing completion recovery path after a service-worker restart.
 
+Multipart output is represented as a real set of contiguous logical-page artifacts. Each part keeps an honest part-local page count plus its document page range; completion is allowed only when the complete part set covers the source document exactly once with no gap or duplicate range.
+
 ## Non-goals
 
 S34 owns difficult-viewer compatibility/adversarial heuristics. S35 owns the dedicated PDF UX and release-candidate polish. S33 does not introduce a backend, telemetry, account/cloud dependency, remote executable code, new required permission, tag, GitHub Release, or Chrome Web Store publication.
