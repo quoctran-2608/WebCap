@@ -3,6 +3,7 @@ import type { PdfDocumentManifest } from "@shared/contracts/pdf-capture";
 import {
   JobResumeMessageSchema,
   PdfManifestGetMessageSchema,
+  isPdfUxMessageType,
   createJobResponseMessage,
   createPdfManifestResponseMessage,
   type JobResponseMessage,
@@ -35,12 +36,6 @@ export interface PdfUxRouterDependencies {
     startAuto(jobId: string): Promise<CaptureJob>;
   };
   now: () => Date;
-}
-
-function isPdfUxMessage(value: unknown): boolean {
-  if (typeof value !== "object" || value === null || !("type" in value)) return false;
-  const type = (value as { type?: unknown }).type;
-  return type === "PDF_MANIFEST_GET" || type === "JOB_RESUME";
 }
 
 function requestIdFrom(value: unknown): string | undefined {
@@ -100,7 +95,7 @@ export async function routePdfUxMessage(
   message: unknown,
   dependencies: PdfUxRouterDependencies = defaultDependencies(),
 ): Promise<PdfUxRouterResponse | undefined> {
-  if (!isPdfUxMessage(message)) return undefined;
+  if (!isPdfUxMessageType(message)) return undefined;
   const requestId = requestIdFrom(message);
   if (requestId === undefined) return undefined;
 
@@ -194,7 +189,7 @@ export async function routePdfUxMessage(
 
 export function registerPdfUxRouter(): void {
   chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
-    if (!isPdfUxMessage(message)) return false;
+    if (!isPdfUxMessageType(message)) return false;
     void routePdfUxMessage(message).then((response) => {
       if (response !== undefined) sendResponse(response);
     });

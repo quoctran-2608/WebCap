@@ -359,6 +359,14 @@ export function parsePersistentJobRequest(
   );
 }
 
+export function isPdfUxMessageType(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || !("type" in value)) {
+    return false;
+  }
+  const type = (value as { type?: unknown }).type;
+  return type === "PDF_MANIFEST_GET" || type === "JOB_RESUME";
+}
+
 export function isPersistentJobRequest(value: unknown): value is PersistentJobRequest {
   return PersistentJobRequestSchema.safeParse(value).success;
 }

@@ -15,6 +15,10 @@ import {
   createVisibleCaptureStartMessage,
   createVisibleSessionGetMessage,
 } from "@shared/contracts/messages";
+import {
+  createJobResumeMessage,
+  createPdfManifestGetMessage,
+} from "@shared/contracts/job-messages";
 import type { VisibleSessionSnapshot } from "@shared/contracts/visible-session";
 import type { VisibleSessionRepositoryPort } from "@storage/visible-session-repository";
 
@@ -287,6 +291,30 @@ describe("routeRuntimeMessage", () => {
     });
     expect(cancel).toHaveBeenCalledWith("request-capture");
     expect(session.getSnapshot()).toMatchObject({ status: "cancelled" });
+  });
+
+  it("leaves S35 PDF UX messages to the dedicated router", async () => {
+    const { dependencies } = createDependencies();
+    await expect(
+      routeRuntimeMessage(
+        createPdfManifestGetMessage({
+          requestId: "request-pdf-manifest",
+          jobId: "job-s35",
+          sentAt: now.toISOString(),
+        }),
+        dependencies,
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      routeRuntimeMessage(
+        createJobResumeMessage({
+          requestId: "request-pdf-resume",
+          jobId: "job-s35",
+          sentAt: now.toISOString(),
+        }),
+        dependencies,
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it("returns a normalized protocol error for addressed invalid messages", async () => {
