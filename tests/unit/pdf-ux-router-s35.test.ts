@@ -65,22 +65,24 @@ function pausedJob(options: { activeOutputFormat?: "pdf" } = {}): CaptureJob {
 }
 
 function capturingJob(): CaptureJob {
+  const job = pausedJob();
+  delete job.error;
   return {
-    ...pausedJob(),
+    ...job,
     state: "capturing",
     stateRevision: 9,
-    error: undefined,
-  } as CaptureJob;
+  };
 }
 
 function exportingJob(): CaptureJob {
+  const job = pausedJob({ activeOutputFormat: "pdf" });
+  delete job.error;
   return {
-    ...pausedJob({ activeOutputFormat: "pdf" }),
+    ...job,
     state: "exporting",
     stateRevision: 9,
-    error: undefined,
     exportProgress: { completedPages: 1, totalPages: 2 },
-  } as CaptureJob;
+  };
 }
 
 function manifest(): PdfDocumentManifest {
@@ -144,8 +146,9 @@ function baseDependencies(job: CaptureJob): PdfUxRouterDependencies {
 describe("S35 PDF UX router", () => {
   it("returns only the durable PDF manifest metadata requested by the popup", async () => {
     const currentManifest = manifest();
+    const getManifest = vi.fn(() => Promise.resolve(currentManifest));
     const dependencies = baseDependencies(pausedJob());
-    dependencies.manifests.get = vi.fn(() => Promise.resolve(currentManifest));
+    dependencies.manifests = { get: getManifest };
     const response = await routePdfUxMessage(
       createPdfManifestGetMessage({
         requestId: "manifest-read",
@@ -160,7 +163,7 @@ describe("S35 PDF UX router", () => {
       requestId: "manifest-read",
       payload: { manifest: currentManifest },
     });
-    expect(dependencies.manifests.get).toHaveBeenCalledWith("job-s35-router");
+    expect(getManifest).toHaveBeenCalledWith("job-s35-router");
   });
 
   it("resumes paused streamed PDF output through the existing S33 export path", async () => {
