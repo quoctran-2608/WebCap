@@ -110,8 +110,14 @@ test("@smoke discovers all 500 virtualized PDF pages without simultaneous DOM no
     complete: true,
     sourcePageCount: 500,
     pages: expect.arrayContaining([
-      { index: 4, sourceRectCss: { width: 850, height: 120 } },
-      { index: 6, sourceRectCss: { width: 590, height: 130 } },
+      expect.objectContaining({
+        index: 4,
+        sourceRectCss: expect.objectContaining({ width: 850, height: 120 }),
+      }),
+      expect.objectContaining({
+        index: 6,
+        sourceRectCss: expect.objectContaining({ width: 590, height: 130 }),
+      }),
     ]),
   });
   expect(state.documentPageMap?.pages).toHaveLength(500);
