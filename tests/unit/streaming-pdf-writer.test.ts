@@ -15,7 +15,7 @@ const ONE_PIXEL_JPEG = Buffer.from(
 
 class MemoryPdfWritable implements PdfSpoolWritable {
   readonly reference = "webcap-pdf-output/test.pdf";
-  private readonly chunks: Uint8Array[] = [];
+  private readonly chunks: ArrayBuffer[] = [];
   private bytes = 0;
   private closed = false;
 
@@ -25,7 +25,7 @@ class MemoryPdfWritable implements PdfSpoolWritable {
 
   write(chunk: Uint8Array): Promise<void> {
     if (this.closed) return Promise.reject(new Error("closed"));
-    const copy = Uint8Array.from(chunk);
+    const copy = Uint8Array.from(chunk).buffer;
     this.chunks.push(copy);
     this.bytes += copy.byteLength;
     return Promise.resolve();
@@ -51,7 +51,7 @@ class MemoryPdfWritable implements PdfSpoolWritable {
 }
 
 function jpegBlob(): Blob {
-  return new Blob([Uint8Array.from(ONE_PIXEL_JPEG)], { type: "image/jpeg" });
+  return new Blob([Uint8Array.from(ONE_PIXEL_JPEG).buffer], { type: "image/jpeg" });
 }
 
 async function writeDocument(pageCount: number): Promise<Blob> {
