@@ -36,7 +36,8 @@ export type ArtifactMetadata = z.infer<typeof ArtifactMetadataSchema>;
 export interface ArtifactRecord extends ArtifactMetadata {
   jobId: string;
   role: ArtifactRole;
-  blob: Blob;
+  blob?: Blob;
+  opfsReference?: string;
   sourceTitle?: string;
   sourceDomain?: string;
 }
