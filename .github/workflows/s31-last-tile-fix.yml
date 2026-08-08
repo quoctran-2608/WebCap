@@ -1,0 +1,89 @@
+name: S31 verified last-tile fix
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'agent/s31-page-native-capture-v2'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/s31-page-native-capture-v2
+      - name: Require a verified final tile per page
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path("src/capture/page-native-capture-engine.ts")
+          text = path.read_text()
+          old = '''        if (!pageCoveredByTiles(page.sourceRectCss, capturedPageTiles)) {
+            throw captureError({
+              code: "E_LAYOUT_UNSTABLE",
+              message: "A logical PDF page was not fully verified before advancing.",
+              userMessageKey: "errors.layoutChanged",
+              causeCode: "PdfPageCoverageGap",
+              safeContext: { pageIndex: page.index, pageTiles: capturedPageTiles.length },
+            });
+          }
+          completedPages += 1;
+          await context.reportProgress({
+            jobId: context.jobId,
+            state: "capturing",
+            stage: "storing",
+            completed: completedPages,
+            total: documentPageMap.sourcePageCount,
+            ...(capturedPageTiles.at(-1)?.index === undefined
+              ? {}
+              : { tileIndex: capturedPageTiles.at(-1)?.index }),
+          });
+          '''
+          new = '''        const lastCapturedTile = capturedPageTiles.at(-1);
+          if (
+            lastCapturedTile === undefined ||
+            !pageCoveredByTiles(page.sourceRectCss, capturedPageTiles)
+          ) {
+            throw captureError({
+              code: "E_LAYOUT_UNSTABLE",
+              message: "A logical PDF page was not fully verified before advancing.",
+              userMessageKey: "errors.layoutChanged",
+              causeCode: "PdfPageCoverageGap",
+              safeContext: { pageIndex: page.index, pageTiles: capturedPageTiles.length },
+            });
+          }
+          completedPages += 1;
+          await context.reportProgress({
+            jobId: context.jobId,
+            state: "capturing",
+            stage: "storing",
+            completed: completedPages,
+            total: documentPageMap.sourcePageCount,
+            tileIndex: lastCapturedTile.index,
+          });
+          '''
+          if old not in text:
+              raise SystemExit("S31 last-tile patch anchor missing")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          git rm .github/workflows/s31-last-tile-fix.yml
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --write src/capture/page-native-capture-engine.ts
+      - name: Commit fix and remove helper
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Require verified final tile for S31 page progress"
+          git push origin HEAD:agent/s31-page-native-capture-v2
