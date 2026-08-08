@@ -1,0 +1,42 @@
+name: S31 canonical format
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.head_ref == 'agent/s31-page-native-capture-v2'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/s31-page-native-capture-v2
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: >-
+          pnpm exec prettier --write
+          src/capture/adaptive-page-batch-controller.ts
+          src/capture/page-native-capture-engine.ts
+          src/capture/pdf-page-capture-planner.ts
+          tests/unit/page-native-capture-engine.test.ts
+          tests/unit/page-native-stop-boundary-s31.test.ts
+          tests/unit/pdf-page-capture-planner.test.ts
+      - name: Commit canonical formatting
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/capture tests/unit
+          git commit -m "Format S31 page-native capture"
+          git push origin HEAD:agent/s31-page-native-capture-v2
