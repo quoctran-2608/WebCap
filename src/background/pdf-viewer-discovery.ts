@@ -39,6 +39,7 @@ export interface PdfViewerDiscoveryBrowserAdapter {
 
 const PAGE_EDGE_MIN_CSS = 96;
 const PAGE_OVERLAP_RATIO = 0.78;
+const STABLE_GEOMETRY_OVERLAP_RATIO = 0.92;
 const MAX_PAGES = 10_000;
 
 function finitePositive(value: number): boolean {
@@ -162,6 +163,27 @@ function declaredCompletion(
   };
 }
 
+function hasStableCanvasGeometry(candidates: readonly PdfViewerPageCandidate[]): boolean {
+  if (!candidates.every((candidate) => candidate.adapter === "canvas-visual")) return true;
+
+  const sampleCounts = new Map<number, number>();
+  for (const candidate of candidates) {
+    sampleCounts.set(candidate.sampleIndex, (sampleCounts.get(candidate.sampleIndex) ?? 0) + 1);
+  }
+  if (![...sampleCounts.values()].some((count) => count >= 2)) return false;
+
+  for (let leftIndex = 0; leftIndex < candidates.length; leftIndex += 1) {
+    const left = candidates[leftIndex];
+    if (left === undefined) continue;
+    for (let rightIndex = leftIndex + 1; rightIndex < candidates.length; rightIndex += 1) {
+      const right = candidates[rightIndex];
+      if (right === undefined || left.sampleIndex === right.sampleIndex) continue;
+      if (overlapRatio(left.rect, right.rect) >= STABLE_GEOMETRY_OVERLAP_RATIO) return true;
+    }
+  }
+  return false;
+}
+
 function geometryCompletion(
   snapshot: PdfViewerDiscoverySnapshot,
   candidates: readonly PdfViewerPageCandidate[],
@@ -169,6 +191,7 @@ function geometryCompletion(
   if (!snapshot.reachedStart || !snapshot.reachedEnd || snapshot.stableEndRounds < 2) {
     return undefined;
   }
+  if (!hasStableCanvasGeometry(candidates)) return undefined;
 
   const ordered = [...candidates].sort(
     (left, right) => left.rect.y - right.rect.y || left.rect.x - right.rect.x,
@@ -186,6 +209,12 @@ function geometryCompletion(
   }
   deduplicated.sort((left, right) => left.rect.y - right.rect.y || left.rect.x - right.rect.x);
   if (deduplicated.length < 2 || deduplicated.length > MAX_PAGES) return undefined;
+  if (
+    snapshot.declaredPageCount !== undefined &&
+    deduplicated.length !== snapshot.declaredPageCount
+  ) {
+    return undefined;
+  }
 
   const heights = deduplicated.map((candidate) => candidate.rect.height);
   const medianHeight = median(heights);
