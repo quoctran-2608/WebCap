@@ -1,5 +1,4 @@
 import type { ArtifactMetadata, ArtifactRecord } from "@shared/contracts/artifact";
-import type { CaptureTile, Rect } from "@shared/contracts/domain";
 import type { PdfEditorPage } from "@shared/contracts/pdf-editor";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
@@ -224,7 +223,7 @@ function artifactMetadata(record: ArtifactRecord): ArtifactMetadata {
     byteLength: record.byteLength,
     width: record.width,
     height: record.height,
-    pageCount: record.pageCount,
+    ...(record.pageCount === undefined ? {} : { pageCount: record.pageCount }),
     createdAt: record.createdAt,
     expiresAt: record.expiresAt,
   };
