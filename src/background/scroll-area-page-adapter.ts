@@ -1,3 +1,7 @@
+import {
+  ChromePdfViewerDiscovery,
+  type PdfViewerDiscoveryPort,
+} from "@background/pdf-viewer-discovery";
 import type {
   DocumentPageMap,
   ElementTargetDescriptor,
@@ -85,11 +89,49 @@ export function createChromeScrollAreaBrowserAdapter(): ScrollAreaBrowserAdapter
   };
 }
 
+function isInitialDiscoveryProbe(request: ScrollAreaPageRequest): boolean {
+  return (
+    request.scrollLeft === 0 &&
+    request.scrollTop === 0 &&
+    request.row === 0 &&
+    request.column === 0 &&
+    request.rows === 1 &&
+    request.columns === 1
+  );
+}
+
+function descriptorSuggestsPdf(descriptor: ElementTargetDescriptor): boolean {
+  const hint = [descriptor.tagName, ...descriptor.classNames].join(" ");
+  return /(pdf|document|viewer)/iu.test(hint);
+}
+
+function shouldDiscoverPdfViewer(
+  request: ScrollAreaPageRequest,
+  legacyPageMap: DocumentPageMap | undefined,
+): boolean {
+  return (
+    isInitialDiscoveryProbe(request) &&
+    (legacyPageMap !== undefined || descriptorSuggestsPdf(request.descriptor))
+  );
+}
+
+function pageMapExtent(pageMap: DocumentPageMap | undefined): { right: number; bottom: number } {
+  if (pageMap === undefined) return { right: 0, bottom: 0 };
+  return pageMap.pages.reduce(
+    (extent, page) => ({
+      right: Math.max(extent.right, page.sourceRectCss.x + page.sourceRectCss.width),
+      bottom: Math.max(extent.bottom, page.sourceRectCss.y + page.sourceRectCss.height),
+    }),
+    { right: 0, bottom: 0 },
+  );
+}
+
 export class ChromeScrollAreaPageAdapter implements ScrollAreaPageAdapter {
   constructor(
     private readonly browser: ScrollAreaBrowserAdapter = createChromeScrollAreaBrowserAdapter(),
     private readonly now: () => Date = () => new Date(),
     private readonly requestId: () => string = () => crypto.randomUUID(),
+    private readonly viewerDiscovery: PdfViewerDiscoveryPort = new ChromePdfViewerDiscovery(),
   ) {}
 
   async scrollAndSettle(request: ScrollAreaPageRequest): Promise<ScrollAreaPageResult> {
@@ -133,13 +175,29 @@ export class ChromeScrollAreaPageAdapter implements ScrollAreaPageAdapter {
       throw new Error("Scrollable container response did not match the selected target.");
     }
     const payload = parsed.value.payload;
+    const discoveryRan = shouldDiscoverPdfViewer(request, payload.documentPageMap);
+    const discoveredPageMap = discoveryRan
+      ? await this.viewerDiscovery.discover({
+          tabId: request.tabId,
+          jobId: request.jobId,
+          descriptor: request.descriptor,
+          settleMs: request.settleMs,
+        })
+      : undefined;
+    const legacyDomPageMap =
+      payload.documentPageMap?.strategy === "dom" ? payload.documentPageMap : undefined;
+    const documentPageMap = discoveryRan ? discoveredPageMap : legacyDomPageMap;
+    const extent = pageMapExtent(documentPageMap);
+    const scrollWidth = Math.max(payload.scrollWidth, extent.right);
+    const scrollHeight = Math.max(payload.scrollHeight, extent.bottom);
+    const discoveredWidthDrift = extent.right > payload.scrollWidth + 2;
     return {
       requestedScrollLeft: payload.requestedScrollLeft,
       requestedScrollTop: payload.requestedScrollTop,
       actualScrollLeft: payload.actualScrollLeft,
       actualScrollTop: payload.actualScrollTop,
-      scrollWidth: payload.scrollWidth,
-      scrollHeight: payload.scrollHeight,
+      scrollWidth,
+      scrollHeight,
       clientWidth: payload.clientWidth,
       clientHeight: payload.clientHeight,
       viewportWidth: payload.viewportWidth,
@@ -150,10 +208,8 @@ export class ChromeScrollAreaPageAdapter implements ScrollAreaPageAdapter {
       stableSamples: payload.stableSamples,
       mutationCount: payload.mutationCount,
       scrollSnapped: payload.scrollSnapped,
-      layoutChanged: payload.layoutChanged,
-      ...(payload.documentPageMap === undefined
-        ? {}
-        : { documentPageMap: payload.documentPageMap }),
+      layoutChanged: payload.layoutChanged || discoveredWidthDrift,
+      ...(documentPageMap === undefined ? {} : { documentPageMap }),
     };
   }
 
