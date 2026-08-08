@@ -494,7 +494,9 @@ export class PageNativeCaptureEngine implements CaptureEngine {
           stage: "storing",
           completed: completedPages,
           total: documentPageMap.sourcePageCount,
-          tileIndex: capturedPageTiles.at(-1)?.index,
+          ...(capturedPageTiles.at(-1)?.index === undefined
+            ? {}
+            : { tileIndex: capturedPageTiles.at(-1)?.index }),
         });
       }
 
