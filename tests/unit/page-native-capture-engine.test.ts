@@ -52,7 +52,7 @@ function pageResult(request: ScrollAreaPageRequest, includeMap = false): ScrollA
     devicePixelRatio: 1,
     captureCropCss: { x: 0, y: 0, width: 100, height: 100 },
     hiddenStickyElements: request.fixedElementMode === "remove" ? 1 : 0,
-    stableSamples: 2,
+    stableSamples: 1,
     mutationCount: 0,
     scrollSnapped: false,
     layoutChanged: false,
@@ -174,7 +174,7 @@ describe("PageNativeCaptureEngine", () => {
     harness.scrollAndSettle.mockImplementation((request: ScrollAreaPageRequest) =>
       Promise.resolve({
         ...pageResult(request, request.expectedScrollWidth === undefined),
-        ...(request.expectedScrollWidth === undefined ? {} : { stableSamples: 1 }),
+        ...(request.expectedScrollWidth === undefined ? {} : { stableSamples: 0 }),
       }),
     );
 

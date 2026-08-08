@@ -568,7 +568,7 @@ export class PageNativeCaptureEngine implements CaptureEngine {
       Math.abs(measurement.scrollWidth - initial.scrollWidth) <= 2 &&
       Math.abs(measurement.clientWidth - initial.clientWidth) <= 2 &&
       Math.abs(measurement.clientHeight - initial.clientHeight) <= 2;
-    if (measurement.layoutChanged || !stableGeometry || measurement.stableSamples < 2) {
+    if (measurement.layoutChanged || !stableGeometry || measurement.stableSamples < 1) {
       throw captureError({
         code: "E_LAYOUT_UNSTABLE",
         message: "The logical PDF page did not settle to stable capture geometry.",
