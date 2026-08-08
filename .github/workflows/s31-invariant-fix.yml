@@ -1,0 +1,85 @@
+name: S31 incremental planning invariants
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'agent/s31-page-native-capture-v2'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/s31-page-native-capture-v2
+      - name: Apply focused invariants
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              if old not in text:
+                  raise SystemExit(f"S31 patch anchor missing: {path}")
+              file.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "src/background/full-page-capture-coordinator.ts",
+              '''      tilePlan: tiles,
+              completedTiles: 0,
+              totalTiles: tiles.length,
+          ''',
+              '''      tilePlan: tiles,
+              completedTiles: tiles.filter((tile) => tile.status === "stored").length,
+              totalTiles: tiles.length,
+          ''',
+          )
+
+          replace_once(
+              "src/background/scroll-area-page-adapter.ts",
+              '''    request.row === 0 &&
+              request.column === 0 &&
+              request.rows === 1 &&
+              request.columns === 1
+          ''',
+              '''    request.row === 0 &&
+              request.column === 0 &&
+              request.rows === 1 &&
+              request.columns === 1 &&
+              request.expectedScrollWidth === undefined &&
+              request.expectedScrollHeight === undefined &&
+              request.expectedClientWidth === undefined &&
+              request.expectedClientHeight === undefined
+          ''',
+          )
+
+          replace_once(
+              "src/background/scroll-area-page-adapter.ts",
+              '''  const hint = [descriptor.tagName, ...descriptor.classNames].join(" ");
+          ''',
+              '''  const hint = [descriptor.tagName, descriptor.id ?? "", ...descriptor.classNames].join(" ");
+          ''',
+          )
+          PY
+          git rm .github/workflows/s31-invariant-fix.yml
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --write src/background/full-page-capture-coordinator.ts src/background/scroll-area-page-adapter.ts
+      - name: Commit invariants and remove helper
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Preserve S31 incremental capture invariants"
+          git push origin HEAD:agent/s31-page-native-capture-v2
