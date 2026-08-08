@@ -52,6 +52,8 @@ For every logical page, S31:
 
 The engine does not advance to the next page until that coverage proof succeeds. A page-boundary progress event always references the verified final stored tile of that page, so it cannot report a synthetic or undefined tile boundary.
 
+The page-native stability check follows the existing scroll-area protocol exactly: `stableSamples >= 1` means the content runtime observed one repeated unchanged geometry sample after the initial sample. Requiring a higher number would contradict the protocol because the content runtime intentionally stops settling as soon as that first repeated stable sample is observed.
+
 Incremental `onPlan` updates preserve already-stored tile status and `completedTiles`; progress cannot move backwards merely because the next batch was planned.
 
 S30 discovery is restricted to the genuine initial measurement probe. Page-native capture tiles cannot accidentally trigger another full viewer-discovery pass when their coordinates happen to be `(0, 0)`.
