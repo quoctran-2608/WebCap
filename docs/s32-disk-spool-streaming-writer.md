@@ -83,6 +83,8 @@ The xref/trailer region is bounded metadata and is read independently of image p
 
 `ObjectUrlRegistry` resolves the OPFS file only when preview/download needs an object URL. Runtime messages continue to carry `ArtifactMetadata` only; PDF bytes are never sent through Chrome runtime messaging.
 
+Real-browser PDF E2E reads the final extension-origin OPFS file through the stored reference, verifies that IndexedDB does not duplicate the final Blob, checks the `%PDF-` signature and file size, and still parses page count/orientation for page-aware viewer output.
+
 ## Memory invariant
 
 The streamed path owns at most:
