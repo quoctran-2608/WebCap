@@ -1,0 +1,38 @@
+name: S32 focused gate
+
+on:
+  push:
+    branches:
+      - agent/s32-disk-spool-streaming-writer
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/s32-disk-spool-streaming-writer
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --write src/offscreen/streaming-pdf-exporter.ts tests/unit/streaming-pdf-exporter.test.ts docs/s32-disk-spool-streaming-writer.md
+      - run: pnpm typecheck
+      - run: pnpm exec vitest run tests/unit/streaming-pdf-exporter.test.ts tests/unit/streaming-pdf-writer.test.ts tests/unit/object-url-registry-s32.test.ts
+      - name: Commit canonical files and remove helper
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/s32-focused-gate.yml
+          git add src/offscreen/streaming-pdf-exporter.ts tests/unit/streaming-pdf-exporter.test.ts docs/s32-disk-spool-streaming-writer.md
+          git commit -m "Verify S32 streaming writer core"
+          git push origin HEAD:agent/s32-disk-spool-streaming-writer
