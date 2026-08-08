@@ -7,9 +7,9 @@ import { buildPdfUxSnapshot, isDedicatedViewerPdfJob, pdfUxCopy } from "./pdf-ux
 
 export interface PdfExperienceCardProps {
   locale: UiLocale;
-  capability?: PdfSourceCapability;
-  job?: CaptureJob;
-  manifest?: PdfDocumentManifest;
+  capability: PdfSourceCapability | undefined;
+  job: CaptureJob | undefined;
+  manifest: PdfDocumentManifest | undefined;
   busy: boolean;
   onCaptureViewer: () => void;
   onResume: () => void;
@@ -24,7 +24,7 @@ function stageCopy(locale: UiLocale, stage: ReturnType<typeof buildPdfUxSnapshot
     case "paused":
       return pdfUxCopy(locale, "paused");
     case "completed":
-      return pdfUxCopy(locale, "progressTitle");
+      return pdfUxCopy(locale, "resultTitle");
     case "capturing":
       return pdfUxCopy(locale, "capturing");
   }
@@ -52,7 +52,7 @@ export function PdfExperienceCard({
       <section className="pdf-source-card" data-testid="pdf-viewer-entry">
         <div className="section-heading">
           <div>
-            <p className="section-heading__eyebrow">PDF ENGINE V2</p>
+            <p className="section-heading__eyebrow">{pdfUxCopy(locale, "eyebrow")}</p>
             <h2>{pdfUxCopy(locale, "entryTitle")}</h2>
           </div>
         </div>
@@ -89,8 +89,13 @@ export function PdfExperienceCard({
     >
       <div className="section-heading">
         <div>
-          <p className="section-heading__eyebrow">PDF ENGINE V2</p>
-          <h2>{pdfUxCopy(locale, "progressTitle")}</h2>
+          <p className="section-heading__eyebrow">{pdfUxCopy(locale, "eyebrow")}</p>
+          <h2>
+            {pdfUxCopy(
+              locale,
+              snapshot.stage === "completed" ? "resultTitle" : "progressTitle",
+            )}
+          </h2>
         </div>
       </div>
 
