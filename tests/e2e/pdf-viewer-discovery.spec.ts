@@ -31,7 +31,7 @@ async function selectScrollableViewer(targetPage: Page): Promise<void> {
   const box = await target.boundingBox();
   if (box === null) throw new Error("The virtualized PDF viewer fixture is not visible.");
   const selector = targetPage.locator("[data-webcap-element-selector]");
-  const gutterX = box.x + 40;
+  const gutterX = box.x + 8;
   const gutterY = box.y + box.height / 2;
   await targetPage.mouse.move(gutterX, gutterY);
   await targetPage.mouse.click(gutterX, gutterY);
