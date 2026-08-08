@@ -184,7 +184,7 @@ describe("PdfSourceService", () => {
     expect(download).toHaveBeenCalledWith("original-pdf-1");
     expect(artifacts.records).toHaveLength(1);
     const stored = artifacts.records[0];
-    if (stored === undefined) throw new Error("Original PDF artifact was not stored.");
+    if (stored?.blob === undefined) throw new Error("Original PDF artifact Blob was not stored.");
     expect(new Uint8Array(await stored.blob.arrayBuffer())).toEqual(bytes);
   });
 
