@@ -106,7 +106,7 @@ S32 adds regressions for:
 - per-page durable checkpoint advancement;
 - no final PDF Blob duplication in IndexedDB on the streamed path;
 - deletion of temporary page raster files;
-- document-wide tile counts above the legacy 4,096 threshold without treating them as active-page memory;
+- a 4,097-tile captured document exporting a selected page without tripping the legacy document-wide tile-count guard;
 - safe legacy fallback only when OPFS is unavailable before writing.
 
 The existing S29 source passthrough, S30 viewer discovery, S31 page-native capture, PDF editor/export, generic capture modes, full extension E2E matrix, and packaged lifecycle remain release gates.
