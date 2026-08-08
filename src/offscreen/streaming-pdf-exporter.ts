@@ -277,7 +277,8 @@ export class StreamingPdfExporter {
     try {
       const records = await this.tiles.listByJob(payload.jobId);
       const recordByIndex = new Map(records.map((record) => [record.index, record]));
-      let tileBytes = 0;
+      const tileByIndex = new Map(payload.tiles.map((tile) => [tile.index, tile]));
+      const storedBlobByIndex = new Map<number, Blob>();
       for (const tile of payload.tiles) {
         const record = recordByIndex.get(tile.index);
         if (record?.blob === undefined || record.tile.status !== "stored") {
@@ -286,7 +287,7 @@ export class StreamingPdfExporter {
             tileIndex: tile.index,
           });
         }
-        tileBytes += record.blob.size;
+        storedBlobByIndex.set(tile.index, record.blob);
       }
 
       const firstTile = payload.tiles[0];
@@ -325,14 +326,44 @@ export class StreamingPdfExporter {
         }
         return { page, pixelXRange, pixelYRange };
       });
+      const pageIntersections = writerPages.map((page) =>
+        planPdfTileIntersections(page.sourceRectCss, payload.tiles),
+      );
 
       const maxPagePixelArea = Math.max(
         ...pagePixelRanges.map(
           ({ pixelXRange, pixelYRange }) => pixelXRange.length * pixelYRange.length,
         ),
       );
+      const maxPageTileCount = Math.max(...pageIntersections.map((items) => items.length));
+      const maxPageTileBytes = Math.max(
+        ...pageIntersections.map((items) =>
+          items.reduce((total, intersection) => {
+            const blob = storedBlobByIndex.get(intersection.tileIndex);
+            if (blob === undefined) {
+              throw storageReadError("A PDF page tile disappeared before memory planning.", {
+                jobId: payload.jobId.slice(0, 24),
+                tileIndex: intersection.tileIndex,
+              });
+            }
+            return total + blob.size;
+          }, 0),
+        ),
+      );
+      const activeTileIndexes = new Set(
+        pageIntersections.flatMap((items) => items.map((item) => item.tileIndex)),
+      );
       const largestTilePixelArea = Math.max(
-        ...payload.tiles.map((tile) => tile.expectedPixelWidth * tile.expectedPixelHeight),
+        ...[...activeTileIndexes].map((tileIndex) => {
+          const tile = tileByIndex.get(tileIndex);
+          if (tile === undefined) {
+            throw storageReadError("A PDF page tile disappeared before memory planning.", {
+              jobId: payload.jobId.slice(0, 24),
+              tileIndex,
+            });
+          }
+          return tile.expectedPixelWidth * tile.expectedPixelHeight;
+        }),
       );
       const initialHeap = readHeapSnapshot(this.environment);
       const memoryEstimate: PdfMemoryEstimate = assertPdfExportMemorySafe({
@@ -340,8 +371,8 @@ export class StreamingPdfExporter {
         heightCss: Math.max(...writerPages.map((page) => page.sourceRectCss.height)),
         renderScaleX,
         renderScaleY,
-        tileCount: payload.tiles.length,
-        tileBytes,
+        tileCount: maxPageTileCount,
+        tileBytes: maxPageTileBytes,
         pageCount: writerPages.length,
         maxPagePixelArea,
         largestTilePixelArea,
@@ -381,20 +412,24 @@ export class StreamingPdfExporter {
             );
           }
           context.fillWhite(canvas.width, canvas.height);
-          const intersections = planPdfTileIntersections(page.sourceRectCss, payload.tiles);
-          for (const intersection of intersections) {
-            const record = recordByIndex.get(intersection.tileIndex);
-            const tile = payload.tiles.find(
-              (candidate) => candidate.index === intersection.tileIndex,
+          const intersections = pageIntersections[outputIndex];
+          if (intersections === undefined) {
+            throw exportError(
+              "A streamed PDF page plan is unavailable.",
+              "StreamingPdfPagePlanMissing",
             );
-            if (record?.blob === undefined || tile === undefined) {
+          }
+          for (const intersection of intersections) {
+            const blob = storedBlobByIndex.get(intersection.tileIndex);
+            const tile = tileByIndex.get(intersection.tileIndex);
+            if (blob === undefined || tile === undefined) {
               throw storageReadError("A PDF page tile disappeared during streamed export.", {
                 jobId: payload.jobId.slice(0, 24),
                 tileIndex: intersection.tileIndex,
               });
             }
 
-            const decoded = await this.environment.decode(record.blob);
+            const decoded = await this.environment.decode(blob);
             activeDecodedTiles += 1;
             decodedTileCount += 1;
             maxDecodedTiles = Math.max(maxDecodedTiles, activeDecodedTiles);
