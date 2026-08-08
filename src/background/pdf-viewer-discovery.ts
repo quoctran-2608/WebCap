@@ -5,6 +5,7 @@ import {
   type PdfViewerAdapterKind,
   type PdfViewerDiscoverySnapshot,
   type PdfViewerPageCandidate,
+  type PdfViewerRenderState,
 } from "@shared/contracts/pdf-viewer-discovery";
 import { createWebCapRuntimeError } from "@shared/errors/error";
 
@@ -101,11 +102,26 @@ function normalizeCandidate(
   };
 }
 
+function renderStateRank(state: PdfViewerRenderState | undefined): number {
+  switch (state) {
+    case "ready":
+      return 2;
+    case "unknown":
+    case undefined:
+      return 1;
+    case "placeholder":
+      return 0;
+  }
+}
+
 function preferCandidate(
   current: PdfViewerPageCandidate | undefined,
   candidate: PdfViewerPageCandidate,
 ): PdfViewerPageCandidate {
   if (current === undefined) return candidate;
+  const currentState = renderStateRank(current.renderState);
+  const candidateState = renderStateRank(candidate.renderState);
+  if (candidateState !== currentState) return candidateState > currentState ? candidate : current;
   if (candidate.confidence !== current.confidence) {
     return candidate.confidence > current.confidence ? candidate : current;
   }
@@ -287,6 +303,7 @@ export function finalizePdfViewerDiscovery(
     return undefined;
   }
   const candidates = snapshot.candidates
+    .filter((candidate) => candidate.renderState !== "placeholder")
     .map((candidate) => normalizeCandidate(candidate, snapshot.scrollWidth, snapshot.scrollHeight))
     .filter((candidate): candidate is PdfViewerPageCandidate => candidate !== undefined);
   if (candidates.length === 0) return undefined;

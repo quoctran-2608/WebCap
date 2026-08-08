@@ -2,6 +2,7 @@ import type {
   PdfViewerAdapterKind,
   PdfViewerDiscoverySnapshot,
   PdfViewerPageCandidate,
+  PdfViewerRenderState,
 } from "@shared/contracts/pdf-viewer-discovery";
 import type { Rect } from "@shared/contracts/domain";
 
@@ -103,6 +104,59 @@ function declaredPageCount(target: HTMLElement, elements: readonly Element[]): n
   return count > 0 ? count : undefined;
 }
 
+function normalizedStateValue(value: string | null): string {
+  return (value ?? "").trim().toLowerCase();
+}
+
+function canvasHasDurableSurface(canvas: HTMLCanvasElement): boolean {
+  return canvas.width > 0 && canvas.height > 0;
+}
+
+function pageRenderState(element: Element): PdfViewerRenderState {
+  const loaded = normalizedStateValue(element.getAttribute("data-loaded"));
+  const rendered = normalizedStateValue(element.getAttribute("data-rendered"));
+  const rendering = normalizedStateValue(
+    element.getAttribute("data-rendering-state") ?? element.getAttribute("rendering-state"),
+  );
+  if (
+    loaded === "false" ||
+    rendered === "false" ||
+    ["initial", "loading", "pending", "running", "rendering"].includes(rendering) ||
+    normalizedStateValue(element.getAttribute("aria-busy")) === "true" ||
+    element.matches("[data-placeholder='true'], .placeholder, .skeleton") ||
+    element.querySelector(
+      "[data-placeholder='true'], [data-loaded='false'], [data-rendered='false'], [aria-busy='true']",
+    ) !== null
+  ) {
+    return "placeholder";
+  }
+
+  if (
+    loaded === "true" ||
+    rendered === "true" ||
+    ["finished", "ready", "rendered", "complete"].includes(rendering)
+  ) {
+    return "ready";
+  }
+
+  if (element instanceof HTMLCanvasElement) {
+    return canvasHasDurableSurface(element) ? "ready" : "placeholder";
+  }
+  const canvas = element.querySelector("canvas");
+  if (canvas instanceof HTMLCanvasElement && canvasHasDurableSurface(canvas)) return "ready";
+  const image = element.querySelector("img");
+  if (
+    image instanceof HTMLImageElement &&
+    image.complete &&
+    image.naturalWidth > 0 &&
+    image.naturalHeight > 0
+  ) {
+    return "ready";
+  }
+  if (element.querySelector("svg") !== null) return "ready";
+  return "unknown";
+}
+
 function pdfContextSignal(target: HTMLElement): boolean {
   if (document.contentType.toLowerCase().includes("pdf")) return true;
   if (/\.pdf(?:$|[?#])/iu.test(globalThis.location.href)) return true;
@@ -111,7 +165,15 @@ function pdfContextSignal(target: HTMLElement): boolean {
   for (const root of collectRoots(target)) {
     if (
       root.querySelector(
-        'embed[type="application/pdf"], object[type="application/pdf"], source[type="application/pdf"]',
+        [
+          'embed[type="application/pdf"]',
+          'object[type="application/pdf"]',
+          'source[type="application/pdf"]',
+          'embed[src^="blob:"]',
+          'object[data^="blob:"]',
+          'iframe[src^="blob:"]',
+          'iframe[src*=".pdf"]',
+        ].join(","),
       ) !== null
     ) {
       return true;
@@ -135,11 +197,26 @@ function adapterConfidence(adapter: PdfViewerAdapterKind): number {
   }
 }
 
+function renderStateRank(state: PdfViewerRenderState | undefined): number {
+  switch (state) {
+    case "ready":
+      return 2;
+    case "unknown":
+    case undefined:
+      return 1;
+    case "placeholder":
+      return 0;
+  }
+}
+
 function preferCandidate(
   current: PdfViewerPageCandidate | undefined,
   candidate: PdfViewerPageCandidate,
 ): PdfViewerPageCandidate {
   if (current === undefined) return candidate;
+  const candidateState = renderStateRank(candidate.renderState);
+  const currentState = renderStateRank(current.renderState);
+  if (candidateState !== currentState) return candidateState > currentState ? candidate : current;
   if (candidate.confidence !== current.confidence) {
     return candidate.confidence > current.confidence ? candidate : current;
   }
@@ -248,11 +325,13 @@ export async function discoverPdfViewerSnapshot(
       const rect = rectInsideTarget(target, element);
       if (rect === undefined) continue;
       const declaredIndex = pageIndex(element);
+      const renderState = pageRenderState(element);
       rememberCandidate({
         rect,
         adapter: sampleAdapter,
         confidence: declaredIndex === undefined ? Math.max(0, confidence - 0.04) : confidence,
         sampleIndex,
+        renderState,
         ...(declaredIndex === undefined ? {} : { declaredIndex }),
       });
     }
