@@ -1,54 +1,77 @@
-# WebCap 0.1.0 release checklist
+# WebCap 0.2.0 release-owner checklist
 
-This checklist prepares an internal release candidate and Chrome Web Store submission package. Completing it does not publish the extension.
+This checklist starts after PDF Engine V2 S35 has merged into `main`. It separates the already-validated technical release candidate from publication actions that still require deliberate release-owner control.
 
-## Final automated evidence
+Tracking issue: #46 — `Release owner handoff — WebCap 0.2.0`.
 
-- Validation source head: `3fb083fc0e8779cc5e7b25cec107c148246bd1cc`.
-- Read-only CI run: `30909732983` — success.
-- Release Candidate run: `30909732939` — success.
-- Package: `webcap-0.1.0.zip`, 1,097,035 bytes, 24 entries.
-- Package SHA-256: `630c44c07e72da0d5edc1c82c013ecf6caf995e0542ee19679380081e7b0cb7a`.
-- Packaged lifecycle: Linux, Windows, macOS, Chrome 116.0.5845.96, and Chrome stable 151.0.7922.71 — success.
-- Regression gate: 279 unit tests/79 files, four PDF benchmarks, verified Manifest V3 build, and 38 Playwright E2E cases — success.
-- Triage: zero open P0/P1, zero critical dependency advisory, and no unresolved review thread.
+## Approved technical candidate
+
+- S35 merge commit on `main`: `0f4b6bb4a55a9d8bbaf1a628fdb49fcf570a1d62`.
+- Validated S35 PR head: `88b60c29e793c07e6ed6d0790ad4c16d324d6866`.
+- CI run `31259390923`: success.
+- Release Candidate run `31259390917`: success.
+- Reproducible package: `webcap-0.2.0.zip`, 1,341,084 bytes, 25 entries.
+- Package SHA-256: `8bade485ee0672a2b160abf59f45c1772062ffc00724889c5aaa39294e7edb34`.
+- Unit suite: 444/444 tests across 127/127 files.
+- PDF performance benchmark: 4/4 PASS.
+- Playwright extension E2E: 56/56 PASS on Chrome for Testing `151.0.7922.34`.
+- Packaged browser compatibility: minimum, previous stable and current stable Chrome — PASS.
+- Packaged lifecycle: Ubuntu, Windows and macOS — PASS, including clean install, `0.1.0 -> 0.2.0` state preservation and uninstall.
+- Dependency gate: configured critical threshold PASS; `pnpm audit` reports one high-severity advisory and no critical blocker.
+- Open P0/P1 search at release handoff: none found.
 
 ## Automated release gate
 
-- [x] Frozen lockfile installs without mutation and passes the pnpm supply-chain policy.
-- [x] Formatting, ESLint, strict TypeScript, privacy, dependency/license, release-metadata, and critical-vulnerability audits pass.
-- [x] Unit, PDF benchmark, production build, full Playwright regression, and DPR/zoom release matrix pass.
-- [x] The production ZIP is generated twice from the same commit and is byte-identical.
-- [x] ZIP checksum, release manifest, entry hashes, CRC values, paths, timestamps, permissions, icons, locales, CSP-sensitive JavaScript, and root `manifest.json` pass verification.
-- [x] The packaged ZIP installs in a clean profile, upgrades over the `0.0.9` fixture without losing `chrome.storage.local`, and self-uninstalls without requesting `management`.
-- [x] Packaged smoke passes on Chrome 116 and the current stable Chrome for Testing build used by CI.
-- [x] CI uploads the ZIP, SHA-256 file, release manifest, lifecycle reports, and Playwright report. Generated files are not committed.
+- [x] Frozen lockfile install and repository supply-chain policy pass.
+- [x] Formatting, ESLint, strict TypeScript, privacy, dependency/license, release-metadata and configured critical-vulnerability audits pass.
+- [x] Full unit suite, PDF benchmarks, production MV3 build and Playwright regression pass.
+- [x] S29 original-source, S30 virtualized discovery, S33 restart/recovery, S34 adversarial viewer and S35 verified PDF UX regressions pass.
+- [x] Production ZIP is reproducible from the validated candidate.
+- [x] Package verification covers manifest, paths, entry metadata and release-package integrity.
+- [x] Packaged compatibility passes on minimum / previous stable / current stable Chrome.
+- [x] Packaged install/update/uninstall lifecycle passes on Linux, Windows and macOS.
+- [x] `0.1.0 -> 0.2.0` migration preserves extension identity and supported stored state.
 
-## Product and security review
+## Product, correctness and privacy review
 
-- [x] Every PRD MUST acceptance criterion has automated or documented manual evidence.
-- [x] No open P0/P1 defect, data-loss bug, missing-content bug, repeated-content bug, restore failure, or leaked debugger attachment.
-- [x] Every remaining P2 limitation is listed with a practical workaround.
-- [x] No runtime remote code, analytics SDK, content upload, default host permission, account, cloud sync, or remote diagnostics path.
-- [x] Required permissions and optional host patterns match `docs/permissions.md` and the store disclosures.
-- [x] Privacy copy describes local processing, temporary retention, user controls, diagnostics, original-PDF fetches, and Limited Use accurately.
-- [x] Dependency inventory and critical vulnerability audit have been reviewed for this exact lockfile.
+- [x] PDF Engine V2 acceptance criteria AC-41–AC-60 have release traceability in `docs/release/acceptance-criteria-pdf-engine-v2.md`.
+- [x] `100%` / verified rendered-PDF output is gated by durable source-page/output agreement rather than tile completion.
+- [x] Original PDF bytes remain preferred when safely accessible; visible-viewer capture remains the bounded fallback.
+- [x] No accepted P0/P1 correctness issue is recorded for the release candidate.
+- [x] No backend, telemetry, analytics SDK, cloud sync, content upload or remote executable code is introduced.
+- [x] No new required Chrome permission or default host permission is introduced by PDF Engine V2.
+- [x] Diagnostics remain bounded and content-free; no page text, title, URL or filename is added to S35 PDF diagnostics.
+- [x] The remaining high-severity dependency advisory is recorded accurately and is not a critical blocker under the configured gate.
 
-## Chrome Web Store dashboard — manual owner actions
+## GitHub release-owner actions
 
-- [ ] Register/verify the developer account, contact email, and publisher identity.
+- [ ] Review `docs/release/0.2.0.md` and this checklist against the exact approved candidate.
+- [ ] Retain the exact `webcap-0.2.0.zip`, checksum and validation reports from the successful Release Candidate run.
+- [ ] Create tag `v0.2.0` only after explicit release-owner approval.
+- [ ] Create the GitHub Release from the approved tag and use the final 0.2.0 release notes.
+- [ ] Attach or otherwise retain the exact reproducible ZIP/checksum/evidence required by the project release policy.
+- [ ] Verify the GitHub Release points to the intended S35-complete source commit and does not silently rebuild a different package.
+
+## Chrome Web Store — manual owner actions
+
+- [ ] Register/verify the developer account, contact email and publisher identity.
 - [ ] Host a public privacy-policy URL containing the approved policy and Limited Use statement.
 - [ ] Provide a public support/homepage URL and support contact.
-- [ ] Paste the approved Vietnamese and English listing copy; choose the Product category and distribution audience.
-- [ ] Upload a 128×128 store icon, at least one human-reviewed 1280×800 screenshot, and a 440×280 small promo tile. Do not use misleading claims or unreviewed placeholder artwork.
-- [ ] Complete the Privacy practices declarations so they match product behavior and the published privacy policy.
-- [ ] Upload `webcap-0.1.0.zip`, verify the dashboard parses the manifest, and review every permission warning.
-- [ ] Use private or trusted-tester distribution for the first external validation.
-- [ ] Submit for review only after explicit release approval. Do not enable automatic publication unless deliberately chosen.
+- [ ] Review Vietnamese and English listing copy against actual 0.2.0 behavior; do not advertise unsupported OCR, annotation, cloud or unlimited capture claims.
+- [ ] Upload/review a 128x128 store icon, at least one human-reviewed 1280x800 or 640x400 screenshot, and a 440x280 small promo tile.
+- [ ] Complete Privacy practices declarations so they match `docs/privacy.md`, `docs/permissions.md` and actual product behavior.
+- [ ] Upload the exact approved `webcap-0.2.0.zip` and review every dashboard-parsed permission warning.
+- [ ] Prefer private/trusted-tester distribution for the first external validation unless the release owner deliberately chooses broader distribution.
+- [ ] Submit for review only after explicit release-owner approval.
+- [ ] Do not enable automatic publication unless it is deliberately chosen.
 
 ## Version and rollback
 
-- [x] `package.json`, packaged `manifest.json`, release notes, checksum filename, and release manifest all say `0.1.0`.
-- [x] Any changed package uploaded after `0.1.0` uses a strictly larger manifest version.
-- [x] Retain the exact ZIP, SHA-256, release manifest, test reports, source commit, and rollback notes.
-- [x] Rollback means disabling distribution or uploading a corrected higher version; an already uploaded Chrome Web Store version number cannot be reused.
+- [x] `package.json` and `public/manifest.json` identify version `0.2.0`.
+- [x] Release notes and the approved package evidence identify `0.2.0`.
+- [ ] Confirm tag/GitHub Release naming uses `v0.2.0` consistently.
+- [ ] Retain the exact ZIP, SHA-256, source commit and validation evidence after publication.
+- [ ] If a store-uploaded build requires correction, use a strictly larger manifest version; an uploaded Chrome Web Store version number cannot be reused.
+- [ ] Rollback planning must use distribution controls or a corrected higher version rather than attempting to replace an already-published `0.2.0` artifact.
+
+Creating or merging this checklist does not itself create a tag, GitHub Release, Chrome Web Store upload, review submission or publication.
