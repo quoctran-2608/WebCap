@@ -15,6 +15,7 @@ import {
   parseBackgroundRequest,
   type BackgroundResponse,
 } from "@shared/contracts/messages";
+import { isPdfUxMessageType } from "@shared/contracts/job-messages";
 import { isOffscreenPdfExportProgressMessage } from "@shared/contracts/offscreen";
 import type {
   VisibleSessionSnapshot,
@@ -138,6 +139,7 @@ function targetsBackground(value: unknown): boolean {
     "target" in value &&
     (value as { target?: unknown }).target === "background" &&
     !isPersistentJobMessageType(value) &&
+    !isPdfUxMessageType(value) &&
     !isOffscreenPdfExportProgressMessage(value) &&
     !isRegionSelectionEventType(value) &&
     !isElementSelectionEventType(value) &&

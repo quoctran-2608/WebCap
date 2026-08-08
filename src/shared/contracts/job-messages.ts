@@ -15,6 +15,7 @@ import {
   type CaptureMode,
   type CaptureSettings,
 } from "@shared/contracts/domain";
+import { PdfDocumentManifestSchema, type PdfDocumentManifest } from "@shared/contracts/pdf-capture";
 import { createWebCapError, type WebCapErrorData } from "@shared/errors/error";
 import { err, ok, type Result } from "@shared/result";
 
@@ -72,6 +73,11 @@ export const JobCancelMessageSchema = EnvelopeBaseSchema.extend({
     .strict(),
 }).strict();
 
+export const JobResumeMessageSchema = EnvelopeBaseSchema.extend({
+  type: z.literal("JOB_RESUME"),
+  payload: z.object({ jobId: IdentifierSchema }).strict(),
+}).strict();
+
 export const PdfExportStartMessageSchema = EnvelopeBaseSchema.extend({
   type: z.literal("PDF_EXPORT_START"),
   payload: z
@@ -80,6 +86,11 @@ export const PdfExportStartMessageSchema = EnvelopeBaseSchema.extend({
       settings: CaptureSettingsSchema.shape.pdf.optional(),
     })
     .strict(),
+}).strict();
+
+export const PdfManifestGetMessageSchema = EnvelopeBaseSchema.extend({
+  type: z.literal("PDF_MANIFEST_GET"),
+  payload: z.object({ jobId: IdentifierSchema }).strict(),
 }).strict();
 
 export const JobResponseMessageSchema = z
@@ -106,6 +117,18 @@ export const JobActiveResponseMessageSchema = z
   })
   .strict();
 
+export const PdfManifestResponseMessageSchema = z
+  .object({
+    protocolVersion: z.literal(PROTOCOL_VERSION),
+    requestId: IdentifierSchema,
+    source: z.literal("background"),
+    target: z.literal("popup"),
+    type: z.literal("PDF_MANIFEST_RESPONSE"),
+    payload: z.object({ manifest: PdfDocumentManifestSchema.nullable() }).strict(),
+    sentAt: IsoDateTimeSchema,
+  })
+  .strict();
+
 export const PersistentJobRequestSchema = z.discriminatedUnion("type", [
   JobCreateMessageSchema,
   JobGetMessageSchema,
@@ -119,9 +142,12 @@ export type JobCreateMessage = z.infer<typeof JobCreateMessageSchema>;
 export type JobGetMessage = z.infer<typeof JobGetMessageSchema>;
 export type JobGetActiveMessage = z.infer<typeof JobGetActiveMessageSchema>;
 export type JobCancelMessage = z.infer<typeof JobCancelMessageSchema>;
+export type JobResumeMessage = z.infer<typeof JobResumeMessageSchema>;
 export type PdfExportStartMessage = z.infer<typeof PdfExportStartMessageSchema>;
+export type PdfManifestGetMessage = z.infer<typeof PdfManifestGetMessageSchema>;
 export type JobResponseMessage = z.infer<typeof JobResponseMessageSchema>;
 export type JobActiveResponseMessage = z.infer<typeof JobActiveResponseMessageSchema>;
+export type PdfManifestResponseMessage = z.infer<typeof PdfManifestResponseMessageSchema>;
 export type PersistentJobRequest =
   | z.infer<typeof JobCreateMessageSchema>
   | z.infer<typeof JobGetMessageSchema>
@@ -215,6 +241,20 @@ export function createJobCancelMessage(
   });
 }
 
+export function createJobResumeMessage(
+  options: JobMessageCreationOptions & { jobId: string },
+): JobResumeMessage {
+  return JobResumeMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "popup",
+    target: "background",
+    type: "JOB_RESUME",
+    payload: { jobId: options.jobId },
+    sentAt: options.sentAt,
+  });
+}
+
 export function createPdfExportStartMessage(
   options: JobMessageCreationOptions & {
     jobId: string;
@@ -231,6 +271,20 @@ export function createPdfExportStartMessage(
       jobId: options.jobId,
       ...(options.settings === undefined ? {} : { settings: options.settings }),
     },
+    sentAt: options.sentAt,
+  });
+}
+
+export function createPdfManifestGetMessage(
+  options: JobMessageCreationOptions & { jobId: string },
+): PdfManifestGetMessage {
+  return PdfManifestGetMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "popup",
+    target: "background",
+    type: "PDF_MANIFEST_GET",
+    payload: { jobId: options.jobId },
     sentAt: options.sentAt,
   });
 }
@@ -263,6 +317,20 @@ export function createJobActiveResponseMessage(
   });
 }
 
+export function createPdfManifestResponseMessage(
+  options: JobMessageCreationOptions & { manifest: PdfDocumentManifest | null },
+): PdfManifestResponseMessage {
+  return PdfManifestResponseMessageSchema.parse({
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: options.requestId,
+    source: "background",
+    target: "popup",
+    type: "PDF_MANIFEST_RESPONSE",
+    payload: { manifest: options.manifest },
+    sentAt: options.sentAt,
+  });
+}
+
 export function parsePersistentJobRequest(
   value: unknown,
 ): Result<PersistentJobRequest, WebCapErrorData> {
@@ -291,6 +359,14 @@ export function parsePersistentJobRequest(
   );
 }
 
+export function isPdfUxMessageType(value: unknown): boolean {
+  if (typeof value !== "object" || value === null || !("type" in value)) {
+    return false;
+  }
+  const type = (value as { type?: unknown }).type;
+  return type === "PDF_MANIFEST_GET" || type === "JOB_RESUME";
+}
+
 export function isPersistentJobRequest(value: unknown): value is PersistentJobRequest {
   return PersistentJobRequestSchema.safeParse(value).success;
 }
@@ -301,4 +377,8 @@ export function isJobResponseMessage(value: unknown): value is JobResponseMessag
 
 export function isJobActiveResponseMessage(value: unknown): value is JobActiveResponseMessage {
   return JobActiveResponseMessageSchema.safeParse(value).success;
+}
+
+export function isPdfManifestResponseMessage(value: unknown): value is PdfManifestResponseMessage {
+  return PdfManifestResponseMessageSchema.safeParse(value).success;
 }

@@ -6,14 +6,18 @@ import {
   type CaptureResetReport,
 } from "@shared/contracts/capture-reset";
 import type { CaptureJob, CaptureSettings } from "@shared/contracts/domain";
+import type { PdfDocumentManifest } from "@shared/contracts/pdf-capture";
 import {
   createJobCancelMessage,
   createJobCreateMessage,
   createJobGetActiveMessage,
   createJobGetMessage,
+  createJobResumeMessage,
   createPdfExportStartMessage,
+  createPdfManifestGetMessage,
   isJobActiveResponseMessage,
   isJobResponseMessage,
+  isPdfManifestResponseMessage,
 } from "@shared/contracts/job-messages";
 import { isErrorResponseMessage } from "@shared/contracts/messages";
 
@@ -108,6 +112,37 @@ export function getCaptureJob(jobId: string): Promise<CaptureJob> {
       sentAt: new Date().toISOString(),
     }),
   );
+}
+
+export function resumeCaptureJob(jobId: string): Promise<CaptureJob> {
+  return sendJobRequest(
+    createJobResumeMessage({
+      requestId: crypto.randomUUID(),
+      jobId,
+      sentAt: new Date().toISOString(),
+    }),
+  );
+}
+
+export async function getPdfDocumentManifest(
+  jobId: string,
+): Promise<PdfDocumentManifest | undefined> {
+  const request = createPdfManifestGetMessage({
+    requestId: crypto.randomUUID(),
+    jobId,
+    sentAt: new Date().toISOString(),
+  });
+  const response: unknown = await Promise.race([
+    chrome.runtime.sendMessage(request),
+    rejectAfter(DEFAULT_REQUEST_TIMEOUT_MS),
+  ]);
+  if (isErrorResponseMessage(response)) {
+    throwRemoteWebCapError(response.payload);
+  }
+  if (!isPdfManifestResponseMessage(response) || response.requestId !== request.requestId) {
+    throw new TypeError("Service worker returned an invalid PDF manifest response.");
+  }
+  return response.payload.manifest ?? undefined;
 }
 
 export function startPdfExport(

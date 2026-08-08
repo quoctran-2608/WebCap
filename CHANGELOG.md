@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- PDF Engine V2 S27–S35: page-aware PDF capture, dedicated orchestration and completion evidence, streamed original-source acquisition, incremental virtualized-viewer discovery, page-native adaptive batches, OPFS sequential PDF writing, restart/quota/multipart resilience, difficult-viewer hardening, and dedicated page-first PDF UX.
+- S35 metadata-only `PDF_MANIFEST_GET` and retryable `JOB_RESUME` routing, verified rendered-view result copy, legacy manifest fallback, and bounded diagnostics for strategy/adapter bucket/page counters without page content, URLs, filenames or titles.
+- S35 browser regression ties the user-facing verified label to a real three-page mixed-orientation artifact and exact durable manifest evidence.
+- S35 clean read-only CI run `31258825875`: 444/444 unit tests across 127 files, 4/4 PDF benchmarks, 56/56 Playwright E2E on Chrome 151.0.7922.34, packaged `0.1.0 → 0.2.0` lifecycle PASS, reproducible `webcap-0.2.0.zip` (1,341,084 bytes, 25 entries, SHA-256 `8bade485ee0672a2b160abf59f45c1772062ffc00724889c5aaa39294e7edb34`). Security gate passes its configured critical threshold; `pnpm audit` reports one high-severity advisory and no critical blocker.
+
 ## [0.2.0] - 2026-08-06
 
 ### Added

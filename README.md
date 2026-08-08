@@ -10,7 +10,9 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 
 **WebCap 0.2.0 release candidate is complete and ready for review.** S21–S25 delivered reset, reliable selectors, adaptive capture, automatic mode-aware output, stored settings and event-driven popup progress. S26 bumps the package to 0.2.0, validates upgrade from 0.1.0, adds previous-stable Chrome coverage, closes the gap audit and prepares a reproducible local-first release candidate without publishing it.
 
-## 0.2.0 outcomes and remaining work
+**PDF Engine V2 S27–S35 is complete and ready for release-owner review.** The engine now prefers byte-preserved original PDFs when safely available, discovers virtualized viewers incrementally, captures verified logical pages page-by-page, streams raster output to OPFS, resumes at durable page/writer checkpoints, handles storage pressure with page-aligned multipart fallback, hardens difficult viewers, and surfaces page-first verified UX plus bounded diagnostics. S35 clean read-only CI run `31258825875` passed 444/444 unit tests, 4/4 PDF benchmarks, 56/56 Playwright E2E and packaged lifecycle; the reproducible 25-entry `webcap-0.2.0.zip` is 1,341,084 bytes with SHA-256 `8bade485ee0672a2b160abf59f45c1772062ffc00724889c5aaa39294e7edb34`. No publication action has been performed.
+
+## 0.2.0 and PDF Engine V2 outcomes
 
 - Delivered in S23–S24: one-click **Full page → PDF** captures from document start, follows finite lazy growth, restores the page and automatically creates a PDF.
 - Delivered in S22–S24: **Draw region** closes the popup only after selector readiness, supports pointer and keyboard editing, excludes selector UI and returns a guarded image result.
@@ -21,6 +23,8 @@ WebCap is a local-first Chrome extension for capturing everything a web page pre
 - Delivered in S25: the primary capture action precedes advanced settings, which remain available at idle/result and disappear while capture is busy, while version, milestones, raw tile counts, privacy help and diagnostics no longer compete in the default main flow.
 - Delivered in S26: 0.1.0 → 0.2.0 settings/locale migration coverage, minimum/previous/current Chrome compatibility, version 0.2.0 metadata, acceptance traceability and reproducible RC packaging.
 - No backend, telemetry, remote executable code, new required permission or default host permission.
+- Delivered in S27–S35: first-class PDF strategy negotiation, streamed original-source acquisition, virtualized viewer discovery, page-native bounded capture, OPFS streaming output, recovery/quota/multipart resilience, difficult-viewer hardening, page-first verified UX and content-free diagnostics.
+- S35 keeps legacy/pre-manifest jobs backward compatible by falling back to durable job page/export progress without rewriting existing IndexedDB records.
 
 ## Requirements
 

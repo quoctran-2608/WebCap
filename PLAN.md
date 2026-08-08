@@ -2,15 +2,15 @@
 product: WebCap
 document: Active Implementation Plan
 version: 1.1
-date: 2026-08-06
-status: Release candidate complete
+date: 2026-08-08
+status: PDF Engine V2 release candidate complete
 repository: quoctran-2608/WebCap
 owner: OpenAI coding agent
 prd: ./PRD_WebCap_v1.1.md
 spec: ./docs/spec-0.2.0.md
 audit: ./docs/audits/0.1.0-gap-audit.md
 release_target: 0.2.0
-current_session: S26-DONE
+current_session: S35-DONE
 ---
 
 # WebCap — Implementation plan 0.2.0
@@ -18,6 +18,26 @@ current_session: S26-DONE
 Roadmap `S00–S20` đã tạo release candidate 0.1.0. Roadmap mới `S21–S26` xử lý các khoảng trống thực tế: reset/chụp mới, region drawing có thể nhìn thấy và sử dụng được, adaptive auto-scroll, auto-PDF/output routing, settings/UI/progress và hardening release.
 
 S21–S26 đã hoàn tất roadmap 0.2.0: reset lifecycle, reliable selectors, adaptive/resumable capture, mode-aware output, stored settings, event-driven progress, release migration và reproducible RC. Artifact 0.1.0 vẫn được giữ nguyên và 0.2.0 chưa được xuất bản.
+
+## PDF Engine V2 S27–S35
+
+Roadmap PDF Engine V2 đã hoàn tất trên cùng release candidate 0.2.0 mà không thêm backend, telemetry, cloud dependency, remote executable code, required permission hoặc default host permission. S35 là session cuối và `current_session` hiện là `S35-DONE`.
+
+| Session | Capability | Status |
+| --- | --- | --- |
+| S27 | Dedicated page-aware PDF capture | DONE |
+| S28 | PDF orchestration, manifest và strict completion contracts | DONE |
+| S29 | Streamed original-source acquisition | DONE |
+| S30 | Incremental/virtualized viewer intelligence | DONE |
+| S31 | Page-native capture và adaptive page batches | DONE |
+| S32 | OPFS spool và sequential streaming PDF writer | DONE |
+| S33 | Recovery, quota/backpressure và page-aligned multipart | DONE |
+| S34 | Difficult viewer/adversarial hardening | DONE |
+| S35 | Dedicated PDF UX, verification diagnostics, resume và RC polish | DONE |
+
+S35 clean read-only CI run `31258825875` xác nhận 444/444 unit tests trên 127 files, 4/4 PDF benchmarks, 56/56 Playwright E2E trên Chrome for Testing 151.0.7922.34, reproducible `webcap-0.2.0.zip` (1,341,084 bytes, 25 entries, SHA-256 `8bade485ee0672a2b160abf59f45c1772062ffc00724889c5aaa39294e7edb34`) và packaged lifecycle gồm clean install, `0.1.0 → 0.2.0` state preservation và uninstall. Dependency audit vẫn báo đúng 1 high-severity advisory nhưng không có critical finding chặn CI.
+
+Traceability PDF Engine V2 nằm tại `docs/release/acceptance-criteria-pdf-engine-v2.md`. Không có tag, GitHub Release hoặc Chrome Web Store submission trong S35.
 
 # 1. Nguồn sự thật
 
