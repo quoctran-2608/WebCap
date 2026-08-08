@@ -52,10 +52,7 @@ export function isDedicatedViewerPdfJob(job: CaptureJob | undefined): boolean {
   );
 }
 
-export function buildPdfUxSnapshot(
-  job: CaptureJob,
-  manifest?: PdfDocumentManifest,
-): PdfUxSnapshot {
+export function buildPdfUxSnapshot(job: CaptureJob, manifest?: PdfDocumentManifest): PdfUxSnapshot {
   const dedicatedViewer = isDedicatedViewerPdfJob(job);
   const sourceTotal = expectedSourcePages(job, manifest);
   const pageProgress = documentPageProgress(job);

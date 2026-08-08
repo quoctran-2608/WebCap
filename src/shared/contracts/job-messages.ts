@@ -15,10 +15,7 @@ import {
   type CaptureMode,
   type CaptureSettings,
 } from "@shared/contracts/domain";
-import {
-  PdfDocumentManifestSchema,
-  type PdfDocumentManifest,
-} from "@shared/contracts/pdf-capture";
+import { PdfDocumentManifestSchema, type PdfDocumentManifest } from "@shared/contracts/pdf-capture";
 import { createWebCapError, type WebCapErrorData } from "@shared/errors/error";
 import { err, ok, type Result } from "@shared/result";
 

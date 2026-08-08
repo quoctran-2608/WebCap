@@ -6,10 +6,7 @@ import {
   type JobResponseMessage,
   type PdfManifestResponseMessage,
 } from "@shared/contracts/job-messages";
-import {
-  createErrorResponseMessage,
-  type ErrorResponseMessage,
-} from "@shared/contracts/messages";
+import { createErrorResponseMessage, type ErrorResponseMessage } from "@shared/contracts/messages";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
 
@@ -17,9 +14,7 @@ import { getPdfCaptureOrchestrator } from "./pdf-capture-runtime";
 import { getPersistentJobRouterDependencies } from "./persistent-job-router";
 
 export type PdfUxRouterResponse =
-  | JobResponseMessage
-  | PdfManifestResponseMessage
-  | ErrorResponseMessage;
+  JobResponseMessage | PdfManifestResponseMessage | ErrorResponseMessage;
 
 function isPdfUxMessage(value: unknown): boolean {
   if (typeof value !== "object" || value === null || !("type" in value)) return false;
@@ -63,7 +58,9 @@ function resumeUnavailable(jobId: string): Error {
   );
 }
 
-export async function routePdfUxMessage(message: unknown): Promise<PdfUxRouterResponse | undefined> {
+export async function routePdfUxMessage(
+  message: unknown,
+): Promise<PdfUxRouterResponse | undefined> {
   if (!isPdfUxMessage(message)) return undefined;
   const requestId = requestIdFrom(message);
   if (requestId === undefined) return undefined;
@@ -73,7 +70,8 @@ export async function routePdfUxMessage(message: unknown): Promise<PdfUxRouterRe
   if (manifestRequest.success) {
     try {
       const manifest =
-        (await getPdfCaptureOrchestrator()?.getManifest(manifestRequest.data.payload.jobId)) ?? null;
+        (await getPdfCaptureOrchestrator()?.getManifest(manifestRequest.data.payload.jobId)) ??
+        null;
       return createPdfManifestResponseMessage({
         requestId,
         manifest,

@@ -50,7 +50,12 @@ export function PdfUxCompanion(): React.JSX.Element | null {
   useEffect(() => {
     const shell = document.querySelector<HTMLElement>(".popup-shell");
     const capturePanel = shell?.querySelector<HTMLElement>(".capture-panel");
-    if (shell === undefined || shell === null || capturePanel === undefined || capturePanel === null) {
+    if (
+      shell === undefined ||
+      shell === null ||
+      capturePanel === undefined ||
+      capturePanel === null
+    ) {
       return;
     }
     const container = document.createElement("div");

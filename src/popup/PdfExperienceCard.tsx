@@ -15,7 +15,10 @@ export interface PdfExperienceCardProps {
   onResume: () => void;
 }
 
-function stageCopy(locale: UiLocale, stage: ReturnType<typeof buildPdfUxSnapshot>["stage"]): string {
+function stageCopy(
+  locale: UiLocale,
+  stage: ReturnType<typeof buildPdfUxSnapshot>["stage"],
+): string {
   switch (stage) {
     case "verifying":
       return pdfUxCopy(locale, "verifying");
@@ -91,10 +94,7 @@ export function PdfExperienceCard({
         <div>
           <p className="section-heading__eyebrow">{pdfUxCopy(locale, "eyebrow")}</p>
           <h2>
-            {pdfUxCopy(
-              locale,
-              snapshot.stage === "completed" ? "resultTitle" : "progressTitle",
-            )}
+            {pdfUxCopy(locale, snapshot.stage === "completed" ? "resultTitle" : "progressTitle")}
           </h2>
         </div>
       </div>
