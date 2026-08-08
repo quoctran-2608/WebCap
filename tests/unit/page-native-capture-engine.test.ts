@@ -13,7 +13,7 @@ import type { CaptureTile, DocumentPageMap } from "@shared/contracts/domain";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 
 const HUNDRED_PIXEL_PNG =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAIAAAD/gAIDAAAAnklEQVR42u3QMQEAAAgDILV/51nBzwci0CmuRoEsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YCWbJkyZIlS4EsWd8Wil4Bx2r6t7cAAAAASUVORK5CYII=";
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAIAAAD/gAIDAAAAnklEQVR42u3QMQEAAAgDILV/51nBzwci0CmuRoEsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWd8Wil4Bx2r6t7cAAAAASUVORK5CYII=";
 
 const descriptor = {
   schemaVersion: 1 as const,
@@ -79,19 +79,21 @@ function setup(options: { discover?: boolean } = {}) {
     queryActiveTab: () => Promise.resolve({ id: 7, windowId: 3, active: true }),
     captureVisibleTab: vi.fn(() => Promise.resolve(HUNDRED_PIXEL_PNG)),
   };
-  const fallbackCapture = vi.fn(async (context: CaptureEngineContext) => ({
-    metrics: {
-      document: { x: 0, y: 0, width: 100, height: 270 },
-      layoutViewport: { x: 0, y: 0, width: 100, height: 100 },
-      visualViewport: { x: 0, y: 0, width: 100, height: 100, scale: 1 },
-      devicePixelRatio: 1,
-      zoomFactor: 1,
-      scrollX: 0,
-      scrollY: 0,
-    },
-    targetRect: context.targetRect ?? { x: 0, y: 0, width: 100, height: 270 },
-    tiles: [],
-  }));
+  const fallbackCapture = vi.fn((context: CaptureEngineContext) =>
+    Promise.resolve({
+      metrics: {
+        document: { x: 0, y: 0, width: 100, height: 270 },
+        layoutViewport: { x: 0, y: 0, width: 100, height: 100 },
+        visualViewport: { x: 0, y: 0, width: 100, height: 100, scale: 1 },
+        devicePixelRatio: 1,
+        zoomFactor: 1,
+        scrollX: 0,
+        scrollY: 0,
+      },
+      targetRect: context.targetRect ?? { x: 0, y: 0, width: 100, height: 270 },
+      tiles: [],
+    }),
+  );
   const fallback: CaptureEngine = { kind: "scroll", capture: fallbackCapture };
   const engine = new PageNativeCaptureEngine({
     pages,
