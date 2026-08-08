@@ -50,7 +50,7 @@ For every logical page, S31:
 6. stores the tile immediately;
 7. verifies that the union of stored output rectangles completely covers the logical page.
 
-The engine does not advance to the next page until that coverage proof succeeds.
+The engine does not advance to the next page until that coverage proof succeeds. A page-boundary progress event always references the verified final stored tile of that page, so it cannot report a synthetic or undefined tile boundary.
 
 Incremental `onPlan` updates preserve already-stored tile status and `completedTiles`; progress cannot move backwards merely because the next batch was planned.
 
