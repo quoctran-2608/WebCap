@@ -95,10 +95,6 @@ describe("planPdfPageCaptureTiles", () => {
         startTileIndex: 0,
         maxTilesPerPage: 10,
       }),
-    ).toThrowError(
-      expect.objectContaining({
-        data: expect.objectContaining({ causeCode: "PdfPageTileBudgetExceeded" }),
-      }),
-    );
+    ).toThrowError("One logical PDF page exceeds the bounded page-local tile budget.");
   });
 });
