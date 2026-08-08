@@ -26,6 +26,8 @@ export const PdfViewerAdapterKindSchema = z.enum([
   "canvas-visual",
 ]);
 
+export const PdfViewerRenderStateSchema = z.enum(["ready", "unknown", "placeholder"]);
+
 export const PdfViewerPageCandidateSchema = z
   .object({
     rect: RectSchema,
@@ -33,6 +35,7 @@ export const PdfViewerPageCandidateSchema = z
     confidence: z.number().finite().min(0).max(1),
     sampleIndex: NonNegativeIntegerSchema,
     declaredIndex: NonNegativeIntegerSchema.optional(),
+    renderState: PdfViewerRenderStateSchema.optional(),
   })
   .strict();
 
@@ -100,6 +103,7 @@ export const PdfViewerDiscoveryErrorMessageSchema = ContentToBackgroundSchema.ex
 }).strict();
 
 export type PdfViewerAdapterKind = z.infer<typeof PdfViewerAdapterKindSchema>;
+export type PdfViewerRenderState = z.infer<typeof PdfViewerRenderStateSchema>;
 export type PdfViewerPageCandidate = z.infer<typeof PdfViewerPageCandidateSchema>;
 export type PdfViewerDiscoverySnapshot = z.infer<typeof PdfViewerDiscoverySnapshotSchema>;
 export type PdfViewerDiscoveryRequestMessage = z.infer<
