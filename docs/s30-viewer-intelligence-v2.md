@@ -75,7 +75,7 @@ Used when a stable page index is unavailable:
 - the ordered sequence has no implausibly large internal gap;
 - if a declared page count exists, the geometry sequence must agree with it.
 
-Canvas candidates require independent PDF context or declared page-count evidence before they are considered. Canvas-only completion additionally requires repeated stable geometry across distinct observations and more than one page surface in at least one observation. A single viewport-sized canvas that is merely recycled while scrolling therefore cannot manufacture a fake multipage `DocumentPageMap`.
+Canvas candidates require independent PDF context or declared page-count evidence before they are considered. Canvas-only completion additionally requires repeated stable geometry across distinct observations and more than one page surface in at least one observation. Stable canvas recurrence is checked with quantized geometry fingerprints in linear time rather than a pairwise candidate scan. A single viewport-sized canvas that is merely recycled while scrolling therefore cannot manufacture a fake multipage `DocumentPageMap`.
 
 ## Projection boundary
 
