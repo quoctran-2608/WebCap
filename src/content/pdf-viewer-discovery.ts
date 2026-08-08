@@ -17,6 +17,9 @@ const PAGE_SELECTOR = [
 ].join(",");
 const ROOT_SCAN_LIMIT = 20_000;
 const MAX_SAMPLES = 10_000;
+const MAX_INTERMEDIATE_SETTLE_MS = 80;
+const MAX_TERMINAL_SETTLE_MS = 250;
+const MAX_GEOMETRY_OBSERVATIONS = 2;
 
 function positiveAttribute(element: Element, names: readonly string[]): number | undefined {
   for (const name of names) {
@@ -45,6 +48,7 @@ function pageIndex(element: Element): number | undefined {
 
 function collectRoots(target: HTMLElement): Array<Element | ShadowRoot> {
   const roots: Array<Element | ShadowRoot> = [target];
+  if (target.shadowRoot?.mode === "open") roots.push(target.shadowRoot);
   let cursor = 0;
   let scanned = 0;
   while (cursor < roots.length && scanned < ROOT_SCAN_LIMIT) {
@@ -131,13 +135,39 @@ function adapterConfidence(adapter: PdfViewerAdapterKind): number {
   }
 }
 
+function preferCandidate(
+  current: PdfViewerPageCandidate | undefined,
+  candidate: PdfViewerPageCandidate,
+): PdfViewerPageCandidate {
+  if (current === undefined) return candidate;
+  if (candidate.confidence !== current.confidence) {
+    return candidate.confidence > current.confidence ? candidate : current;
+  }
+  const candidateArea = candidate.rect.width * candidate.rect.height;
+  const currentArea = current.rect.width * current.rect.height;
+  return candidateArea > currentArea ? candidate : current;
+}
+
+function geometryKey(candidate: PdfViewerPageCandidate): string {
+  const quantize = (value: number) => Math.round(value * 2);
+  const rect = candidate.rect;
+  return [
+    candidate.adapter,
+    quantize(rect.x),
+    quantize(rect.y),
+    quantize(rect.width),
+    quantize(rect.height),
+  ].join(":");
+}
+
 export async function discoverPdfViewerSnapshot(
   target: HTMLElement,
   settleMs: number,
 ): Promise<PdfViewerDiscoverySnapshot> {
   const originalLeft = target.scrollLeft;
   const originalTop = target.scrollTop;
-  const candidates: PdfViewerPageCandidate[] = [];
+  const declaredCandidates = new Map<number, PdfViewerPageCandidate>();
+  const geometryCandidates = new Map<string, PdfViewerPageCandidate[]>();
   let observedPageCount: number | undefined;
   let sampleIndex = 0;
   let stableEndRounds = 0;
@@ -157,14 +187,34 @@ export async function discoverPdfViewerSnapshot(
       globalThis.setTimeout(resolve, Math.max(0, milliseconds));
     });
 
+  const rememberCandidate = (candidate: PdfViewerPageCandidate) => {
+    const declaredIndex = candidate.declaredIndex;
+    if (declaredIndex !== undefined) {
+      declaredCandidates.set(
+        declaredIndex,
+        preferCandidate(declaredCandidates.get(declaredIndex), candidate),
+      );
+      return;
+    }
+
+    const key = geometryKey(candidate);
+    const observations = geometryCandidates.get(key) ?? [];
+    if (observations.some((observation) => observation.sampleIndex === candidate.sampleIndex)) return;
+    if (observations.length < MAX_GEOMETRY_OBSERVATIONS) {
+      observations.push(candidate);
+      geometryCandidates.set(key, observations);
+    }
+  };
+
   const sample = () => {
     const roots = collectRoots(target);
     const selected = new Set<Element>();
     let sawShadow = false;
     for (const root of roots) {
       if (root instanceof ShadowRoot) sawShadow = true;
-      if (root instanceof Element && root !== target && root.matches(PAGE_SELECTOR))
+      if (root instanceof Element && root !== target && root.matches(PAGE_SELECTOR)) {
         selected.add(root);
+      }
       for (const element of Array.from(root.querySelectorAll(PAGE_SELECTOR))) selected.add(element);
     }
     observedPageCount = Math.max(
@@ -197,7 +247,7 @@ export async function discoverPdfViewerSnapshot(
       const rect = rectInsideTarget(target, element);
       if (rect === undefined) continue;
       const declaredIndex = pageIndex(element);
-      candidates.push({
+      rememberCandidate({
         rect,
         adapter: sampleAdapter,
         confidence: declaredIndex === undefined ? Math.max(0, confidence - 0.04) : confidence,
@@ -213,7 +263,11 @@ export async function discoverPdfViewerSnapshot(
     target.scrollTop = 0;
     await frames();
     sample();
-    const boundedSettleMs = Math.min(250, Math.max(0, Math.round(settleMs)));
+    const requestedSettleMs = Math.min(
+      MAX_TERMINAL_SETTLE_MS,
+      Math.max(0, Math.round(settleMs)),
+    );
+    const intermediateSettleMs = Math.min(MAX_INTERMEDIATE_SETTLE_MS, requestedSettleMs);
     const step = Math.max(128, Math.round(Math.max(1, target.clientHeight) * 0.8));
     let nextTop = 0;
     while (sampleIndex < MAX_SAMPLES) {
@@ -222,7 +276,15 @@ export async function discoverPdfViewerSnapshot(
       nextTop = Math.min(maxTop, nextTop + step);
       target.scrollTop = nextTop;
       await frames();
-      if (boundedSettleMs > 0) await delay(boundedSettleMs);
+
+      const provisionalHeight = Math.max(1, target.scrollHeight);
+      const provisionalMaxTop = Math.max(
+        0,
+        provisionalHeight - Math.max(1, target.clientHeight),
+      );
+      const nearTerminal = target.scrollTop >= provisionalMaxTop - 1;
+      const currentSettleMs = nearTerminal ? requestedSettleMs : intermediateSettleMs;
+      if (currentSettleMs > 0) await delay(currentSettleMs);
       await frames();
       sample();
 
@@ -236,6 +298,10 @@ export async function discoverPdfViewerSnapshot(
       if (nextTop >= currentMaxTop - 1 && !atEnd) nextTop = target.scrollTop;
     }
 
+    const candidates = [
+      ...declaredCandidates.values(),
+      ...Array.from(geometryCandidates.values()).flat(),
+    ];
     return {
       adapter,
       ...((observedPageCount ?? 0) > 0 ? { declaredPageCount: observedPageCount } : {}),
