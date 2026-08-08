@@ -96,12 +96,16 @@ function isInitialDiscoveryProbe(request: ScrollAreaPageRequest): boolean {
     request.row === 0 &&
     request.column === 0 &&
     request.rows === 1 &&
-    request.columns === 1
+    request.columns === 1 &&
+    request.expectedScrollWidth === undefined &&
+    request.expectedScrollHeight === undefined &&
+    request.expectedClientWidth === undefined &&
+    request.expectedClientHeight === undefined
   );
 }
 
 function descriptorSuggestsPdf(descriptor: ElementTargetDescriptor): boolean {
-  const hint = [descriptor.tagName, ...descriptor.classNames].join(" ");
+  const hint = [descriptor.tagName, descriptor.id ?? "", ...descriptor.classNames].join(" ");
   return /(pdf|document|viewer)/iu.test(hint);
 }
 
