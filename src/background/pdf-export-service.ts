@@ -7,7 +7,8 @@ import type { PdfOutputPlan } from "@shared/contracts/pdf-capture";
 import type { PdfEditorPage } from "@shared/contracts/pdf-editor";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
-import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
+import type { ArtifactRepositoryPort, JobArtifactLookupPort } from "@storage/artifact-repository";
+import { validateCompletePdfMultipartSet } from "@shared/contracts/pdf-multipart";
 import type { PdfEditManifestRepositoryPort } from "@storage/pdf-edit-manifest-repository";
 import type { TileRepositoryPort } from "@storage/tile-repository";
 
@@ -29,7 +30,8 @@ export interface PdfExportServiceOptions {
   offscreen: PdfOffscreenPort;
   manifests?: PdfEditManifestRepositoryPort;
   pdfDocuments?: PdfCaptureOrchestratorPort;
-  artifacts?: Pick<ArtifactRepositoryPort, "delete">;
+  artifacts?: Pick<ArtifactRepositoryPort, "delete"> &
+    Partial<Pick<JobArtifactLookupPort, "listByJob">>;
   now?: () => Date;
   createId?: () => string;
   artifactTtlMs?: number;
@@ -119,7 +121,9 @@ export class PdfExportService {
   private readonly offscreen: PdfOffscreenPort;
   private readonly manifests: PdfEditManifestRepositoryPort | undefined;
   private readonly pdfDocuments: PdfCaptureOrchestratorPort | undefined;
-  private readonly artifacts: Pick<ArtifactRepositoryPort, "delete"> | undefined;
+  private readonly artifacts:
+    | (Pick<ArtifactRepositoryPort, "delete"> & Partial<Pick<JobArtifactLookupPort, "listByJob">>)
+    | undefined;
   private readonly now: () => Date;
   private readonly createId: () => string;
   private readonly artifactTtlMs: number;
@@ -142,10 +146,15 @@ export class PdfExportService {
     const current = await this.jobs.get(jobId);
     if (current === undefined) throw exportSourceError(jobId, "PdfExportJobMissing");
     if (current.state === "completed" && current.outputArtifactId !== undefined) return current;
-    if (current.state === "exporting") return current;
-    if (!["ready", "failed"].includes(current.state) || current.targetRect === undefined) {
+    if (current.state === "exporting" && this.operations.has(jobId)) return current;
+    const resumablePaused =
+      current.state === "paused" &&
+      current.activeOutputFormat === "pdf" &&
+      current.exportProgress !== undefined;
+    if (!["ready", "failed", "exporting"].includes(current.state) && !resumablePaused) {
       throw jobNotReadyError(current);
     }
+    if (current.targetRect === undefined) throw jobNotReadyError(current);
 
     const records = await this.tiles.listByJob(jobId);
     const storedIndexes = new Set(
@@ -185,18 +194,31 @@ export class PdfExportService {
     }
 
     this.cancelledJobs.delete(jobId);
-    const exporting = await this.jobs.transition(
-      jobId,
-      "exporting",
-      {
-        activeOutputFormat: "pdf",
-        error: undefined,
-        output: undefined,
-        outputArtifactId: undefined,
-        exportProgress: { completedPages: 0, totalPages },
-      },
-      { sourceArtifactExists: true },
-    );
+    const outputArtifactId = current.outputArtifactId ?? this.createId();
+    const preservedProgress =
+      current.exportProgress?.totalPages === totalPages
+        ? current.exportProgress
+        : { completedPages: 0, totalPages };
+    let exporting: CaptureJob;
+    if (current.state === "exporting") {
+      exporting =
+        current.outputArtifactId === outputArtifactId
+          ? current
+          : await this.jobs.update(jobId, { outputArtifactId });
+    } else {
+      exporting = await this.jobs.transition(
+        jobId,
+        "exporting",
+        {
+          activeOutputFormat: "pdf",
+          error: undefined,
+          output: undefined,
+          outputArtifactId,
+          exportProgress: resumablePaused ? preservedProgress : { completedPages: 0, totalPages },
+        },
+        { sourceArtifactExists: true },
+      );
+    }
 
     if (!this.operations.has(jobId)) {
       const operation = this.run(exporting, pdfSettings, pages).finally(() => {
@@ -215,6 +237,10 @@ export class PdfExportService {
     if (job.state !== "exporting") return job;
     this.cancelledJobs.add(jobId);
     return this.jobs.transition(jobId, "ready", {
+      activeOutputFormat: undefined,
+      outputArtifactId: undefined,
+      output: undefined,
+      error: undefined,
       exportProgress: job.exportProgress ?? { completedPages: 0, totalPages: 1 },
     });
   }
@@ -261,7 +287,10 @@ export class PdfExportService {
     if (targetRect === undefined) throw exportSourceError(job.id, "PdfExportTargetMissing");
     const createdAt = this.now();
     const sourceDomain = domainFromOrigin(job.source.origin);
-    const outputArtifactId = this.createId();
+    const outputArtifactId = job.outputArtifactId;
+    if (outputArtifactId === undefined) {
+      throw exportSourceError(job.id, "PdfOutputArtifactIdMissing");
+    }
     try {
       const artifact = await this.offscreen.exportPdf({
         jobId: job.id,
@@ -287,15 +316,28 @@ export class PdfExportService {
         return;
       }
 
+      const multipart = artifact.pdfPart;
+      let completedPages = artifact.pageCount ?? latest.exportProgress?.totalPages ?? 1;
+      if (multipart !== undefined) {
+        const records = await this.artifacts?.listByJob?.(job.id);
+        const group = records
+          ?.filter((record) => record.pdfPart?.groupId === multipart.groupId)
+          .map((record) => record.pdfPart)
+          .filter((part): part is NonNullable<typeof part> => part !== undefined);
+        const validation = validateCompletePdfMultipartSet(group ?? []);
+        if (!validation.valid || validation.groupId !== multipart.groupId) {
+          throw exportSourceError(job.id, "PdfMultipartArtifactsIncomplete");
+        }
+        completedPages = validation.documentPageCount;
+      }
       const dedicated = isDedicatedViewerPdfJob(latest) && latest.partialCapture === undefined;
       const completionEvidence = dedicated
-        ? await this.pdfDocuments?.completeViewerOutput(latest, artifact.pageCount ?? 0)
+        ? await this.pdfDocuments?.completeViewerOutput(latest, completedPages)
         : undefined;
       if (dedicated && completionEvidence === undefined) {
         throw exportSourceError(job.id, "PdfDocumentCompletionEvidenceUnavailable");
       }
 
-      const completedPages = artifact.pageCount ?? latest.exportProgress?.totalPages ?? 1;
       await this.jobs.transition(
         job.id,
         "completed",
@@ -325,6 +367,19 @@ export class PdfExportService {
         fallbackAllowed: false,
         safeContext: { jobId: job.id.slice(0, 24) },
       });
+      const resumable =
+        normalized.retryable &&
+        (normalized.code === "E_STORAGE_QUOTA" ||
+          normalized.code === "E_STORAGE_WRITE" ||
+          normalized.code === "E_OFFSCREEN_UNAVAILABLE");
+      if (resumable) {
+        await this.pdfDocuments?.recordPause?.(job.id, normalized).catch(() => undefined);
+        await this.jobs.transition(job.id, "paused", {
+          activeOutputFormat: "pdf",
+          error: normalized,
+        });
+        return;
+      }
       await this.pdfDocuments?.recordFailure(job.id, normalized).catch(() => undefined);
       await this.jobs.transition(job.id, "failed", {
         activeOutputFormat: "pdf",

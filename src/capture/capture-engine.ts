@@ -35,6 +35,13 @@ export interface AdaptiveCaptureResumeState {
   metrics?: PageMetrics;
 }
 
+export interface PageNativeCaptureResumeState {
+  tilePlan: CaptureTile[];
+  metrics: PageMetrics;
+  targetRect: Rect;
+  documentPageMap: DocumentPageMap;
+}
+
 export interface CaptureEngineContext {
   jobId: string;
   tabId: number;
@@ -45,6 +52,7 @@ export interface CaptureEngineContext {
   targetDescriptor?: ElementTargetDescriptor;
   preparation?: PagePreparationReadyPayload;
   resume?: AdaptiveCaptureResumeState;
+  pageNativeResume?: PageNativeCaptureResumeState;
   cancellation: CaptureCancellation;
   onPlan(
     metrics: PageMetrics,

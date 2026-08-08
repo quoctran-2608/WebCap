@@ -34,6 +34,7 @@ export interface PdfCaptureOrchestratorPort {
     totalPages: number,
   ): Promise<PdfDocumentManifest | undefined>;
   completeViewerOutput(job: CaptureJob, outputPageCount: number): Promise<PdfCompletionEvidence>;
+  recordPause?(jobId: string, error: WebCapErrorData): Promise<void>;
   recordFailure(jobId: string, error: WebCapErrorData): Promise<void>;
   getManifest(jobId: string): Promise<PdfDocumentManifest | undefined>;
 }
@@ -379,6 +380,25 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
       return manifest;
     }
 
+    if (manifest.state === "paused") {
+      if (!sameOutputPlan(manifest.outputPlan, outputPlan)) {
+        throw pdfError(
+          "A paused PDF export cannot resume with a different verified output plan.",
+          "PdfOutputPlanChanged",
+          { jobId: job.id.slice(0, 24) },
+        );
+      }
+      const now = this.now();
+      const writing = transitionPdfManifest(manifest, "writing", now.toISOString(), {
+        outputState: "writing",
+        error: undefined,
+        expiresAt: addMilliseconds(now, this.manifestTtlMs),
+      });
+      if (!writing.ok) throw createWebCapRuntimeError(writing.error);
+      await this.manifests.save(writing.value, manifest.revision);
+      return writing.value;
+    }
+
     if (manifest.state === "completed") {
       const now = this.now();
       const writing = transitionPdfManifest(manifest, "writing", now.toISOString(), {
@@ -582,6 +602,35 @@ export class PdfCaptureOrchestrator implements PdfCaptureOrchestratorPort {
       outputPageCount,
       verified: true,
     });
+  }
+
+  async recordPause(jobId: string, error: WebCapErrorData): Promise<void> {
+    const manifest = await this.manifests.get(jobId);
+    if (
+      manifest === undefined ||
+      manifest.state === "completed" ||
+      manifest.state === "cancelled" ||
+      manifest.state === "failed"
+    ) {
+      return;
+    }
+    if (manifest.state === "paused") {
+      const now = this.now();
+      const updated = updatePdfManifest(manifest, now.toISOString(), {
+        error,
+        expiresAt: addMilliseconds(now, this.manifestTtlMs),
+      });
+      if (!updated.ok) throw createWebCapRuntimeError(updated.error);
+      await this.manifests.save(updated.value, manifest.revision);
+      return;
+    }
+    const now = this.now();
+    const paused = transitionPdfManifest(manifest, "paused", now.toISOString(), {
+      error,
+      expiresAt: addMilliseconds(now, this.manifestTtlMs),
+    });
+    if (!paused.ok) throw createWebCapRuntimeError(paused.error);
+    await this.manifests.save(paused.value, manifest.revision);
   }
 
   async recordFailure(jobId: string, error: WebCapErrorData): Promise<void> {

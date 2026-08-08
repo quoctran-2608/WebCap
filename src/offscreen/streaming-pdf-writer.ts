@@ -3,13 +3,22 @@ import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/erro
 import type { PdfSpoolFile, PdfSpoolWritable } from "@storage/pdf-output-spool";
 
 const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 const MAX_PDF_XREF_OFFSET = 9_999_999_999;
+const PDF_HEADER_BYTES = 15;
 
 export interface StreamingPdfWriterCheckpoint {
   spoolReference: string;
   pagesWritten: number;
   totalPages: number;
   byteLength: number;
+}
+
+export interface StreamingPdfWriterResumeState {
+  pagesWritten: number;
+  totalPages: number;
+  byteLength: number;
+  offsets: number[];
 }
 
 export interface StreamingPdfPageInput {
@@ -73,6 +82,136 @@ function expectedObjectSize(totalPages: number): number {
   return 3 + totalPages * 3;
 }
 
+async function readAscii(blob: Blob, offset: number, maximum: number): Promise<string> {
+  return decoder.decode(
+    await blob.slice(offset, Math.min(blob.size, offset + maximum)).arrayBuffer(),
+  );
+}
+
+async function expectAscii(blob: Blob, offset: number, expected: string): Promise<void> {
+  const actual = await readAscii(blob, offset, expected.length);
+  if (actual !== expected) {
+    throw writerError(
+      "The durable streamed PDF checkpoint does not match the expected object sequence.",
+      "StreamingPdfResumeStructureMismatch",
+      { offset },
+    );
+  }
+}
+
+function streamLength(header: string): number {
+  const match = /\/Length\s+(\d+)/u.exec(header);
+  const value = match === null ? Number.NaN : Number(match[1]);
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw writerError(
+      "The durable streamed PDF checkpoint contains an invalid stream length.",
+      "StreamingPdfResumeLengthInvalid",
+    );
+  }
+  return value;
+}
+
+export async function recoverStreamingPdfWriterState(
+  blob: Blob,
+  pagesWritten: number,
+  totalPages: number,
+): Promise<StreamingPdfWriterResumeState> {
+  if (
+    !Number.isInteger(pagesWritten) ||
+    pagesWritten < 0 ||
+    !Number.isInteger(totalPages) ||
+    totalPages <= 0 ||
+    pagesWritten > totalPages
+  ) {
+    throw writerError(
+      "The streamed PDF recovery checkpoint has an invalid page count.",
+      "StreamingPdfResumePageCountInvalid",
+    );
+  }
+  if (pagesWritten === 0) {
+    return {
+      pagesWritten: 0,
+      totalPages,
+      byteLength: 0,
+      offsets: new Array<number>(expectedObjectSize(totalPages))
+        .fill(-1)
+        .map((value, index) => (index === 0 ? 0 : value)),
+    };
+  }
+  if (blob.size < PDF_HEADER_BYTES) {
+    throw writerError(
+      "The durable streamed PDF checkpoint is shorter than its PDF header.",
+      "StreamingPdfResumeTruncated",
+    );
+  }
+  await expectAscii(blob, 0, "%PDF-1.7\n");
+  const offsets = new Array<number>(expectedObjectSize(totalPages)).fill(-1);
+  offsets[0] = 0;
+  let offset = PDF_HEADER_BYTES;
+
+  for (let pageIndex = 0; pageIndex < pagesWritten; pageIndex += 1) {
+    const pageObject = pageObjectNumber(pageIndex);
+    const imageObject = imageObjectNumber(pageIndex);
+    const contentObject = contentObjectNumber(pageIndex);
+
+    offsets[pageObject] = offset;
+    await expectAscii(blob, offset, `${pageObject} 0 obj\n`);
+    const pageText = await readAscii(blob, offset, 2_048);
+    const pageEnd = pageText.indexOf("endobj\n");
+    if (pageEnd < 0) {
+      throw writerError(
+        "The durable streamed PDF page object is incomplete.",
+        "StreamingPdfResumePageObjectIncomplete",
+        { pageIndex },
+      );
+    }
+    offset += pageEnd + "endobj\n".length;
+
+    offsets[imageObject] = offset;
+    await expectAscii(blob, offset, `${imageObject} 0 obj\n`);
+    const imageHeader = await readAscii(blob, offset, 2_048);
+    const imageStream = imageHeader.indexOf("stream\n");
+    if (imageStream < 0) {
+      throw writerError(
+        "The durable streamed PDF image object is incomplete.",
+        "StreamingPdfResumeImageHeaderIncomplete",
+        { pageIndex },
+      );
+    }
+    const imageLength = streamLength(imageHeader.slice(0, imageStream));
+    offset += imageStream + "stream\n".length + imageLength;
+    const imageTail = "\nendstream\nendobj\n";
+    await expectAscii(blob, offset, imageTail);
+    offset += imageTail.length;
+
+    offsets[contentObject] = offset;
+    await expectAscii(blob, offset, `${contentObject} 0 obj\n`);
+    const contentHeader = await readAscii(blob, offset, 1_024);
+    const contentStream = contentHeader.indexOf("stream\n");
+    if (contentStream < 0) {
+      throw writerError(
+        "The durable streamed PDF content object is incomplete.",
+        "StreamingPdfResumeContentHeaderIncomplete",
+        { pageIndex },
+      );
+    }
+    const contentLength = streamLength(contentHeader.slice(0, contentStream));
+    offset += contentStream + "stream\n".length + contentLength;
+    const contentTail = "endstream\nendobj\n";
+    await expectAscii(blob, offset, contentTail);
+    offset += contentTail.length;
+  }
+
+  if (offset !== blob.size) {
+    throw writerError(
+      "The durable streamed PDF checkpoint contains bytes beyond the verified page boundary.",
+      "StreamingPdfResumeBoundaryMismatch",
+      { verifiedBytes: offset, checkpointBytes: blob.size },
+    );
+  }
+  return { pagesWritten, totalPages, byteLength: blob.size, offsets };
+}
+
 export class SequentialRasterPdfWriter {
   private readonly output: PdfSpoolWritable;
   private readonly totalPages: number;
@@ -81,7 +220,11 @@ export class SequentialRasterPdfWriter {
   private finalized = false;
   private pagesWritten = 0;
 
-  constructor(output: PdfSpoolWritable, totalPages: number) {
+  constructor(
+    output: PdfSpoolWritable,
+    totalPages: number,
+    resume?: StreamingPdfWriterResumeState,
+  ) {
     if (!Number.isInteger(totalPages) || totalPages <= 0) {
       throw writerError(
         "Streamed PDF output requires a positive page count.",
@@ -92,6 +235,23 @@ export class SequentialRasterPdfWriter {
     this.totalPages = totalPages;
     this.offsets = new Array<number>(expectedObjectSize(totalPages)).fill(-1);
     this.offsets[0] = 0;
+    if (resume !== undefined) {
+      if (
+        resume.totalPages !== totalPages ||
+        resume.byteLength !== output.byteLength ||
+        resume.offsets.length !== this.offsets.length
+      ) {
+        throw writerError(
+          "The streamed PDF writer resume state does not match the output checkpoint.",
+          "StreamingPdfResumeStateMismatch",
+        );
+      }
+      this.pagesWritten = resume.pagesWritten;
+      this.initialized = resume.pagesWritten > 0;
+      for (let index = 0; index < resume.offsets.length; index += 1) {
+        this.offsets[index] = resume.offsets[index] ?? -1;
+      }
+    }
   }
 
   get checkpoint(): StreamingPdfWriterCheckpoint {
@@ -117,9 +277,7 @@ export class SequentialRasterPdfWriter {
       throw writerError(
         "The streamed PDF exceeded the supported xref offset range.",
         "StreamingPdfXrefOverflow",
-        {
-          byteLength: offset,
-        },
+        { byteLength: offset },
       );
     }
     this.offsets[objectNumber] = offset;
@@ -175,9 +333,7 @@ export class SequentialRasterPdfWriter {
       throw writerError(
         "A streamed PDF page has invalid raster or geometry metadata.",
         "StreamingPdfPageInvalid",
-        {
-          pageIndex: this.pagesWritten,
-        },
+        { pageIndex: this.pagesWritten },
       );
     }
 
@@ -212,6 +368,17 @@ export class SequentialRasterPdfWriter {
     return this.checkpoint;
   }
 
+  async commit(): Promise<StreamingPdfWriterCheckpoint> {
+    if (this.finalized) {
+      throw writerError(
+        "The streamed PDF writer is already finalized.",
+        "StreamingPdfWriterFinalized",
+      );
+    }
+    await this.output.commit?.();
+    return this.checkpoint;
+  }
+
   async finalize(): Promise<StreamingPdfWriterResult> {
     if (this.finalized) {
       throw writerError(
@@ -223,10 +390,7 @@ export class SequentialRasterPdfWriter {
       throw writerError(
         "The streamed PDF writer cannot finalize before every planned page is written.",
         "StreamingPdfPagesIncomplete",
-        {
-          pagesWritten: this.pagesWritten,
-          totalPages: this.totalPages,
-        },
+        { pagesWritten: this.pagesWritten, totalPages: this.totalPages },
       );
     }
     await this.initialize();
@@ -253,9 +417,7 @@ export class SequentialRasterPdfWriter {
         throw writerError(
           "The streamed PDF xref table is incomplete.",
           "StreamingPdfXrefIncomplete",
-          {
-            objectNumber,
-          },
+          { objectNumber },
         );
       }
       await this.writeText(`${Math.floor(offset).toString().padStart(10, "0")} 00000 n \n`);
@@ -276,6 +438,16 @@ export class SequentialRasterPdfWriter {
         byteLength: file.byteLength,
       },
     };
+  }
+
+  async suspend(): Promise<void> {
+    if (this.finalized) return;
+    this.finalized = true;
+    if (this.output.rollback !== undefined) {
+      await this.output.rollback();
+      return;
+    }
+    await this.output.close().then(() => undefined);
   }
 
   async abort(): Promise<void> {

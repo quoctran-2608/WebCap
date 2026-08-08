@@ -1,5 +1,6 @@
 import type { ArtifactMetadata, ArtifactRecord } from "@shared/contracts/artifact";
 import type { PdfEditorPage } from "@shared/contracts/pdf-editor";
+import type { PdfMultipartMetadata } from "@shared/contracts/pdf-multipart";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
 import { isPdfSpoolFallbackAllowed, type PdfOutputSpoolPort } from "@storage/pdf-output-spool";
@@ -21,8 +22,13 @@ import type {
   PdfPageCanvasPort,
   PdfExporter,
 } from "./pdf-exporter";
+import {
+  multipartPdfFilename,
+  planPdfMultipart,
+  type PdfMultipartPlan,
+} from "./pdf-multipart-planner";
 import { assertStreamingPdfStructure } from "./streaming-pdf-integrity";
-import { SequentialRasterPdfWriter } from "./streaming-pdf-writer";
+import { SequentialRasterPdfWriter, recoverStreamingPdfWriterState } from "./streaming-pdf-writer";
 
 export interface StreamingPdfExportEnvironment {
   decode(blob: Blob): Promise<DecodedPdfTile>;
@@ -38,6 +44,7 @@ export interface StreamingPdfExporterOptions {
   checkpoints: PdfWriterCheckpointRepositoryPort;
   fallback: Pick<PdfExporter, "export">;
   environment?: StreamingPdfExportEnvironment;
+  maxPartBytes?: number;
 }
 
 interface PerformanceWithMemory extends Performance {
@@ -46,6 +53,8 @@ interface PerformanceWithMemory extends Performance {
     jsHeapSizeLimit: number;
   };
 }
+
+const DEFAULT_MAX_PDF_PART_BYTES = 512 * 1024 * 1024;
 
 const defaultEnvironment: StreamingPdfExportEnvironment = {
   async decode(blob) {
@@ -144,6 +153,42 @@ function storageReadError(message: string, safeContext: Record<string, string | 
   );
 }
 
+function storagePressurePause(
+  jobId: string,
+  pageIndex: number,
+  availableBytes: number,
+  requiredBytes: number,
+): Error {
+  return createWebCapRuntimeError(
+    createWebCapError({
+      code: "E_STORAGE_QUOTA",
+      stage: "storage",
+      message:
+        "PDF export paused at a durable page boundary because local storage is under pressure.",
+      userMessageKey: "errors.storageQuota",
+      retryable: true,
+      fallbackAllowed: false,
+      causeCode: "StreamingPdfStoragePressurePaused",
+      safeContext: {
+        jobId: jobId.slice(0, 24),
+        pageIndex,
+        availableBytes,
+        requiredBytes,
+      },
+    }),
+  );
+}
+
+function resumableStorageError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("data" in error)) return false;
+  const data = (error as { data?: { code?: unknown; retryable?: unknown; stage?: unknown } }).data;
+  return (
+    data?.retryable === true &&
+    data.stage === "storage" &&
+    (data.code === "E_STORAGE_QUOTA" || data.code === "E_STORAGE_WRITE")
+  );
+}
+
 function cancelledError(jobId: string): Error {
   return createWebCapRuntimeError(
     createWebCapError({
@@ -224,6 +269,7 @@ function artifactMetadata(record: ArtifactRecord): ArtifactMetadata {
     width: record.width,
     height: record.height,
     ...(record.pageCount === undefined ? {} : { pageCount: record.pageCount }),
+    ...(record.pdfPart === undefined ? {} : { pdfPart: record.pdfPart }),
     createdAt: record.createdAt,
     expiresAt: record.expiresAt,
   };
@@ -236,6 +282,7 @@ export class StreamingPdfExporter {
   private readonly checkpoints: PdfWriterCheckpointRepositoryPort;
   private readonly fallback: Pick<PdfExporter, "export">;
   private readonly environment: StreamingPdfExportEnvironment;
+  private readonly maxPartBytes: number;
 
   constructor(options: StreamingPdfExporterOptions) {
     this.tiles = options.tiles;
@@ -244,34 +291,265 @@ export class StreamingPdfExporter {
     this.checkpoints = options.checkpoints;
     this.fallback = options.fallback;
     this.environment = options.environment ?? defaultEnvironment;
+    this.maxPartBytes = Math.max(1, Math.floor(options.maxPartBytes ?? DEFAULT_MAX_PDF_PART_BYTES));
   }
 
   async export(
     payload: PdfExportPayload,
     reportProgress: (progress: PdfExportProgress) => Promise<boolean> = () => Promise.resolve(true),
   ): Promise<PdfExportResult> {
-    const startedAt = nowMilliseconds(this.environment);
-    await this.checkpoints.delete(payload.jobId).catch(() => false);
+    const writerPages = payload.pages ?? defaultEditorPages(payload);
+    const firstTile = payload.tiles[0];
+    if (writerPages.length === 0 || firstTile === undefined) {
+      return this.exportSingle(payload, reportProgress);
+    }
+    const renderScaleX = positiveScale(
+      firstTile.expectedPixelWidth / firstTile.sourceRectCss.width,
+      "x",
+    );
+    const renderScaleY = positiveScale(
+      firstTile.expectedPixelHeight / firstTile.sourceRectCss.height,
+      "y",
+    );
+    const estimates = writerPages.map((page) =>
+      Math.max(
+        1,
+        Math.ceil(
+          page.sourceRectCss.width * page.sourceRectCss.height * renderScaleX * renderScaleY * 1.5 +
+            64 * 1024,
+        ),
+      ),
+    );
+    const plan = planPdfMultipart(estimates, { maxPartBytes: this.maxPartBytes });
+    if (plan.parts.length <= 1) {
+      return this.exportSingle({ ...payload, pages: writerPages }, reportProgress);
+    }
+    return this.exportMultipart(
+      payload,
+      writerPages,
+      plan,
+      renderScaleX,
+      renderScaleY,
+      reportProgress,
+    );
+  }
 
-    let output;
-    try {
-      output = await this.spool.createOutput(payload.outputArtifactId);
-    } catch (error) {
-      if (isPdfSpoolFallbackAllowed(error)) {
-        return this.fallback.export(payload, reportProgress);
+  private async exportMultipart(
+    payload: PdfExportPayload,
+    writerPages: readonly PdfEditorPage[],
+    plan: PdfMultipartPlan,
+    renderScaleX: number,
+    renderScaleY: number,
+    reportProgress: (progress: PdfExportProgress) => Promise<boolean>,
+  ): Promise<PdfExportResult> {
+    let lastResult: PdfExportResult | undefined;
+    for (const part of plan.parts) {
+      const partNumber = part.partIndex + 1;
+      const partArtifactId =
+        part.partIndex === 0
+          ? payload.outputArtifactId
+          : `${payload.outputArtifactId.slice(0, 140)}.part-${String(partNumber).padStart(3, "0")}`;
+      const metadata: PdfMultipartMetadata = {
+        schemaVersion: 1,
+        groupId: payload.outputArtifactId,
+        partIndex: part.partIndex,
+        partCount: plan.parts.length,
+        startPageIndex: part.startPageIndex,
+        endPageIndexExclusive: part.endPageIndexExclusive,
+        documentPageCount: plan.totalPages,
+      };
+
+      const existing = await this.artifacts.get(partArtifactId);
+      if (
+        existing?.format === "pdf" &&
+        existing.opfsReference !== undefined &&
+        existing.pdfPart?.groupId === metadata.groupId &&
+        existing.pdfPart.partIndex === metadata.partIndex &&
+        existing.pdfPart.partCount === metadata.partCount &&
+        existing.pdfPart.startPageIndex === metadata.startPageIndex &&
+        existing.pdfPart.endPageIndexExclusive === metadata.endPageIndexExclusive &&
+        existing.pdfPart.documentPageCount === metadata.documentPageCount
+      ) {
+        const blob = await this.spool.read(existing.opfsReference);
+        await assertStreamingPdfStructure(blob, part.pageCount);
+        const checkpoint = await this.checkpoints.get(payload.jobId).catch(() => undefined);
+        if (checkpoint?.outputArtifactId === partArtifactId) {
+          await this.checkpoints.delete(payload.jobId).catch(() => false);
+        }
+        const accepted = await reportProgress({
+          jobId: payload.jobId,
+          completedPages: part.endPageIndexExclusive,
+          totalPages: plan.totalPages,
+        });
+        if (!accepted) throw cancelledError(payload.jobId);
+        continue;
       }
-      throw error;
+
+      const staleCheckpoint = await this.checkpoints.get(payload.jobId).catch(() => undefined);
+      if (staleCheckpoint !== undefined && staleCheckpoint.outputArtifactId !== partArtifactId) {
+        await this.checkpoints.delete(payload.jobId).catch(() => false);
+      }
+      const pages = writerPages.slice(part.startPageIndex, part.endPageIndexExclusive);
+      const result = await this.exportSingle(
+        {
+          ...payload,
+          outputArtifactId: partArtifactId,
+          pages,
+          filename: multipartPdfFilename(payload.filename, part, plan.parts.length),
+        },
+        (progress) =>
+          reportProgress({
+            jobId: payload.jobId,
+            completedPages: part.startPageIndex + progress.completedPages,
+            totalPages: plan.totalPages,
+          }),
+        metadata,
+      );
+      lastResult = result;
+      await this.checkpoints.delete(payload.jobId).catch(() => false);
     }
 
+    const first = await this.artifacts.get(payload.outputArtifactId);
+    if (first === undefined) {
+      throw storageReadError("The first PDF multipart artifact is unavailable after export.", {
+        jobId: payload.jobId.slice(0, 24),
+      });
+    }
+    if (lastResult === undefined) {
+      const firstBlob =
+        first.opfsReference === undefined ? first.blob : await this.spool.read(first.opfsReference);
+      if (firstBlob === undefined) {
+        throw storageReadError("The first PDF multipart bytes are unavailable.", {
+          jobId: payload.jobId.slice(0, 24),
+        });
+      }
+      const integrity = await assertStreamingPdfStructure(firstBlob, first.pageCount ?? 1);
+      const firstPage = writerPages[0];
+      if (firstPage === undefined) {
+        throw exportError("PDF multipart page metadata is unavailable.", "PdfMultipartPageMissing");
+      }
+      const maxPagePixelArea = Math.max(
+        1,
+        Math.ceil(
+          firstPage.sourceRectCss.width *
+            firstPage.sourceRectCss.height *
+            renderScaleX *
+            renderScaleY,
+        ),
+      );
+      const memoryEstimate = assertPdfExportMemorySafe({
+        widthCss: firstPage.sourceRectCss.width,
+        heightCss: firstPage.sourceRectCss.height,
+        renderScaleX,
+        renderScaleY,
+        tileCount: 1,
+        tileBytes: 1,
+        pageCount: plan.totalPages,
+        maxPagePixelArea,
+        largestTilePixelArea: 1,
+        jpegQuality: payload.settings.jpegQuality,
+      });
+      return {
+        artifact: artifactMetadata(first),
+        diagnostics: {
+          pageCount: plan.totalPages,
+          decodedTileCount: 0,
+          maxDecodedTiles: 0,
+          maxCanvasPixelArea: 0,
+          releasedCanvasCount: 0,
+          durationMs: 0,
+          artifactBytes: first.byteLength,
+          memoryEstimate,
+          integrity: {
+            valid: integrity.valid,
+            pageCount: plan.totalPages,
+            imageObjectCount: plan.totalPages,
+            nonEmptyStreamCount: plan.totalPages * 2,
+          },
+        },
+      };
+    }
+    return {
+      artifact: artifactMetadata(first),
+      diagnostics: {
+        ...lastResult.diagnostics,
+        pageCount: plan.totalPages,
+        integrity: {
+          ...lastResult.diagnostics.integrity,
+          valid: true,
+          pageCount: plan.totalPages,
+          imageObjectCount: plan.totalPages,
+          nonEmptyStreamCount: plan.totalPages * 2,
+        },
+      },
+    };
+  }
+
+  private async exportSingle(
+    payload: PdfExportPayload,
+    reportProgress: (progress: PdfExportProgress) => Promise<boolean> = () => Promise.resolve(true),
+    pdfPart?: PdfMultipartMetadata,
+  ): Promise<PdfExportResult> {
+    const startedAt = nowMilliseconds(this.environment);
     const writerPages = payload.pages ?? defaultEditorPages(payload);
     if (writerPages.length === 0) {
-      await output.abort().catch(() => undefined);
       throw exportError(
         "PDF export requires at least one selected page.",
         "StreamingPdfPagesMissing",
       );
     }
-    const writer = new SequentialRasterPdfWriter(output, writerPages.length);
+
+    let output;
+    let writer: SequentialRasterPdfWriter | undefined;
+    let startOutputIndex = 0;
+    const durableCheckpoint = await this.checkpoints.get(payload.jobId).catch(() => undefined);
+    if (
+      durableCheckpoint !== undefined &&
+      durableCheckpoint.outputArtifactId === payload.outputArtifactId &&
+      durableCheckpoint.totalPages === writerPages.length &&
+      durableCheckpoint.pagesWritten <= writerPages.length &&
+      this.spool.resumeOutput !== undefined
+    ) {
+      try {
+        const persisted = await this.spool.read(durableCheckpoint.spoolReference);
+        if (persisted.size < durableCheckpoint.byteLength) {
+          throw exportError(
+            "The streamed PDF spool is shorter than its writer checkpoint.",
+            "StreamingPdfResumeSpoolTruncated",
+          );
+        }
+        const durableBlob = persisted.slice(0, durableCheckpoint.byteLength, "application/pdf");
+        const resume = await recoverStreamingPdfWriterState(
+          durableBlob,
+          durableCheckpoint.pagesWritten,
+          writerPages.length,
+        );
+        output = await this.spool.resumeOutput(
+          durableCheckpoint.spoolReference,
+          durableCheckpoint.byteLength,
+        );
+        writer = new SequentialRasterPdfWriter(output, writerPages.length, resume);
+        startOutputIndex = durableCheckpoint.pagesWritten;
+      } catch {
+        await this.spool.delete(durableCheckpoint.spoolReference).catch(() => undefined);
+        await this.checkpoints.delete(payload.jobId).catch(() => false);
+      }
+    } else if (durableCheckpoint !== undefined) {
+      await this.spool.delete(durableCheckpoint.spoolReference).catch(() => undefined);
+      await this.checkpoints.delete(payload.jobId).catch(() => false);
+    }
+
+    if (writer === undefined) {
+      try {
+        output = await this.spool.createOutput(payload.outputArtifactId);
+      } catch (error) {
+        if (isPdfSpoolFallbackAllowed(error)) {
+          return this.fallback.export(payload, reportProgress);
+        }
+        throw error;
+      }
+      writer = new SequentialRasterPdfWriter(output, writerPages.length);
+    }
     const rasterReferences = new Set<string>();
 
     try {
@@ -395,8 +673,32 @@ export class StreamingPdfExporter {
         if (snapshot.limitBytes !== undefined) heapLimitBytes = snapshot.limitBytes;
       };
 
-      for (const [outputIndex, entry] of pagePixelRanges.entries()) {
+      for (
+        let outputIndex = startOutputIndex;
+        outputIndex < pagePixelRanges.length;
+        outputIndex += 1
+      ) {
+        const entry = pagePixelRanges[outputIndex];
+        if (entry === undefined) {
+          throw exportError(
+            "A streamed PDF page plan is unavailable during recovery.",
+            "StreamingPdfRecoveryPageMissing",
+          );
+        }
         const { page, pixelXRange, pixelYRange } = entry;
+        const estimatedPageBytes = Math.max(
+          1,
+          Math.ceil(pixelXRange.length * pixelYRange.length * 4 * 2 + 64 * 1024),
+        );
+        const availableBytes = await this.spool.availableBytes();
+        if (availableBytes !== undefined && availableBytes < estimatedPageBytes) {
+          throw storagePressurePause(
+            payload.jobId,
+            outputIndex,
+            availableBytes,
+            estimatedPageBytes,
+          );
+        }
         const canvasWidth = pixelXRange.length;
         const canvasHeight = pixelYRange.length;
         const canvas = this.environment.createCanvas(canvasWidth, canvasHeight);
@@ -511,7 +813,7 @@ export class StreamingPdfExporter {
           rasterReference = raster.reference;
           rasterReferences.add(raster.reference);
 
-          const checkpoint = await writer.addJpegPage({
+          await writer.addJpegPage({
             jpeg: raster.blob,
             pixelWidth: canvasWidth,
             pixelHeight: canvasHeight,
@@ -519,6 +821,9 @@ export class StreamingPdfExporter {
             pageHeightPt: page.pageHeightPt,
             imageRectPt: page.imageRectPt,
           });
+          // The OPFS page boundary is committed before the IndexedDB checkpoint. A crash
+          // between these operations is recovered by truncating back to the older checkpoint.
+          const checkpoint = await writer.commit();
           const now = new Date();
           const durableCheckpoint: PdfWriterCheckpoint = {
             schemaVersion: 1,
@@ -555,19 +860,9 @@ export class StreamingPdfExporter {
       }
 
       const finalized = await writer.finalize();
-      const finalCheckpoint: PdfWriterCheckpoint = {
-        schemaVersion: 1,
-        jobId: payload.jobId,
-        outputArtifactId: payload.outputArtifactId,
-        spoolReference: finalized.checkpoint.spoolReference,
-        pagesWritten: finalized.checkpoint.pagesWritten,
-        totalPages: finalized.checkpoint.totalPages,
-        byteLength: finalized.checkpoint.byteLength,
-        createdAt: payload.createdAt,
-        updatedAt: new Date().toISOString(),
-        expiresAt: payload.expiresAt,
-      };
-      await this.checkpoints.put(finalCheckpoint);
+      // Keep the last page-only durable checkpoint until job cleanup. If the background loses
+      // the completion response, recovery truncates the final xref/trailer and re-finalizes
+      // deterministically without re-rendering verified pages.
       const integrity = await assertStreamingPdfStructure(finalized.file.blob, writerPages.length);
       const firstPage = writerPages[0];
       if (firstPage === undefined) {
@@ -589,6 +884,7 @@ export class StreamingPdfExporter {
         width: Math.max(1, Math.round(firstPage.pageWidthPt)),
         height: Math.max(1, Math.round(firstPage.pageHeightPt)),
         pageCount: writerPages.length,
+        ...(pdfPart === undefined ? {} : { pdfPart }),
         createdAt: payload.createdAt,
         expiresAt: payload.expiresAt,
         opfsReference: finalized.file.reference,
@@ -619,7 +915,12 @@ export class StreamingPdfExporter {
         },
       };
     } catch (error) {
-      await writer.abort().catch(() => undefined);
+      if (resumableStorageError(error)) {
+        await writer.suspend().catch(() => undefined);
+      } else {
+        await writer.abort().catch(() => undefined);
+        await this.checkpoints.delete(payload.jobId).catch(() => false);
+      }
       for (const reference of rasterReferences) {
         await this.spool.delete(reference).catch(() => undefined);
       }

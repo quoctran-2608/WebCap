@@ -6,6 +6,7 @@ import type {
   OutputFormat,
 } from "@shared/contracts/domain";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
+import { validateCompletePdfMultipartSet } from "@shared/contracts/pdf-multipart";
 import type { JobArtifactLookupPort } from "@storage/artifact-repository";
 
 import { completionPolicyForJob } from "./capture-completion-policy";
@@ -100,6 +101,7 @@ function newestOutput(records: ArtifactRecord[]): ArtifactRecord | undefined {
 
 export class CaptureCompletionService {
   private readonly pdfDocuments: PdfCaptureOrchestratorPort | undefined;
+  private readonly recoveredPdfJobs = new Set<string>();
 
   constructor(private readonly options: CaptureCompletionServiceOptions) {
     this.pdfDocuments = options.pdfDocuments ?? getPdfCaptureOrchestrator();
@@ -145,15 +147,37 @@ export class CaptureCompletionService {
     const reconciled = await this.reconcileExistingOutput(job);
     if (reconciled !== undefined) return reconciled;
     if (job.state === "ready") return this.startAuto(job.id);
+    if (job.activeOutputFormat === "pdf" && (job.state === "exporting" || job.state === "paused")) {
+      if (job.state === "exporting" && this.recoveredPdfJobs.has(job.id)) return job;
+      this.recoveredPdfJobs.add(job.id);
+      try {
+        return await this.options.pdf.start(job.id);
+      } catch (error) {
+        this.recoveredPdfJobs.delete(job.id);
+        throw error;
+      }
+    }
     if (job.state === "failed" && job.error?.causeCode === "ServiceWorkerRestart") {
-      return this.startAuto(job.id);
+      if (this.recoveredPdfJobs.has(job.id)) return job;
+      this.recoveredPdfJobs.add(job.id);
+      try {
+        return await this.startAuto(job.id);
+      } catch (error) {
+        this.recoveredPdfJobs.delete(job.id);
+        throw error;
+      }
     }
     return job;
   }
 
   async recoverAll(): Promise<CaptureJob[]> {
     const jobs = (await this.options.jobs.listActive?.()) ?? [];
-    const candidates = jobs.filter((job) => job.state === "ready" || job.state === "failed");
+    const candidates = jobs.filter(
+      (job) =>
+        job.state === "ready" ||
+        job.state === "failed" ||
+        (job.activeOutputFormat === "pdf" && (job.state === "exporting" || job.state === "paused")),
+    );
     const settled = await Promise.allSettled(candidates.map((job) => this.recover(job.id)));
     return settled.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
   }
@@ -178,10 +202,20 @@ export class CaptureCompletionService {
   }
 
   private async reconcileExistingOutput(job: CaptureJob): Promise<CaptureJob | undefined> {
-    if (!["ready", "failed", "exporting"].includes(job.state)) return undefined;
-    const artifact = newestOutput(await this.options.artifacts.listByJob(job.id));
+    if (!["ready", "failed", "exporting", "paused"].includes(job.state)) return undefined;
+    const records = await this.options.artifacts.listByJob(job.id);
+    const artifact = newestOutput(records);
     if (artifact === undefined) return undefined;
-    const totalPages = artifact.format === "pdf" ? (artifact.pageCount ?? 1) : 1;
+    let totalPages = artifact.format === "pdf" ? (artifact.pageCount ?? 1) : 1;
+    if (artifact.pdfPart !== undefined) {
+      const parts = records
+        .filter((record) => record.pdfPart?.groupId === artifact.pdfPart?.groupId)
+        .map((record) => record.pdfPart)
+        .filter((part): part is NonNullable<typeof part> => part !== undefined);
+      const validation = validateCompletePdfMultipartSet(parts);
+      if (!validation.valid) return undefined;
+      totalPages = validation.documentPageCount;
+    }
     const dedicated =
       artifact.format === "pdf" && isDedicatedViewerPdfJob(job) && job.partialCapture === undefined;
     const evidence = dedicated
@@ -196,6 +230,7 @@ export class CaptureCompletionService {
         "exporting",
         {
           activeOutputFormat: artifact.format,
+          error: undefined,
           exportProgress: { completedPages: 0, totalPages },
         },
         { sourceArtifactExists: true },

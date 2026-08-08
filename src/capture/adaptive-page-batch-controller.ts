@@ -66,10 +66,17 @@ export class AdaptivePageBatchController {
     );
   }
 
-  nextBatch(pages: readonly DocumentPage[], startPageIndex: number): AdaptivePageBatch | undefined {
+  nextBatch(
+    pages: readonly DocumentPage[],
+    startPageIndex: number,
+    limits: { maxEstimatedBytesPerBatch?: number } = {},
+  ): AdaptivePageBatch | undefined {
     if (startPageIndex >= pages.length) return undefined;
     const maxTiles = Math.max(1, Math.floor(this.options.maxTilesPerBatch));
-    const maxBytes = Math.max(1, Math.floor(this.options.maxEstimatedBytesPerBatch));
+    const maxBytes = Math.max(
+      1,
+      Math.floor(limits.maxEstimatedBytesPerBatch ?? this.options.maxEstimatedBytesPerBatch),
+    );
     const pageIndexes: number[] = [];
     let estimatedTiles = 0;
     let estimatedRasterBytes = 0;

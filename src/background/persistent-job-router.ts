@@ -77,6 +77,8 @@ import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/erro
 import { normalizeError } from "@shared/errors/normalize-error";
 import { IndexedDbDedupeRepository, type DedupeRepositoryPort } from "@storage/dedupe-repository";
 import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
+import { OpfsPdfOutputSpool } from "@storage/pdf-output-spool";
+import { IndexedDbPdfWriterCheckpointRepository } from "@storage/pdf-writer-checkpoint-repository";
 import { IndexedDbJobArtifactCleanupRepository } from "@storage/job-artifact-cleanup-repository";
 import { IndexedDbJobRepository } from "@storage/job-repository";
 import { JobSessionRepository } from "@storage/job-session-repository";
@@ -168,12 +170,18 @@ export function getPersistentJobRouterDependencies(): PersistentJobRouterDepende
   const sessions = new JobSessionRepository();
   const tiles = new IndexedDbTileRepository();
   const jobArtifacts = new IndexedDbJobArtifactCleanupRepository();
+  const artifacts = new IndexedDbArtifactRepository();
   const manifests = new PdfEditManifestRepository();
+  const pdfSpool = new OpfsPdfOutputSpool();
+  const pdfWriterCheckpoints = new IndexedDbPdfWriterCheckpointRepository();
   const ownedDataCleanup = new CaptureOwnedDataCleanupService({
     jobs: jobRepository,
     sessions,
     tiles,
     artifacts: jobArtifacts,
+    artifactLookup: artifacts,
+    pdfSpool,
+    pdfWriterCheckpoints,
     manifests,
   });
   const pages = new PagePreparationService({
@@ -247,7 +255,6 @@ export function getPersistentJobRouterDependencies(): PersistentJobRouterDepende
     targetValidator: elements,
   });
   const regions = new RegionSelectionService(createChromeRegionSelectionBrowserAdapter());
-  const artifacts = new IndexedDbArtifactRepository();
   const offscreen = new OffscreenService();
   const pdfExports = new PdfExportService({
     jobs,
@@ -314,9 +321,20 @@ export function getPersistentJobRouterDependencies(): PersistentJobRouterDepende
           (job.state === "preparing" ||
             (job.state === "capturing" && job.adaptiveFrontier !== undefined)),
       );
-      await Promise.allSettled(
-        resumable.map((job) => runCaptureAndCompletion(job.id, captures, completion)),
+      const resumablePageNative = activeJobs.filter(
+        (job) =>
+          job.mode === "scroll-area" &&
+          job.activeOutputFormat !== "pdf" &&
+          (job.state === "preparing" ||
+            (job.state === "capturing" && job.documentPageMap?.complete === true) ||
+            job.state === "paused"),
       );
+      await Promise.allSettled([
+        ...resumable.map((job) => runCaptureAndCompletion(job.id, captures, completion)),
+        ...resumablePageNative.map((job) =>
+          runCaptureAndCompletion(job.id, scrollAreaCaptures, completion),
+        ),
+      ]);
       await completion.recoverAll();
     })
     .catch(() => undefined);

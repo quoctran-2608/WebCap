@@ -1,10 +1,13 @@
 import type { CaptureResetReport } from "@shared/contracts/capture-reset";
+import type { JobArtifactLookupPort } from "@storage/artifact-repository";
 import { createWebCapError, type WebCapErrorData } from "@shared/errors/error";
 import type { JobArtifactCleanupPort } from "@storage/job-artifact-cleanup-repository";
 import type { JobRepositoryPort } from "@storage/job-repository";
 import type { JobSessionRepositoryPort } from "@storage/job-session-repository";
 import type { PdfDocumentManifestRepositoryPort } from "@storage/pdf-document-manifest-repository";
 import type { PdfEditManifestRepositoryPort } from "@storage/pdf-edit-manifest-repository";
+import type { PdfOutputSpoolPort } from "@storage/pdf-output-spool";
+import type { PdfWriterCheckpointRepositoryPort } from "@storage/pdf-writer-checkpoint-repository";
 import type { TileRepositoryPort } from "@storage/tile-repository";
 
 import { getPdfDocumentManifestRepository } from "./pdf-capture-runtime";
@@ -27,6 +30,9 @@ export interface CaptureOwnedDataCleanupServiceOptions {
   sessions: Pick<JobSessionRepositoryPort, "getSummary" | "getTabLock" | "deleteJob">;
   tiles: Pick<TileRepositoryPort, "deleteByJob">;
   artifacts: JobArtifactCleanupPort;
+  artifactLookup?: Pick<JobArtifactLookupPort, "listByJob">;
+  pdfSpool?: Pick<PdfOutputSpoolPort, "delete" | "deleteOutputFamily">;
+  pdfWriterCheckpoints?: Pick<PdfWriterCheckpointRepositoryPort, "get" | "delete">;
   manifests: Pick<PdfEditManifestRepositoryPort, "load" | "delete">;
   pdfDocuments?: Pick<PdfDocumentManifestRepositoryPort, "get" | "delete">;
 }
@@ -81,6 +87,55 @@ export class CaptureOwnedDataCleanupService implements CaptureOwnedDataCleanupPo
         if (document !== undefined) report.deletedManifests += 1;
       } catch {
         failedOperations.push("pdf-document");
+      }
+    }
+
+    let writerCheckpoint:
+      Awaited<ReturnType<NonNullable<typeof this.options.pdfWriterCheckpoints>["get"]>> | undefined;
+    try {
+      writerCheckpoint = await this.options.pdfWriterCheckpoints?.get(jobId);
+    } catch {
+      failedOperations.push("pdf-writer-checkpoint-read");
+    }
+
+    if (this.options.pdfSpool !== undefined) {
+      const references = new Set<string>();
+      try {
+        const records = await this.options.artifactLookup?.listByJob(jobId);
+        for (const record of records ?? []) {
+          if (record.opfsReference !== undefined) references.add(record.opfsReference);
+        }
+      } catch {
+        failedOperations.push("artifact-opfs-lookup");
+      }
+      if (writerCheckpoint !== undefined) references.add(writerCheckpoint.spoolReference);
+      for (const reference of references) {
+        try {
+          await this.options.pdfSpool.delete(reference);
+        } catch {
+          failedOperations.push("pdf-spool");
+        }
+      }
+      if (
+        writerCheckpoint !== undefined &&
+        this.options.pdfSpool.deleteOutputFamily !== undefined
+      ) {
+        try {
+          await this.options.pdfSpool.deleteOutputFamily(
+            writerCheckpoint.outputArtifactId,
+            writerCheckpoint.totalPages,
+          );
+        } catch {
+          failedOperations.push("pdf-spool-family");
+        }
+      }
+    }
+
+    if (this.options.pdfWriterCheckpoints !== undefined) {
+      try {
+        await this.options.pdfWriterCheckpoints.delete(jobId);
+      } catch {
+        failedOperations.push("pdf-writer-checkpoint");
       }
     }
 

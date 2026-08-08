@@ -14,5 +14,6 @@ export function captureOutputFromArtifact(artifact: ArtifactMetadata): CaptureOu
     createdAt: artifact.createdAt,
     expiresAt: artifact.expiresAt,
     ...(artifact.pageCount === undefined ? {} : { pageCount: artifact.pageCount }),
+    ...(artifact.pdfPart === undefined ? {} : { pdfPart: artifact.pdfPart }),
   };
 }
