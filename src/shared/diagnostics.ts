@@ -8,6 +8,16 @@ import type { PdfCaptureStrategy, PdfManifestState } from "@shared/contracts/pdf
 import type { UiLocale } from "@shared/i18n";
 import type { WebCapErrorCode } from "@shared/errors/error";
 
+export type PdfViewerAdapterBucket =
+  | "s27-dom"
+  | "s27-projected"
+  | "pdfjs"
+  | "semantic"
+  | "shadow-dom"
+  | "virtualized"
+  | "canvas-visual"
+  | "other";
+
 export interface SafeDiagnosticsInput {
   extensionVersion: string;
   locale: UiLocale;
@@ -84,15 +94,7 @@ export interface SafeDiagnosticsDocument {
     errorCode?: WebCapErrorCode;
     strategy?: PdfCaptureStrategy;
     manifestState?: PdfManifestState;
-    viewerAdapterBucket?:
-      | "s27-dom"
-      | "s27-projected"
-      | "pdfjs"
-      | "semantic"
-      | "shadow-dom"
-      | "virtualized"
-      | "canvas-visual"
-      | "other";
+    viewerAdapterBucket?: PdfViewerAdapterBucket;
     expectedPages?: number;
     discoveredPages?: number;
     capturedPages?: number;
@@ -119,13 +121,7 @@ function finiteCount(value: number | undefined): number | undefined {
     : undefined;
 }
 
-function viewerAdapterBucket(
-  value: string | undefined,
-): SafeDiagnosticsDocument["pdf"] extends infer Pdf
-  ? Pdf extends { viewerAdapterBucket?: infer Bucket }
-    ? Bucket | undefined
-    : never
-  : never {
+function viewerAdapterBucket(value: string | undefined): PdfViewerAdapterBucket | undefined {
   switch (value) {
     case "s27-dom":
     case "s27-projected":
