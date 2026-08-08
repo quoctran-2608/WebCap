@@ -8,7 +8,11 @@ import type { CaptureTile } from "@shared/contracts/domain";
 import type { StoredTileRecord } from "@shared/contracts/job";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
-import type { PdfOutputSpoolPort, PdfSpoolFile, PdfSpoolWritable } from "@storage/pdf-output-spool";
+import type {
+  PdfOutputSpoolPort,
+  PdfSpoolFile,
+  PdfSpoolWritable,
+} from "@storage/pdf-output-spool";
 import type {
   PdfWriterCheckpoint,
   PdfWriterCheckpointRepositoryPort,
@@ -29,7 +33,7 @@ class MemorySpool implements PdfOutputSpoolPort {
 
   createOutput(outputArtifactId: string): Promise<PdfSpoolWritable> {
     const reference = `webcap-pdf-output/${outputArtifactId}.pdf`;
-    const chunks: Uint8Array[] = [];
+    const chunks: ArrayBuffer[] = [];
     let byteLength = 0;
     let closed = false;
     const files = this.files;
@@ -40,7 +44,7 @@ class MemorySpool implements PdfOutputSpoolPort {
       },
       write(chunk) {
         if (closed) return Promise.reject(new Error("closed"));
-        const copy = Uint8Array.from(chunk);
+        const copy = Uint8Array.from(chunk).buffer;
         chunks.push(copy);
         byteLength += copy.byteLength;
         return Promise.resolve();
@@ -257,7 +261,9 @@ describe("StreamingPdfExporter", () => {
             height,
             getContext: () => ({ fillWhite: () => undefined, drawImage: () => undefined }),
             convertToJpeg: () =>
-              Promise.resolve(new Blob([Uint8Array.from(ONE_PIXEL_JPEG)], { type: "image/jpeg" })),
+              Promise.resolve(
+                new Blob([Uint8Array.from(ONE_PIXEL_JPEG).buffer], { type: "image/jpeg" }),
+              ),
             release() {
               releaseCount += 1;
             },
