@@ -129,9 +129,10 @@ describe("S31 page-boundary stop", () => {
       },
       cancellation,
       onPlan: () => Promise.resolve(),
-      async storeTile(tile) {
+      storeTile(tile) {
         stored.push(tile);
         if (stored.length === 1) cancellation.cancelled = true;
+        return Promise.resolve();
       },
       reportProgress: () => undefined,
     };
