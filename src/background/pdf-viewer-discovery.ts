@@ -39,7 +39,7 @@ export interface PdfViewerDiscoveryBrowserAdapter {
 
 const PAGE_EDGE_MIN_CSS = 96;
 const PAGE_OVERLAP_RATIO = 0.78;
-const STABLE_GEOMETRY_QUANTUM_CSS = 2;
+const STABLE_GEOMETRY_QUANTUM_CSS = 16;
 const MAX_PAGES = 10_000;
 
 function finitePositive(value: number): boolean {
@@ -163,11 +163,22 @@ function declaredCompletion(
   };
 }
 
-function stableGeometryKey(rect: Rect): string {
-  const quantize = (value: number) => Math.round(value / STABLE_GEOMETRY_QUANTUM_CSS);
-  return [quantize(rect.x), quantize(rect.y), quantize(rect.width), quantize(rect.height)].join(
-    ":",
-  );
+function stableGeometryKeys(rect: Rect): string[] {
+  const values = [rect.x, rect.y, rect.width, rect.height];
+  const halfQuantum = STABLE_GEOMETRY_QUANTUM_CSS / 2;
+  const keys: string[] = [];
+  for (let mask = 0; mask < 16; mask += 1) {
+    keys.push(
+      values
+        .map((value, index) =>
+          Math.floor(
+            (value + (mask & (1 << index) ? halfQuantum : 0)) / STABLE_GEOMETRY_QUANTUM_CSS,
+          ),
+        )
+        .join(":"),
+    );
+  }
+  return keys;
 }
 
 function hasStableCanvasGeometry(candidates: readonly PdfViewerPageCandidate[]): boolean {
@@ -178,10 +189,18 @@ function hasStableCanvasGeometry(candidates: readonly PdfViewerPageCandidate[]):
   let repeatedStableGeometry = false;
   for (const candidate of candidates) {
     sampleCounts.set(candidate.sampleIndex, (sampleCounts.get(candidate.sampleIndex) ?? 0) + 1);
-    const key = stableGeometryKey(candidate.rect);
-    const firstSample = firstSampleByGeometry.get(key);
-    if (firstSample === undefined) firstSampleByGeometry.set(key, candidate.sampleIndex);
-    else if (firstSample !== candidate.sampleIndex) repeatedStableGeometry = true;
+    const keys = stableGeometryKeys(candidate.rect);
+    if (
+      keys.some((key) => {
+        const firstSample = firstSampleByGeometry.get(key);
+        return firstSample !== undefined && firstSample !== candidate.sampleIndex;
+      })
+    ) {
+      repeatedStableGeometry = true;
+    }
+    for (const key of keys) {
+      if (!firstSampleByGeometry.has(key)) firstSampleByGeometry.set(key, candidate.sampleIndex);
+    }
   }
 
   return repeatedStableGeometry && [...sampleCounts.values()].some((count) => count >= 2);
