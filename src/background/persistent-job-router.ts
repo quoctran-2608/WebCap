@@ -78,7 +78,7 @@ import { normalizeError } from "@shared/errors/normalize-error";
 import { IndexedDbDedupeRepository, type DedupeRepositoryPort } from "@storage/dedupe-repository";
 import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
 import { OpfsPdfOutputSpool } from "@storage/pdf-output-spool";
-import { PdfWriterCheckpointRepository } from "@storage/pdf-writer-checkpoint-repository";
+import { IndexedDbPdfWriterCheckpointRepository } from "@storage/pdf-writer-checkpoint-repository";
 import { IndexedDbJobArtifactCleanupRepository } from "@storage/job-artifact-cleanup-repository";
 import { IndexedDbJobRepository } from "@storage/job-repository";
 import { JobSessionRepository } from "@storage/job-session-repository";
@@ -173,7 +173,7 @@ export function getPersistentJobRouterDependencies(): PersistentJobRouterDepende
   const artifacts = new IndexedDbArtifactRepository();
   const manifests = new PdfEditManifestRepository();
   const pdfSpool = new OpfsPdfOutputSpool();
-  const pdfWriterCheckpoints = new PdfWriterCheckpointRepository();
+  const pdfWriterCheckpoints = new IndexedDbPdfWriterCheckpointRepository();
   const ownedDataCleanup = new CaptureOwnedDataCleanupService({
     jobs: jobRepository,
     sessions,

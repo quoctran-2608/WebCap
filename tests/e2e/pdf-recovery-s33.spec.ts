@@ -119,7 +119,6 @@ async function restartExtensionWorker(
   const browser = popup.context().browser();
   if (browser === null) throw new Error("Chromium browser instance is unavailable.");
   const workerUrl = worker.url();
-  const origin = `chrome-extension://${new URL(workerUrl).host}`;
   const session = await browser.newBrowserCDPSession();
   try {
     await session.send("Target.setDiscoverTargets", { discover: true });
@@ -152,10 +151,10 @@ async function restartExtensionWorker(
     jobId,
     sentAt: new Date().toISOString(),
   });
-  const response: unknown = await popup.evaluate(
-    async (message) => chrome.runtime.sendMessage(message),
-    request,
-  );
+  const response: unknown = await popup.evaluate(async (message): Promise<unknown> => {
+    const value: unknown = await chrome.runtime.sendMessage(message);
+    return value;
+  }, request);
   if (
     typeof response !== "object" ||
     response === null ||
