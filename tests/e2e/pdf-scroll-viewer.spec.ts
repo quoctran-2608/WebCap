@@ -194,4 +194,14 @@ test("@smoke exports one PDF page per detected viewer page with source orientati
   expect(first?.getHeight()).toBeGreaterThan(first?.getWidth() ?? 0);
   expect(second?.getWidth()).toBeGreaterThan(second?.getHeight() ?? 0);
   expect(third?.getHeight()).toBeGreaterThan(third?.getWidth() ?? 0);
+
+  const resultPopup = await openPopup();
+  const experience = resultPopup.getByTestId("pdf-experience-card");
+  await expect(experience).toBeVisible();
+  await expect(experience).toHaveAttribute("data-stage", "completed");
+  await expect(experience).toHaveAttribute("data-verified", "true");
+  await expect(resultPopup.getByTestId("pdf-strategy-result")).toContainText(
+    "3/3 trang đã xác minh",
+  );
+  await expect(resultPopup.getByTestId("pdf-verification-diagnostics")).toBeVisible();
 });
