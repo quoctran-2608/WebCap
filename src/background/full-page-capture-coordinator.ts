@@ -519,7 +519,7 @@ export class FullPageCaptureCoordinator {
       metrics,
       targetRect,
       tilePlan: tiles,
-      completedTiles: 0,
+      completedTiles: tiles.filter((tile) => tile.status === "stored").length,
       totalTiles: tiles.length,
       ...(partialCapture === undefined ? {} : { partialCapture }),
       ...(documentPageMap === undefined ? {} : { documentPageMap }),
