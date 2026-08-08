@@ -8,11 +8,7 @@ import type { CaptureTile } from "@shared/contracts/domain";
 import type { StoredTileRecord } from "@shared/contracts/job";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
-import type {
-  PdfOutputSpoolPort,
-  PdfSpoolFile,
-  PdfSpoolWritable,
-} from "@storage/pdf-output-spool";
+import type { PdfOutputSpoolPort, PdfSpoolFile, PdfSpoolWritable } from "@storage/pdf-output-spool";
 import type {
   PdfWriterCheckpoint,
   PdfWriterCheckpointRepositoryPort,
