@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { PdfMultipartMetadataSchema } from "@shared/contracts/pdf-multipart";
 import { WebCapErrorDataSchema } from "@shared/errors/error";
 
 const FiniteNumberSchema = z.number().finite();
@@ -52,6 +53,7 @@ export const CaptureOutputSchema = z
     width: PositiveIntegerSchema,
     height: PositiveIntegerSchema,
     pageCount: PositiveIntegerSchema.optional(),
+    pdfPart: PdfMultipartMetadataSchema.optional(),
     createdAt: IsoDateTimeSchema,
     expiresAt: IsoDateTimeSchema,
   })

@@ -6,6 +6,7 @@ import type {
   OutputFormat,
 } from "@shared/contracts/domain";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
+import { validateCompletePdfMultipartSet } from "@shared/contracts/pdf-multipart";
 import type { JobArtifactLookupPort } from "@storage/artifact-repository";
 
 import { completionPolicyForJob } from "./capture-completion-policy";
@@ -187,9 +188,19 @@ export class CaptureCompletionService {
 
   private async reconcileExistingOutput(job: CaptureJob): Promise<CaptureJob | undefined> {
     if (!["ready", "failed", "exporting", "paused"].includes(job.state)) return undefined;
-    const artifact = newestOutput(await this.options.artifacts.listByJob(job.id));
+    const records = await this.options.artifacts.listByJob(job.id);
+    const artifact = newestOutput(records);
     if (artifact === undefined) return undefined;
-    const totalPages = artifact.format === "pdf" ? (artifact.pageCount ?? 1) : 1;
+    let totalPages = artifact.format === "pdf" ? (artifact.pageCount ?? 1) : 1;
+    if (artifact.pdfPart !== undefined) {
+      const parts = records
+        .filter((record) => record.pdfPart?.groupId === artifact.pdfPart?.groupId)
+        .map((record) => record.pdfPart)
+        .filter((part): part is NonNullable<typeof part> => part !== undefined);
+      const validation = validateCompletePdfMultipartSet(parts);
+      if (!validation.valid) return undefined;
+      totalPages = validation.documentPageCount;
+    }
     const dedicated =
       artifact.format === "pdf" && isDedicatedViewerPdfJob(job) && job.partialCapture === undefined;
     const evidence = dedicated

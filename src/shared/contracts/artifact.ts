@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { OutputFormatSchema, type OutputFormat } from "@shared/contracts/domain";
+import { PdfMultipartMetadataSchema } from "@shared/contracts/pdf-multipart";
 
 const PositiveIntegerSchema = z.number().int().positive();
 const IsoDateTimeSchema = z.string().datetime({ offset: true });
@@ -24,6 +25,7 @@ export const ArtifactMetadataSchema = z
     width: PositiveIntegerSchema,
     height: PositiveIntegerSchema,
     pageCount: PositiveIntegerSchema.optional(),
+    pdfPart: PdfMultipartMetadataSchema.optional(),
     createdAt: IsoDateTimeSchema,
     expiresAt: IsoDateTimeSchema,
   })

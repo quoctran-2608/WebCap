@@ -1,5 +1,6 @@
 import type { ArtifactMetadata, ArtifactRecord } from "@shared/contracts/artifact";
 import type { PdfEditorPage } from "@shared/contracts/pdf-editor";
+import type { PdfMultipartMetadata } from "@shared/contracts/pdf-multipart";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
 import { isPdfSpoolFallbackAllowed, type PdfOutputSpoolPort } from "@storage/pdf-output-spool";
@@ -21,6 +22,11 @@ import type {
   PdfPageCanvasPort,
   PdfExporter,
 } from "./pdf-exporter";
+import {
+  multipartPdfFilename,
+  planPdfMultipart,
+  type PdfMultipartPlan,
+} from "./pdf-multipart-planner";
 import { assertStreamingPdfStructure } from "./streaming-pdf-integrity";
 import { SequentialRasterPdfWriter, recoverStreamingPdfWriterState } from "./streaming-pdf-writer";
 
@@ -38,6 +44,7 @@ export interface StreamingPdfExporterOptions {
   checkpoints: PdfWriterCheckpointRepositoryPort;
   fallback: Pick<PdfExporter, "export">;
   environment?: StreamingPdfExportEnvironment;
+  maxPartBytes?: number;
 }
 
 interface PerformanceWithMemory extends Performance {
@@ -46,6 +53,8 @@ interface PerformanceWithMemory extends Performance {
     jsHeapSizeLimit: number;
   };
 }
+
+const DEFAULT_MAX_PDF_PART_BYTES = 512 * 1024 * 1024;
 
 const defaultEnvironment: StreamingPdfExportEnvironment = {
   async decode(blob) {
@@ -260,6 +269,7 @@ function artifactMetadata(record: ArtifactRecord): ArtifactMetadata {
     width: record.width,
     height: record.height,
     ...(record.pageCount === undefined ? {} : { pageCount: record.pageCount }),
+    ...(record.pdfPart === undefined ? {} : { pdfPart: record.pdfPart }),
     createdAt: record.createdAt,
     expiresAt: record.expiresAt,
   };
@@ -272,6 +282,7 @@ export class StreamingPdfExporter {
   private readonly checkpoints: PdfWriterCheckpointRepositoryPort;
   private readonly fallback: Pick<PdfExporter, "export">;
   private readonly environment: StreamingPdfExportEnvironment;
+  private readonly maxPartBytes: number;
 
   constructor(options: StreamingPdfExporterOptions) {
     this.tiles = options.tiles;
@@ -280,11 +291,204 @@ export class StreamingPdfExporter {
     this.checkpoints = options.checkpoints;
     this.fallback = options.fallback;
     this.environment = options.environment ?? defaultEnvironment;
+    this.maxPartBytes = Math.max(1, Math.floor(options.maxPartBytes ?? DEFAULT_MAX_PDF_PART_BYTES));
   }
 
   async export(
     payload: PdfExportPayload,
     reportProgress: (progress: PdfExportProgress) => Promise<boolean> = () => Promise.resolve(true),
+  ): Promise<PdfExportResult> {
+    const writerPages = payload.pages ?? defaultEditorPages(payload);
+    const firstTile = payload.tiles[0];
+    if (writerPages.length === 0 || firstTile === undefined) {
+      return this.exportSingle(payload, reportProgress);
+    }
+    const renderScaleX = positiveScale(
+      firstTile.expectedPixelWidth / firstTile.sourceRectCss.width,
+      "x",
+    );
+    const renderScaleY = positiveScale(
+      firstTile.expectedPixelHeight / firstTile.sourceRectCss.height,
+      "y",
+    );
+    const estimates = writerPages.map((page) =>
+      Math.max(
+        1,
+        Math.ceil(
+          page.sourceRectCss.width * page.sourceRectCss.height * renderScaleX * renderScaleY * 1.5 +
+            64 * 1024,
+        ),
+      ),
+    );
+    const plan = planPdfMultipart(estimates, { maxPartBytes: this.maxPartBytes });
+    if (plan.parts.length <= 1) {
+      return this.exportSingle({ ...payload, pages: writerPages }, reportProgress);
+    }
+    return this.exportMultipart(
+      payload,
+      writerPages,
+      plan,
+      renderScaleX,
+      renderScaleY,
+      reportProgress,
+    );
+  }
+
+  private async exportMultipart(
+    payload: PdfExportPayload,
+    writerPages: readonly PdfEditorPage[],
+    plan: PdfMultipartPlan,
+    renderScaleX: number,
+    renderScaleY: number,
+    reportProgress: (progress: PdfExportProgress) => Promise<boolean>,
+  ): Promise<PdfExportResult> {
+    let lastResult: PdfExportResult | undefined;
+    for (const part of plan.parts) {
+      const partNumber = part.partIndex + 1;
+      const partArtifactId =
+        part.partIndex === 0
+          ? payload.outputArtifactId
+          : `${payload.outputArtifactId.slice(0, 140)}.part-${String(partNumber).padStart(3, "0")}`;
+      const metadata: PdfMultipartMetadata = {
+        schemaVersion: 1,
+        groupId: payload.outputArtifactId,
+        partIndex: part.partIndex,
+        partCount: plan.parts.length,
+        startPageIndex: part.startPageIndex,
+        endPageIndexExclusive: part.endPageIndexExclusive,
+        documentPageCount: plan.totalPages,
+      };
+
+      const existing = await this.artifacts.get(partArtifactId);
+      if (
+        existing?.format === "pdf" &&
+        existing.opfsReference !== undefined &&
+        existing.pdfPart?.groupId === metadata.groupId &&
+        existing.pdfPart.partIndex === metadata.partIndex &&
+        existing.pdfPart.partCount === metadata.partCount &&
+        existing.pdfPart.startPageIndex === metadata.startPageIndex &&
+        existing.pdfPart.endPageIndexExclusive === metadata.endPageIndexExclusive &&
+        existing.pdfPart.documentPageCount === metadata.documentPageCount
+      ) {
+        const blob = await this.spool.read(existing.opfsReference);
+        await assertStreamingPdfStructure(blob, part.pageCount);
+        const checkpoint = await this.checkpoints.get(payload.jobId).catch(() => undefined);
+        if (checkpoint?.outputArtifactId === partArtifactId) {
+          await this.checkpoints.delete(payload.jobId).catch(() => false);
+        }
+        const accepted = await reportProgress({
+          jobId: payload.jobId,
+          completedPages: part.endPageIndexExclusive,
+          totalPages: plan.totalPages,
+        });
+        if (!accepted) throw cancelledError(payload.jobId);
+        continue;
+      }
+
+      const staleCheckpoint = await this.checkpoints.get(payload.jobId).catch(() => undefined);
+      if (staleCheckpoint !== undefined && staleCheckpoint.outputArtifactId !== partArtifactId) {
+        await this.checkpoints.delete(payload.jobId).catch(() => false);
+      }
+      const pages = writerPages.slice(part.startPageIndex, part.endPageIndexExclusive);
+      const result = await this.exportSingle(
+        {
+          ...payload,
+          outputArtifactId: partArtifactId,
+          pages,
+          filename: multipartPdfFilename(payload.filename, part, plan.parts.length),
+        },
+        (progress) =>
+          reportProgress({
+            jobId: payload.jobId,
+            completedPages: part.startPageIndex + progress.completedPages,
+            totalPages: plan.totalPages,
+          }),
+        metadata,
+      );
+      lastResult = result;
+      await this.checkpoints.delete(payload.jobId).catch(() => false);
+    }
+
+    const first = await this.artifacts.get(payload.outputArtifactId);
+    if (first === undefined) {
+      throw storageReadError("The first PDF multipart artifact is unavailable after export.", {
+        jobId: payload.jobId.slice(0, 24),
+      });
+    }
+    if (lastResult === undefined) {
+      const firstBlob =
+        first.opfsReference === undefined ? first.blob : await this.spool.read(first.opfsReference);
+      if (firstBlob === undefined) {
+        throw storageReadError("The first PDF multipart bytes are unavailable.", {
+          jobId: payload.jobId.slice(0, 24),
+        });
+      }
+      const integrity = await assertStreamingPdfStructure(firstBlob, first.pageCount ?? 1);
+      const firstPage = writerPages[0];
+      if (firstPage === undefined) {
+        throw exportError("PDF multipart page metadata is unavailable.", "PdfMultipartPageMissing");
+      }
+      const maxPagePixelArea = Math.max(
+        1,
+        Math.ceil(
+          firstPage.sourceRectCss.width *
+            firstPage.sourceRectCss.height *
+            renderScaleX *
+            renderScaleY,
+        ),
+      );
+      const memoryEstimate = assertPdfExportMemorySafe({
+        widthCss: firstPage.sourceRectCss.width,
+        heightCss: firstPage.sourceRectCss.height,
+        renderScaleX,
+        renderScaleY,
+        tileCount: 1,
+        tileBytes: 1,
+        pageCount: plan.totalPages,
+        maxPagePixelArea,
+        largestTilePixelArea: 1,
+        jpegQuality: payload.settings.jpegQuality,
+      });
+      return {
+        artifact: artifactMetadata(first),
+        diagnostics: {
+          pageCount: plan.totalPages,
+          decodedTileCount: 0,
+          maxDecodedTiles: 0,
+          maxCanvasPixelArea: 0,
+          releasedCanvasCount: 0,
+          durationMs: 0,
+          artifactBytes: first.byteLength,
+          memoryEstimate,
+          integrity: {
+            valid: integrity.valid,
+            pageCount: plan.totalPages,
+            imageObjectCount: plan.totalPages,
+            nonEmptyStreamCount: plan.totalPages * 2,
+          },
+        },
+      };
+    }
+    return {
+      artifact: artifactMetadata(first),
+      diagnostics: {
+        ...lastResult.diagnostics,
+        pageCount: plan.totalPages,
+        integrity: {
+          ...lastResult.diagnostics.integrity,
+          valid: true,
+          pageCount: plan.totalPages,
+          imageObjectCount: plan.totalPages,
+          nonEmptyStreamCount: plan.totalPages * 2,
+        },
+      },
+    };
+  }
+
+  private async exportSingle(
+    payload: PdfExportPayload,
+    reportProgress: (progress: PdfExportProgress) => Promise<boolean> = () => Promise.resolve(true),
+    pdfPart?: PdfMultipartMetadata,
   ): Promise<PdfExportResult> {
     const startedAt = nowMilliseconds(this.environment);
     const writerPages = payload.pages ?? defaultEditorPages(payload);
@@ -680,6 +884,7 @@ export class StreamingPdfExporter {
         width: Math.max(1, Math.round(firstPage.pageWidthPt)),
         height: Math.max(1, Math.round(firstPage.pageHeightPt)),
         pageCount: writerPages.length,
+        ...(pdfPart === undefined ? {} : { pdfPart }),
         createdAt: payload.createdAt,
         expiresAt: payload.expiresAt,
         opfsReference: finalized.file.reference,

@@ -7,7 +7,8 @@ import type { PdfOutputPlan } from "@shared/contracts/pdf-capture";
 import type { PdfEditorPage } from "@shared/contracts/pdf-editor";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
-import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
+import type { ArtifactRepositoryPort, JobArtifactLookupPort } from "@storage/artifact-repository";
+import { validateCompletePdfMultipartSet } from "@shared/contracts/pdf-multipart";
 import type { PdfEditManifestRepositoryPort } from "@storage/pdf-edit-manifest-repository";
 import type { TileRepositoryPort } from "@storage/tile-repository";
 
@@ -29,7 +30,8 @@ export interface PdfExportServiceOptions {
   offscreen: PdfOffscreenPort;
   manifests?: PdfEditManifestRepositoryPort;
   pdfDocuments?: PdfCaptureOrchestratorPort;
-  artifacts?: Pick<ArtifactRepositoryPort, "delete">;
+  artifacts?: Pick<ArtifactRepositoryPort, "delete"> &
+    Partial<Pick<JobArtifactLookupPort, "listByJob">>;
   now?: () => Date;
   createId?: () => string;
   artifactTtlMs?: number;
@@ -119,7 +121,9 @@ export class PdfExportService {
   private readonly offscreen: PdfOffscreenPort;
   private readonly manifests: PdfEditManifestRepositoryPort | undefined;
   private readonly pdfDocuments: PdfCaptureOrchestratorPort | undefined;
-  private readonly artifacts: Pick<ArtifactRepositoryPort, "delete"> | undefined;
+  private readonly artifacts:
+    | (Pick<ArtifactRepositoryPort, "delete"> & Partial<Pick<JobArtifactLookupPort, "listByJob">>)
+    | undefined;
   private readonly now: () => Date;
   private readonly createId: () => string;
   private readonly artifactTtlMs: number;
@@ -308,15 +312,28 @@ export class PdfExportService {
         return;
       }
 
+      const multipart = artifact.pdfPart;
+      let completedPages = artifact.pageCount ?? latest.exportProgress?.totalPages ?? 1;
+      if (multipart !== undefined) {
+        const records = await this.artifacts?.listByJob?.(job.id);
+        const group = records
+          ?.filter((record) => record.pdfPart?.groupId === multipart.groupId)
+          .map((record) => record.pdfPart)
+          .filter((part): part is NonNullable<typeof part> => part !== undefined);
+        const validation = validateCompletePdfMultipartSet(group ?? []);
+        if (!validation.valid || validation.groupId !== multipart.groupId) {
+          throw exportSourceError(job.id, "PdfMultipartArtifactsIncomplete");
+        }
+        completedPages = validation.documentPageCount;
+      }
       const dedicated = isDedicatedViewerPdfJob(latest) && latest.partialCapture === undefined;
       const completionEvidence = dedicated
-        ? await this.pdfDocuments?.completeViewerOutput(latest, artifact.pageCount ?? 0)
+        ? await this.pdfDocuments?.completeViewerOutput(latest, completedPages)
         : undefined;
       if (dedicated && completionEvidence === undefined) {
         throw exportSourceError(job.id, "PdfDocumentCompletionEvidenceUnavailable");
       }
 
-      const completedPages = artifact.pageCount ?? latest.exportProgress?.totalPages ?? 1;
       await this.jobs.transition(
         job.id,
         "completed",

@@ -40,9 +40,11 @@ export const PdfMultipartMetadataSchema = z
 
 export type PdfMultipartMetadata = z.infer<typeof PdfMultipartMetadataSchema>;
 
-export function validateCompletePdfMultipartSet(
-  parts: readonly PdfMultipartMetadata[],
-): { valid: boolean; documentPageCount: number; groupId?: string } {
+export function validateCompletePdfMultipartSet(parts: readonly PdfMultipartMetadata[]): {
+  valid: boolean;
+  documentPageCount: number;
+  groupId?: string;
+} {
   if (parts.length === 0) return { valid: false, documentPageCount: 0 };
   const ordered = [...parts].sort((left, right) => left.partIndex - right.partIndex);
   const first = ordered[0];

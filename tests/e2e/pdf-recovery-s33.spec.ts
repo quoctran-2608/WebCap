@@ -73,7 +73,10 @@ async function readRecoveryState(page: Page, jobId?: string): Promise<RecoverySt
     let pdfBytes: number[] = [];
     if (job?.outputArtifactId !== undefined) {
       const artifact = (await read<unknown>(
-        database.transaction("artifacts", "readonly").objectStore("artifacts").get(job.outputArtifactId),
+        database
+          .transaction("artifacts", "readonly")
+          .objectStore("artifacts")
+          .get(job.outputArtifactId),
       )) as { blob?: Blob; opfsReference?: string } | undefined;
       let blob = artifact?.blob;
       if (blob === undefined && artifact?.opfsReference !== undefined) {
@@ -134,10 +137,12 @@ async function restartExtensionWorker(
   await expect
     .poll(
       () =>
-        worker.evaluate(() => true).then(
-          () => false,
-          () => true,
-        ),
+        worker
+          .evaluate(() => true)
+          .then(
+            () => false,
+            () => true,
+          ),
       { timeout: 10_000 },
     )
     .toBe(true);
@@ -179,7 +184,10 @@ async function closeOffscreenDocument(browser: Browser, worker: Worker): Promise
   }
 }
 
-async function createRecoveryJob(targetPage: Page, openPopup: () => Promise<Page>): Promise<{ jobId: string; popup: Page }> {
+async function createRecoveryJob(
+  targetPage: Page,
+  openPopup: () => Promise<Page>,
+): Promise<{ jobId: string; popup: Page }> {
   await targetPage.goto("http://127.0.0.1:4174/pdf-recovery-viewer.html");
   const startPopup = await openPopup();
   await startScrollAreaSelection(startPopup);
@@ -201,7 +209,8 @@ async function assertCompletedPdf(popup: Page, jobId: string): Promise<void> {
     })
     .toBe("completed");
   const state = await readRecoveryState(popup, jobId);
-  if (state.state === "failed") throw new Error(`S33 recovery failed: ${JSON.stringify(state.error)}`);
+  if (state.state === "failed")
+    throw new Error(`S33 recovery failed: ${JSON.stringify(state.error)}`);
   expect(state.documentPageCount).toBe(24);
   expect(state.completedTiles).toBe(state.totalTiles);
   expect(state.output?.pageCount).toBe(24);
@@ -219,10 +228,13 @@ test("@smoke resumes page-native PDF capture after a service-worker restart", as
   test.setTimeout(180_000);
   const { jobId, popup } = await createRecoveryJob(targetPage, openPopup);
   await expect
-    .poll(async () => {
-      const state = await readRecoveryState(popup, jobId);
-      return state.state === "capturing" && state.completedTiles > 0 ? state.completedTiles : 0;
-    }, { timeout: 45_000 })
+    .poll(
+      async () => {
+        const state = await readRecoveryState(popup, jobId);
+        return state.state === "capturing" && state.completedTiles > 0 ? state.completedTiles : 0;
+      },
+      { timeout: 45_000 },
+    )
     .toBeGreaterThan(0);
   const before = await readRecoveryState(popup, jobId);
   await restartExtensionWorker(serviceWorker, popup, targetPage, jobId);
@@ -239,13 +251,16 @@ test("@smoke resumes streamed PDF output after the offscreen document is killed"
   test.setTimeout(180_000);
   const { jobId, popup } = await createRecoveryJob(targetPage, openPopup);
   await expect
-    .poll(async () => {
-      const state = await readRecoveryState(popup, jobId);
-      const progress = state.exportProgress;
-      return state.state === "exporting" && (progress?.completedPages ?? 0) > 0
-        ? progress?.completedPages ?? 0
-        : 0;
-    }, { timeout: 90_000 })
+    .poll(
+      async () => {
+        const state = await readRecoveryState(popup, jobId);
+        const progress = state.exportProgress;
+        return state.state === "exporting" && (progress?.completedPages ?? 0) > 0
+          ? (progress?.completedPages ?? 0)
+          : 0;
+      },
+      { timeout: 90_000 },
+    )
     .toBeGreaterThan(0);
 
   const browser = popup.context().browser();
