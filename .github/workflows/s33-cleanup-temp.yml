@@ -1,0 +1,46 @@
+name: S33 cleanup temp
+
+on:
+  push:
+    branches: [agent/s33-recovery-quota-multipart-resilience]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/s33-recovery-quota-multipart-resilience
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: python scripts/s33_cleanup_patch.py
+      - run: >-
+          pnpm exec prettier --write
+          src/storage/pdf-output-spool.ts
+          src/background/capture-data-cleanup-service.ts
+          src/background/persistent-job-router.ts
+      - name: Validate cleanup ownership
+        run: |
+          pnpm typecheck
+          pnpm exec vitest run tests/unit/capture-data-cleanup-service.test.ts tests/unit/capture-reset-service.test.ts tests/unit/persistent-job-router.test.ts
+      - run: rm -f scripts/s33_cleanup_patch.py .github/workflows/s33-cleanup-temp.yml
+      - name: Commit cleanup
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Implement S33 OPFS ownership cleanup"
+          git push origin HEAD:agent/s33-recovery-quota-multipart-resilience
