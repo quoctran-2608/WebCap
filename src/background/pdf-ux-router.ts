@@ -1,3 +1,5 @@
+import type { CaptureJob } from "@shared/contracts/domain";
+import type { PdfDocumentManifest } from "@shared/contracts/pdf-capture";
 import {
   JobResumeMessageSchema,
   PdfManifestGetMessageSchema,
@@ -15,6 +17,25 @@ import { getPersistentJobRouterDependencies } from "./persistent-job-router";
 
 export type PdfUxRouterResponse =
   JobResponseMessage | PdfManifestResponseMessage | ErrorResponseMessage;
+
+export interface PdfUxRouterDependencies {
+  jobs: {
+    get(jobId: string): Promise<CaptureJob | undefined>;
+  };
+  manifests: {
+    get(jobId: string): Promise<PdfDocumentManifest | undefined>;
+  };
+  pdfExports?: {
+    start(jobId: string, settings?: CaptureJob["settings"]["pdf"]): Promise<CaptureJob>;
+  };
+  scrollAreaCaptures?: {
+    start(jobId: string): Promise<void>;
+  };
+  completion?: {
+    startAuto(jobId: string): Promise<CaptureJob>;
+  };
+  now: () => Date;
+}
 
 function isPdfUxMessage(value: unknown): boolean {
   if (typeof value !== "object" || value === null || !("type" in value)) return false;
@@ -58,24 +79,39 @@ function resumeUnavailable(jobId: string): Error {
   );
 }
 
+function defaultDependencies(): PdfUxRouterDependencies {
+  const persistent = getPersistentJobRouterDependencies();
+  const orchestrator = getPdfCaptureOrchestrator();
+  return {
+    jobs: persistent.jobs,
+    manifests: {
+      get: (jobId) => orchestrator?.getManifest(jobId) ?? Promise.resolve(undefined),
+    },
+    ...(persistent.pdfExports === undefined ? {} : { pdfExports: persistent.pdfExports }),
+    ...(persistent.scrollAreaCaptures === undefined
+      ? {}
+      : { scrollAreaCaptures: persistent.scrollAreaCaptures }),
+    ...(persistent.completion === undefined ? {} : { completion: persistent.completion }),
+    now: persistent.now,
+  };
+}
+
 export async function routePdfUxMessage(
   message: unknown,
+  dependencies: PdfUxRouterDependencies = defaultDependencies(),
 ): Promise<PdfUxRouterResponse | undefined> {
   if (!isPdfUxMessage(message)) return undefined;
   const requestId = requestIdFrom(message);
   if (requestId === undefined) return undefined;
-  const now = () => new Date().toISOString();
 
   const manifestRequest = PdfManifestGetMessageSchema.safeParse(message);
   if (manifestRequest.success) {
     try {
-      const manifest =
-        (await getPdfCaptureOrchestrator()?.getManifest(manifestRequest.data.payload.jobId)) ??
-        null;
+      const manifest = (await dependencies.manifests.get(manifestRequest.data.payload.jobId)) ?? null;
       return createPdfManifestResponseMessage({
         requestId,
         manifest,
-        sentAt: now(),
+        sentAt: dependencies.now().toISOString(),
       });
     } catch (error) {
       return createErrorResponseMessage({
@@ -86,7 +122,7 @@ export async function routePdfUxMessage(
           retryable: true,
           fallbackAllowed: false,
         }),
-        sentAt: now(),
+        sentAt: dependencies.now().toISOString(),
       });
     }
   }
@@ -103,21 +139,28 @@ export async function routePdfUxMessage(
         retryable: false,
         fallbackAllowed: false,
       }),
-      sentAt: now(),
+      sentAt: dependencies.now().toISOString(),
     });
   }
 
   try {
-    const dependencies = getPersistentJobRouterDependencies();
     const current = await dependencies.jobs.get(resumeRequest.data.payload.jobId);
     if (current === undefined) throw jobNotFound(resumeRequest.data.payload.jobId);
     if (current.state !== "paused") {
-      return createJobResponseMessage({ requestId, job: current, sentAt: now() });
+      return createJobResponseMessage({
+        requestId,
+        job: current,
+        sentAt: dependencies.now().toISOString(),
+      });
     }
 
     if (current.activeOutputFormat === "pdf" && dependencies.pdfExports !== undefined) {
       const resumed = await dependencies.pdfExports.start(current.id, current.settings.pdf);
-      return createJobResponseMessage({ requestId, job: resumed, sentAt: now() });
+      return createJobResponseMessage({
+        requestId,
+        job: resumed,
+        sentAt: dependencies.now().toISOString(),
+      });
     }
 
     if (current.mode === "scroll-area" && dependencies.scrollAreaCaptures !== undefined) {
@@ -126,7 +169,11 @@ export async function routePdfUxMessage(
         .then(() => dependencies.completion?.startAuto(current.id))
         .catch(() => undefined);
       const refreshed = (await dependencies.jobs.get(current.id)) ?? current;
-      return createJobResponseMessage({ requestId, job: refreshed, sentAt: now() });
+      return createJobResponseMessage({
+        requestId,
+        job: refreshed,
+        sentAt: dependencies.now().toISOString(),
+      });
     }
 
     throw resumeUnavailable(current.id);
@@ -139,7 +186,7 @@ export async function routePdfUxMessage(
         retryable: true,
         fallbackAllowed: false,
       }),
-      sentAt: now(),
+      sentAt: dependencies.now().toISOString(),
     });
   }
 }
