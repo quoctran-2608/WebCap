@@ -4,12 +4,29 @@ This handoff targets the approved WebCap 0.2.0 release candidate after PDF Engin
 
 ## Required and prepared inputs
 
-| Asset | Store requirement | WebCap 0.2.0 handoff |
-| --- | --- | --- |
-| Extension/store icon | 128x128 PNG | `icons/icon-128.png` is verified inside the release ZIP; final visual/padding review remains a human approval item. |
-| Screenshots | At least one, preferably up to five; 1280x800 or 640x400, full bleed | Capture the exact packaged 0.2.0 UI after the final release gate. Recommended set: Vietnamese capture-mode picker, full-page/PDF page-first progress, verified PDF result, region selector/result, English privacy/diagnostics. |
-| Small promo tile | 440x280 PNG/JPEG | Produce from approved WebCap branding; avoid unsupported performance, unlimited-capture, OCR, annotation or cloud claims. |
-| Marquee image | 1400x560 PNG/JPEG, optional | Optional; create only after brand review. |
+### Extension/store icon
+
+Store requirement: 128x128 PNG.
+
+`icons/icon-128.png` is verified inside the release ZIP. Final visual and padding review remains a human approval item.
+
+### Screenshots
+
+Store requirement: at least one screenshot, preferably up to five, at 1280x800 or 640x400 full bleed.
+
+Capture the exact packaged 0.2.0 UI after the final release gate. Recommended set: Vietnamese capture-mode picker, full-page/PDF page-first progress, verified PDF result, region selector/result, and English privacy/diagnostics.
+
+### Small promo tile
+
+Store requirement: 440x280 PNG/JPEG.
+
+Produce it from approved WebCap branding. Avoid unsupported performance, unlimited-capture, OCR, annotation or cloud claims.
+
+### Marquee image
+
+Store requirement: optional 1400x560 PNG/JPEG.
+
+Create it only after brand review.
 
 ## Source build for store media
 
