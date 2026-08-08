@@ -71,12 +71,12 @@ function viewerJob(state: CaptureJob["state"] = "completed"): CaptureJob {
       allowGuardedImageFallback: false,
     },
     activeOutputFormat: "pdf",
-    output:
-      state === "completed"
-        ? {
+    ...(state === "completed"
+      ? {
+          output: {
             artifactId: "artifact-s35",
             sourceArtifactId: "job-s35",
-            format: "pdf",
+            format: "pdf" as const,
             mimeType: "application/pdf",
             filename: "fixture.pdf",
             byteLength: 1000,
@@ -85,8 +85,9 @@ function viewerJob(state: CaptureJob["state"] = "completed"): CaptureJob {
             pageCount: 2,
             createdAt: now,
             expiresAt: "2026-08-08T12:30:00.000Z",
-          }
-        : undefined,
+          },
+        }
+      : {}),
     cleanup: { attempted: true, completed: true },
     exportProgress: { completedPages: state === "completed" ? 2 : 1, totalPages: 2 },
     outputArtifactId: "artifact-s35",
