@@ -39,7 +39,7 @@ export interface PdfViewerDiscoveryBrowserAdapter {
 
 const PAGE_EDGE_MIN_CSS = 96;
 const PAGE_OVERLAP_RATIO = 0.78;
-const STABLE_GEOMETRY_OVERLAP_RATIO = 0.92;
+const STABLE_GEOMETRY_QUANTUM_CSS = 2;
 const MAX_PAGES = 10_000;
 
 function finitePositive(value: number): boolean {
@@ -163,25 +163,26 @@ function declaredCompletion(
   };
 }
 
+function stableGeometryKey(rect: Rect): string {
+  const quantize = (value: number) => Math.round(value / STABLE_GEOMETRY_QUANTUM_CSS);
+  return [quantize(rect.x), quantize(rect.y), quantize(rect.width), quantize(rect.height)].join(":");
+}
+
 function hasStableCanvasGeometry(candidates: readonly PdfViewerPageCandidate[]): boolean {
   if (!candidates.every((candidate) => candidate.adapter === "canvas-visual")) return true;
 
   const sampleCounts = new Map<number, number>();
+  const firstSampleByGeometry = new Map<string, number>();
+  let repeatedStableGeometry = false;
   for (const candidate of candidates) {
     sampleCounts.set(candidate.sampleIndex, (sampleCounts.get(candidate.sampleIndex) ?? 0) + 1);
+    const key = stableGeometryKey(candidate.rect);
+    const firstSample = firstSampleByGeometry.get(key);
+    if (firstSample === undefined) firstSampleByGeometry.set(key, candidate.sampleIndex);
+    else if (firstSample !== candidate.sampleIndex) repeatedStableGeometry = true;
   }
-  if (![...sampleCounts.values()].some((count) => count >= 2)) return false;
 
-  for (let leftIndex = 0; leftIndex < candidates.length; leftIndex += 1) {
-    const left = candidates[leftIndex];
-    if (left === undefined) continue;
-    for (let rightIndex = leftIndex + 1; rightIndex < candidates.length; rightIndex += 1) {
-      const right = candidates[rightIndex];
-      if (right === undefined || left.sampleIndex === right.sampleIndex) continue;
-      if (overlapRatio(left.rect, right.rect) >= STABLE_GEOMETRY_OVERLAP_RATIO) return true;
-    }
-  }
-  return false;
+  return repeatedStableGeometry && [...sampleCounts.values()].some((count) => count >= 2);
 }
 
 function geometryCompletion(
