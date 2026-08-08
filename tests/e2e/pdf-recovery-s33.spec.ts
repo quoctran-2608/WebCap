@@ -133,36 +133,34 @@ async function restartExtensionWorker(
   } finally {
     await session.detach();
   }
-  await expect
-    .poll(
-      () =>
-        worker
-          .evaluate(() => true)
-          .then(
-            () => false,
-            () => true,
-          ),
-      { timeout: 10_000 },
-    )
-    .toBe(true);
+
   await targetPage.bringToFront();
   const request = createJobGetMessage({
     requestId: crypto.randomUUID(),
     jobId,
     sentAt: new Date().toISOString(),
   });
-  const response: unknown = await popup.evaluate(async (message): Promise<unknown> => {
-    const value: unknown = await chrome.runtime.sendMessage(message);
-    return value;
-  }, request);
-  if (
-    typeof response !== "object" ||
-    response === null ||
-    !("type" in response) ||
-    response.type !== "JOB_RESPONSE"
-  ) {
-    throw new Error(`Unable to wake restarted WebCap runtime: ${JSON.stringify(response)}`);
-  }
+  await expect
+    .poll(
+      async () => {
+        try {
+          const response: unknown = await popup.evaluate(async (message): Promise<unknown> => {
+            const value: unknown = await chrome.runtime.sendMessage(message);
+            return value;
+          }, request);
+          return (
+            typeof response === "object" &&
+            response !== null &&
+            "type" in response &&
+            response.type === "JOB_RESPONSE"
+          );
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 10_000 },
+    )
+    .toBe(true);
 }
 
 async function closeOffscreenDocument(browser: Browser, worker: Worker): Promise<void> {
