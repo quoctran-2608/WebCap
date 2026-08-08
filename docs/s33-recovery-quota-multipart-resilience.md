@@ -17,6 +17,8 @@ S33 builds on the S31 page-native capture engine and the S32 OPFS streaming writ
 
 The capture-side recovery implementation reuses the existing durable-job pattern from adaptive full-page capture: only fully covered logical PDF pages survive a restart; any stored/planned suffix belonging to an incomplete page is discarded before capture resumes.
 
+The output-side recovery boundary is ordered deliberately: finish one logical page, commit the OPFS writable so those bytes are durable, then persist the IndexedDB writer checkpoint. Recovery reads only through that checkpoint byte length, reconstructs PDF object offsets with bounded parsing, truncates any newer uncheckpointed suffix, and continues at the next page.
+
 ## Non-goals
 
 S34 owns difficult-viewer compatibility/adversarial heuristics. S35 owns the dedicated PDF UX and release-candidate polish. S33 does not introduce a backend, telemetry, account/cloud dependency, remote executable code, new required permission, tag, GitHub Release, or Chrome Web Store publication.
