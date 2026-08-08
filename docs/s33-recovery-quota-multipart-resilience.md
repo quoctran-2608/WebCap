@@ -15,6 +15,8 @@ S33 builds on the S31 page-native capture engine and the S32 OPFS streaming writ
 - OPFS + writer-checkpoint cleanup/expiry ownership;
 - forced-restart and quota regressions.
 
+The capture-side recovery implementation reuses the existing durable-job pattern from adaptive full-page capture: only fully covered logical PDF pages survive a restart; any stored/planned suffix belonging to an incomplete page is discarded before capture resumes.
+
 ## Non-goals
 
 S34 owns difficult-viewer compatibility/adversarial heuristics. S35 owns the dedicated PDF UX and release-candidate polish. S33 does not introduce a backend, telemetry, account/cloud dependency, remote executable code, new required permission, tag, GitHub Release, or Chrome Web Store publication.
