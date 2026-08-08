@@ -1,0 +1,319 @@
+name: S32 page-local memory bound
+
+on:
+  push:
+    branches:
+      - agent/s32-disk-spool-streaming-writer
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/s32-disk-spool-streaming-writer
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Make streaming memory guard page-local
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/offscreen/streaming-pdf-exporter.ts')
+          text = path.read_text()
+          old = '''      const records = await this.tiles.listByJob(payload.jobId);
+          const recordByIndex = new Map(records.map((record) => [record.index, record]));
+          let tileBytes = 0;
+          for (const tile of payload.tiles) {
+            const record = recordByIndex.get(tile.index);
+            if (record?.blob === undefined || record.tile.status !== "stored") {
+              throw storageReadError("A stored capture tile is unavailable for streamed PDF export.", {
+                jobId: payload.jobId.slice(0, 24),
+                tileIndex: tile.index,
+              });
+            }
+            tileBytes += record.blob.size;
+          }
+          '''
+          new = '''      const records = await this.tiles.listByJob(payload.jobId);
+          const recordByIndex = new Map(records.map((record) => [record.index, record]));
+          const tileByIndex = new Map(payload.tiles.map((tile) => [tile.index, tile]));
+          const storedBlobByIndex = new Map<number, Blob>();
+          for (const tile of payload.tiles) {
+            const record = recordByIndex.get(tile.index);
+            if (record?.blob === undefined || record.tile.status !== "stored") {
+              throw storageReadError("A stored capture tile is unavailable for streamed PDF export.", {
+                jobId: payload.jobId.slice(0, 24),
+                tileIndex: tile.index,
+              });
+            }
+            storedBlobByIndex.set(tile.index, record.blob);
+          }
+          '''
+          if old not in text:
+              raise SystemExit('record validation anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''      const maxPagePixelArea = Math.max(
+            ...pagePixelRanges.map(
+              ({ pixelXRange, pixelYRange }) => pixelXRange.length * pixelYRange.length,
+            ),
+          );
+          const largestTilePixelArea = Math.max(
+            ...payload.tiles.map((tile) => tile.expectedPixelWidth * tile.expectedPixelHeight),
+          );
+          const initialHeap = readHeapSnapshot(this.environment);
+          const memoryEstimate: PdfMemoryEstimate = assertPdfExportMemorySafe({
+            widthCss: Math.max(...writerPages.map((page) => page.sourceRectCss.width)),
+            heightCss: Math.max(...writerPages.map((page) => page.sourceRectCss.height)),
+            renderScaleX,
+            renderScaleY,
+            tileCount: payload.tiles.length,
+            tileBytes,
+            pageCount: writerPages.length,
+            maxPagePixelArea,
+            largestTilePixelArea,
+            jpegQuality: payload.settings.jpegQuality,
+            ...(initialHeap.limitBytes === undefined ? {} : { heapLimitBytes: initialHeap.limitBytes }),
+          });
+          '''
+          new = '''      const pageIntersections = writerPages.map((page) =>
+            planPdfTileIntersections(page.sourceRectCss, payload.tiles),
+          );
+          const maxPagePixelArea = Math.max(
+            ...pagePixelRanges.map(
+              ({ pixelXRange, pixelYRange }) => pixelXRange.length * pixelYRange.length,
+            ),
+          );
+          const maxPageTileCount = Math.max(...pageIntersections.map((items) => items.length));
+          const maxPageTileBytes = Math.max(
+            ...pageIntersections.map((items) =>
+              items.reduce((total, intersection) => {
+                const blob = storedBlobByIndex.get(intersection.tileIndex);
+                if (blob === undefined) {
+                  throw storageReadError("A PDF page tile disappeared before memory planning.", {
+                    jobId: payload.jobId.slice(0, 24),
+                    tileIndex: intersection.tileIndex,
+                  });
+                }
+                return total + blob.size;
+              }, 0),
+            ),
+          );
+          const activeTileIndexes = new Set(
+            pageIntersections.flatMap((items) => items.map((item) => item.tileIndex)),
+          );
+          const largestTilePixelArea = Math.max(
+            ...[...activeTileIndexes].map((tileIndex) => {
+              const tile = tileByIndex.get(tileIndex);
+              if (tile === undefined) {
+                throw storageReadError("A PDF page tile disappeared before memory planning.", {
+                  jobId: payload.jobId.slice(0, 24),
+                  tileIndex,
+                });
+              }
+              return tile.expectedPixelWidth * tile.expectedPixelHeight;
+            }),
+          );
+          const initialHeap = readHeapSnapshot(this.environment);
+          const memoryEstimate: PdfMemoryEstimate = assertPdfExportMemorySafe({
+            widthCss: Math.max(...writerPages.map((page) => page.sourceRectCss.width)),
+            heightCss: Math.max(...writerPages.map((page) => page.sourceRectCss.height)),
+            renderScaleX,
+            renderScaleY,
+            tileCount: maxPageTileCount,
+            tileBytes: maxPageTileBytes,
+            pageCount: writerPages.length,
+            maxPagePixelArea,
+            largestTilePixelArea,
+            jpegQuality: payload.settings.jpegQuality,
+            ...(initialHeap.limitBytes === undefined ? {} : { heapLimitBytes: initialHeap.limitBytes }),
+          });
+          '''
+          if old not in text:
+              raise SystemExit('memory guard anchor missing')
+          text = text.replace(old, new, 1)
+
+          old = '''          const intersections = planPdfTileIntersections(page.sourceRectCss, payload.tiles);
+              for (const intersection of intersections) {
+                const record = recordByIndex.get(intersection.tileIndex);
+                const tile = payload.tiles.find(
+                  (candidate) => candidate.index === intersection.tileIndex,
+                );
+                if (record?.blob === undefined || tile === undefined) {
+                  throw storageReadError("A PDF page tile disappeared during streamed export.", {
+                    jobId: payload.jobId.slice(0, 24),
+                    tileIndex: intersection.tileIndex,
+                  });
+                }
+
+                const decoded = await this.environment.decode(record.blob);
+          '''
+          new = '''          const intersections = pageIntersections[outputIndex];
+              if (intersections === undefined) {
+                throw exportError("A streamed PDF page plan is unavailable.", "StreamingPdfPagePlanMissing");
+              }
+              for (const intersection of intersections) {
+                const blob = storedBlobByIndex.get(intersection.tileIndex);
+                const tile = tileByIndex.get(intersection.tileIndex);
+                if (blob === undefined || tile === undefined) {
+                  throw storageReadError("A PDF page tile disappeared during streamed export.", {
+                    jobId: payload.jobId.slice(0, 24),
+                    tileIndex: intersection.tileIndex,
+                  });
+                }
+
+                const decoded = await this.environment.decode(blob);
+          '''
+          if old not in text:
+              raise SystemExit('render intersection anchor missing')
+          text = text.replace(old, new, 1)
+          path.write_text(text)
+          PY
+      - name: Add document-length memory regression
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/unit/streaming-pdf-exporter.test.ts')
+          text = path.read_text()
+          anchor = '''  it("falls back to the legacy exporter only when OPFS is unavailable before writing", async () => {
+          '''
+          test = '''  it("does not treat document-wide tile count as active streaming memory", async () => {
+            const tileCount = 4_097;
+            const tiles: CaptureTile[] = [];
+            const records: StoredTileRecord[] = [];
+            for (let index = 0; index < tileCount; index += 1) {
+              const tile: CaptureTile = {
+                id: `job-stream:${index}`,
+                jobId: "job-stream",
+                index,
+                row: index,
+                column: 0,
+                sourceRectCss: { x: 0, y: index, width: 1, height: 1 },
+                outputRectCss: { x: 0, y: index, width: 1, height: 1 },
+                captureViewportCss: { x: 0, y: index, width: 1, height: 1 },
+                expectedPixelWidth: 1,
+                expectedPixelHeight: 1,
+                overlapTopCss: 0,
+                overlapLeftCss: 0,
+                overlapRightCss: 0,
+                overlapBottomCss: 0,
+                status: "stored",
+                attempts: 1,
+                byteLength: 1,
+                mimeType: "image/png",
+              };
+              tiles.push(tile);
+              records.push({
+                schemaVersion: 1,
+                jobId: tile.jobId,
+                index,
+                tile,
+                blob: new Blob([new Uint8Array([index & 0xff])], { type: "image/png" }),
+                createdAt: "2026-08-08T03:00:00.000Z",
+                updatedAt: "2026-08-08T03:00:00.000Z",
+              });
+            }
+            let artifact: ArtifactRecord | undefined;
+            const spool = new MemorySpool();
+            const checkpoints = checkpointRepository();
+            const exporter = new StreamingPdfExporter({
+              tiles: {
+                put: () => Promise.resolve(),
+                get: (_jobId, index) => Promise.resolve(records[index]),
+                listByJob: () => Promise.resolve(records),
+                deleteByJob: () => Promise.resolve(0),
+              },
+              artifacts: {
+                put: (next) => {
+                  artifact = next;
+                  return Promise.resolve();
+                },
+                get: () => Promise.resolve(artifact),
+                delete: () => Promise.resolve(false),
+                deleteExpired: () => Promise.resolve(0),
+              },
+              spool,
+              checkpoints: checkpoints.repository,
+              fallback: { export: () => Promise.reject(new Error("fallback must not run")) },
+              environment: {
+                decode: () =>
+                  Promise.resolve({
+                    width: 1,
+                    height: 1,
+                    source: {} as CanvasImageSource,
+                    close: () => undefined,
+                  }),
+                createCanvas(width, height): PdfPageCanvasPort {
+                  return {
+                    width,
+                    height,
+                    getContext: () => ({ fillWhite: () => undefined, drawImage: () => undefined }),
+                    convertToJpeg: () =>
+                      Promise.resolve(
+                        new Blob([Uint8Array.from(ONE_PIXEL_JPEG).buffer], { type: "image/jpeg" }),
+                      ),
+                    release: () => undefined,
+                  };
+                },
+              },
+            });
+
+            const result = await exporter.export({
+              jobId: "job-stream",
+              outputArtifactId: "long-document-selected-page",
+              targetRect: { x: 0, y: 0, width: 1, height: tileCount },
+              tiles,
+              pages: [
+                {
+                  id: "selected-page-1",
+                  originalIndex: 0,
+                  sourceRectCss: { x: 0, y: 0, width: 1, height: 1 },
+                  pageWidthPt: 595,
+                  pageHeightPt: 842,
+                  imageRectPt: { x: 0, y: 0, width: 595, height: 842 },
+                },
+              ],
+              settings: DEFAULT_CAPTURE_SETTINGS.pdf,
+              filename: "selected-page.pdf",
+              createdAt: "2026-08-08T03:00:00.000Z",
+              expiresAt: "2026-08-08T03:30:00.000Z",
+            });
+
+            expect(result.diagnostics.pageCount).toBe(1);
+            expect(result.diagnostics.memoryEstimate.reasons).not.toContain("tile-count");
+            expect(result.diagnostics.memoryEstimate.reasons).not.toContain("tile-bytes");
+            expect(result.diagnostics.memoryEstimate.shouldBlock).toBe(false);
+            expect(artifact?.opfsReference).toBe(
+              "webcap-pdf-output/long-document-selected-page.pdf",
+            );
+          });
+
+          '''
+          if anchor not in text:
+              raise SystemExit('test insertion anchor missing')
+          path.write_text(text.replace(anchor, test + anchor, 1))
+          PY
+      - run: pnpm exec prettier --write src/offscreen/streaming-pdf-exporter.ts tests/unit/streaming-pdf-exporter.test.ts
+      - run: pnpm typecheck
+      - run: pnpm test:unit -- tests/unit/streaming-pdf-exporter.test.ts tests/unit/streaming-pdf-writer.test.ts
+      - name: Commit patch and remove helper
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/s32-local-memory-bound.yml
+          git add src/offscreen/streaming-pdf-exporter.ts tests/unit/streaming-pdf-exporter.test.ts
+          git commit -m "Bound S32 memory guard to active page"
+          git push origin HEAD:agent/s32-disk-spool-streaming-writer
