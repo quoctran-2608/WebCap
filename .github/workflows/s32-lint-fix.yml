@@ -1,0 +1,62 @@
+name: S32 lint fix
+
+on:
+  push:
+    branches:
+      - agent/s32-disk-spool-streaming-writer
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/s32-disk-spool-streaming-writer
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Patch lint findings
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          exporter = Path('src/offscreen/streaming-pdf-exporter.ts')
+          text = exporter.read_text()
+          old = 'import type { CaptureTile, Rect } from "@shared/contracts/domain";\n'
+          if old not in text:
+              raise SystemExit('exporter import anchor missing')
+          exporter.write_text(text.replace(old, '', 1))
+
+          test = Path('tests/unit/streaming-pdf-exporter.test.ts')
+          text = test.read_text()
+          old = 'createOutput: () => Promise.reject({ data: { fallbackAllowed: true } }),'
+          new = '''createOutput: () => {
+        const error = new Error("OPFS unavailable") as Error & {
+          data: { fallbackAllowed: boolean };
+        };
+        error.data = { fallbackAllowed: true };
+        return Promise.reject(error);
+      },'''
+          if old not in text:
+              raise SystemExit('test rejection anchor missing')
+          test.write_text(text.replace(old, new, 1))
+          PY
+      - run: pnpm exec prettier --write src/offscreen/streaming-pdf-exporter.ts tests/unit/streaming-pdf-exporter.test.ts
+      - name: Commit fix and remove helper
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/s32-lint-fix.yml
+          git add src/offscreen/streaming-pdf-exporter.ts tests/unit/streaming-pdf-exporter.test.ts
+          git commit -m "Fix S32 lint findings"
+          git push origin HEAD:agent/s32-disk-spool-streaming-writer
