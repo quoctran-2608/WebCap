@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>S34 adversarial PDF viewer</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: start center;
+        background: #eceff3;
+        font-family: Arial, sans-serif;
+      }
+      #pdf-scroll {
+        width: 720px;
+        height: 460px;
+        margin-top: 24px;
+        overflow: auto;
+        border: 2px solid #596273;
+        background: #30343b;
+        padding: 18px 0;
+      }
+      .page {
+        position: relative;
+        width: 600px;
+        height: 300px;
+        margin: 0 auto 20px;
+        background: white;
+        box-shadow: 0 2px 8px rgb(0 0 0 / 28%);
+      }
+      .page canvas {
+        display: block;
+        width: 600px;
+        height: 300px;
+      }
+      .duplicate-label {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        font-size: 22px;
+        color: #1f2937;
+        pointer-events: none;
+      }
+      .placeholder::after {
+        content: "loading";
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        color: #667085;
+        background: #f4f5f7;
+      }
+    </style>
+  </head>
+  <body>
+    <section
+      id="pdf-scroll"
+      class="pdf-viewer virtualized-document"
+      data-page-count="4"
+      aria-label="PDF document viewer"
+    >
+      <article class="page" data-page-number="1" data-rendered="true" aria-label="Page 1">
+        <canvas id="blank-page" width="600" height="300"></canvas>
+      </article>
+      <article
+        id="lazy-page"
+        class="page placeholder"
+        data-page-number="2"
+        data-rendered="false"
+        aria-label="Page 2"
+      >
+        <canvas id="lazy-canvas" width="0" height="0"></canvas>
+      </article>
+      <article class="page" data-page-number="3" data-rendered="true" aria-label="Page 3">
+        <canvas class="duplicate-canvas" width="600" height="300"></canvas>
+        <div class="duplicate-label">identical adjacent page</div>
+      </article>
+      <article class="page" data-page-number="4" data-rendered="true" aria-label="Page 4">
+        <canvas class="duplicate-canvas" width="600" height="300"></canvas>
+        <div class="duplicate-label">identical adjacent page</div>
+      </article>
+    </section>
+    <script>
+      (() => {
+        const viewer = document.querySelector("#pdf-scroll");
+        const lazyPage = document.querySelector("#lazy-page");
+        const lazyCanvas = document.querySelector("#lazy-canvas");
+        let releaseCount = 0;
+        let released = false;
+
+        const paint = (canvas, label) => {
+          const context = canvas.getContext("2d");
+          if (!context) return;
+          context.fillStyle = "#ffffff";
+          context.fillRect(0, 0, canvas.width, canvas.height);
+          if (label) {
+            context.fillStyle = "#344054";
+            context.font = "24px sans-serif";
+            context.fillText(label, 150, 155);
+          }
+        };
+        paint(document.querySelector("#blank-page"), "");
+        for (const canvas of document.querySelectorAll(".duplicate-canvas")) {
+          paint(canvas, "identical adjacent page");
+        }
+
+        const releaseLazyPage = () => {
+          if (released || viewer.scrollTop < 140) return;
+          released = true;
+          releaseCount += 1;
+          lazyCanvas.width = 600;
+          lazyCanvas.height = 300;
+          paint(lazyCanvas, "lazy page ready");
+          lazyPage.dataset.rendered = "true";
+          lazyPage.classList.remove("placeholder");
+        };
+        viewer.addEventListener("scroll", releaseLazyPage, { passive: true });
+
+        window.__webcapAdversarialPdfFixture = {
+          get lazyReleased() {
+            return released;
+          },
+          get releaseCount() {
+            return releaseCount;
+          },
+        };
+      })();
+    </script>
+  </body>
+</html>
