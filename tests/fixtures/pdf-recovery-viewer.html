@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebCap S33 PDF recovery viewer</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 24px; font-family: Arial, sans-serif; background: #eef1f5; color: #172033; }
+      h1 { margin: 0 0 14px; font-size: 22px; }
+      #pdf-scroll { width: 760px; height: 500px; overflow: auto; padding: 20px 0; border: 1px solid #111827; background: #25282d; }
+      .pageContainer { position: relative; width: 640px; height: 760px; margin: 0 auto 22px; overflow: hidden; background: white; box-shadow: 0 2px 10px rgb(0 0 0 / 35%); }
+      .page-content { padding: 48px 56px; }
+      .page-number { position: absolute; right: 24px; bottom: 20px; color: #667085; }
+      .bars { display: grid; gap: 14px; margin-top: 34px; }
+      .bars div { height: 34px; border-radius: 8px; background: linear-gradient(90deg, #dbeafe, #dcfce7); border: 1px solid #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <h1>PDF recovery fixture — 24 logical pages</h1>
+    <div id="pdf-scroll" data-page-count="24" aria-label="PDF viewer, 24 pages"></div>
+    <script>
+      const viewer = document.querySelector("#pdf-scroll");
+      for (let index = 0; index < 24; index += 1) {
+        const page = document.createElement("section");
+        page.className = "pageContainer";
+        page.dataset.pageNumber = String(index + 1);
+        page.dataset.pageCount = "24";
+        page.setAttribute("aria-label", `Trang ${index + 1} trên 24`);
+        page.innerHTML = `<div class="page-content"><h2>Trang ${index + 1}</h2><p>S33 recovery boundary ${index + 1}.</p><div class="bars"><div></div><div></div><div></div><div></div></div></div><span class="page-number">${index + 1} / 24</span>`;
+        viewer.append(page);
+      }
+    </script>
+  </body>
+</html>
