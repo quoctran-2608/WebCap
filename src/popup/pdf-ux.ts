@@ -79,7 +79,11 @@ export function buildPdfUxSnapshot(
   }
 
   if (manifest !== undefined) {
-    if (stage === "writing" || stage === "completed" || (stage === "paused" && job.activeOutputFormat === "pdf")) {
+    if (
+      stage === "writing" ||
+      stage === "completed" ||
+      (stage === "paused" && job.activeOutputFormat === "pdf")
+    ) {
       completedPages = boundedCount(manifest.progress.outputPages);
       totalPages = manifestOutputTotal(manifest);
     } else if (stage === "verifying") {
@@ -92,7 +96,10 @@ export function buildPdfUxSnapshot(
       );
       totalPages = boundedCount(manifest.expectedPageCount);
     }
-  } else if (job.exportProgress !== undefined && (job.state === "exporting" || job.activeOutputFormat === "pdf")) {
+  } else if (
+    job.exportProgress !== undefined &&
+    (job.state === "exporting" || job.activeOutputFormat === "pdf")
+  ) {
     completedPages = boundedCount(job.exportProgress.completedPages);
     totalPages = boundedCount(job.exportProgress.totalPages);
   }
@@ -127,18 +134,19 @@ export function buildPdfUxSnapshot(
     ...(manifest?.progress.currentPage === undefined
       ? {}
       : { currentPage: manifest.progress.currentPage + 1 }),
-    ...(manifest?.progress.currentBatch === undefined
-      ? {}
-      : { currentBatch: manifest.progress.currentBatch }),
-    resultKind: job.output?.pdfPart !== undefined ? "multipart" : verifiedComplete ? "viewer" : "legacy",
+    ...(manifest === undefined ? {} : { currentBatch: manifest.progress.currentBatch }),
+    resultKind:
+      job.output?.pdfPart !== undefined ? "multipart" : verifiedComplete ? "viewer" : "legacy",
   };
 }
 
 export type PdfUxCopyKey =
+  | "eyebrow"
   | "entryTitle"
   | "entryDetail"
   | "entryAction"
   | "progressTitle"
+  | "resultTitle"
   | "capturing"
   | "verifying"
   | "writing"
@@ -148,15 +156,19 @@ export type PdfUxCopyKey =
   | "multipart"
   | "legacyResult"
   | "pageProgress"
-  | "batch";
+  | "batch"
+  | "diagnosticsSummary"
+  | "operationFailed";
 
 const COPY: Record<UiLocale, Record<PdfUxCopyKey, string>> = {
   vi: {
+    eyebrow: "PDF",
     entryTitle: "Chụp PDF đang hiển thị",
     entryDetail:
       "WebCap có thể nhận diện từng trang trong viewer, chụp theo ranh giới trang và chỉ báo 100% sau khi xác minh đầu ra.",
     entryAction: "Chụp PDF đang hiển thị",
     progressTitle: "Đang xử lý PDF",
+    resultTitle: "Kết quả PDF",
     capturing: "Đang nhận diện và chụp trang",
     verifying: "Đang xác minh đủ trang nguồn",
     writing: "Đang ghi PDF theo từng trang",
@@ -167,13 +179,17 @@ const COPY: Record<UiLocale, Record<PdfUxCopyKey, string>> = {
     legacyResult: "PDF đã tạo từ dữ liệu chụp cục bộ",
     pageProgress: "Trang {completed} / {total}",
     batch: "Đợt {batch}",
+    diagnosticsSummary: "Xác minh PDF",
+    operationFailed: "Không thể tiếp tục thao tác PDF. Hãy thử lại.",
   },
   en: {
+    eyebrow: "PDF",
     entryTitle: "Capture the displayed PDF",
     entryDetail:
       "WebCap can identify viewer pages, capture on page boundaries, and only report 100% after output verification.",
     entryAction: "Capture displayed PDF",
     progressTitle: "Processing PDF",
+    resultTitle: "PDF result",
     capturing: "Discovering and capturing pages",
     verifying: "Verifying source-page completion",
     writing: "Writing the PDF page by page",
@@ -184,6 +200,8 @@ const COPY: Record<UiLocale, Record<PdfUxCopyKey, string>> = {
     legacyResult: "PDF created from local capture data",
     pageProgress: "Page {completed} / {total}",
     batch: "Batch {batch}",
+    diagnosticsSummary: "PDF verification",
+    operationFailed: "Unable to continue the PDF operation. Please try again.",
   },
 };
 
