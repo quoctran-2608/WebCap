@@ -157,7 +157,8 @@ export class OpfsPdfOutputSpool implements PdfOutputSpoolPort {
           return bytes;
         },
         write: async (chunk) => {
-          if (closed) throw spoolError(new DOMException("PDF output spool is closed.", "InvalidStateError"));
+          if (closed)
+            throw spoolError(new DOMException("PDF output spool is closed.", "InvalidStateError"));
           try {
             await writable.write(ownedArrayBuffer(chunk));
             bytes += chunk.byteLength;

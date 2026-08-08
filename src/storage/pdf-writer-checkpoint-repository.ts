@@ -67,8 +67,10 @@ function requestResult<T>(request: IDBRequest<T>): Promise<T> {
 function transactionDone(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB transaction aborted."));
-    transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB transaction failed."));
+    transaction.onabort = () =>
+      reject(transaction.error ?? new Error("IndexedDB transaction aborted."));
+    transaction.onerror = () =>
+      reject(transaction.error ?? new Error("IndexedDB transaction failed."));
   });
 }
 
@@ -82,7 +84,8 @@ export async function openPdfWriterCheckpointDatabase(): Promise<IDBDatabase> {
       }
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error("Could not open PDF writer database."));
+    request.onerror = () =>
+      reject(request.error ?? new Error("Could not open PDF writer database."));
     request.onblocked = () => reject(new Error("PDF writer database upgrade was blocked."));
   });
 }
@@ -106,7 +109,9 @@ export class IndexedDbPdfWriterCheckpointRepository implements PdfWriterCheckpoi
     try {
       const database = await this.openDatabase();
       const transaction = database.transaction(PDF_WRITER_STORE, "readonly");
-      const value = await requestResult<unknown>(transaction.objectStore(PDF_WRITER_STORE).get(jobId));
+      const value = await requestResult<unknown>(
+        transaction.objectStore(PDF_WRITER_STORE).get(jobId),
+      );
       return value === undefined ? undefined : parseCheckpoint(value);
     } catch (error) {
       throw storageError("read", error);

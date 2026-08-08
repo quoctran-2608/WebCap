@@ -3,10 +3,7 @@ import type { CaptureTile, Rect } from "@shared/contracts/domain";
 import type { PdfEditorPage } from "@shared/contracts/pdf-editor";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import type { ArtifactRepositoryPort } from "@storage/artifact-repository";
-import {
-  isPdfSpoolFallbackAllowed,
-  type PdfOutputSpoolPort,
-} from "@storage/pdf-output-spool";
+import { isPdfSpoolFallbackAllowed, type PdfOutputSpoolPort } from "@storage/pdf-output-spool";
 import type {
   PdfWriterCheckpointRepositoryPort,
   PdfWriterCheckpoint,
@@ -165,12 +162,19 @@ function cancelledError(jobId: string): Error {
 
 function positiveScale(value: number, axis: "x" | "y"): number {
   if (!Number.isFinite(value) || value <= 0 || value > 8) {
-    throw exportError(`The streamed PDF ${axis}-axis tile scale is invalid.`, "StreamingPdfTileScaleInvalid");
+    throw exportError(
+      `The streamed PDF ${axis}-axis tile scale is invalid.`,
+      "StreamingPdfTileScaleInvalid",
+    );
   }
   return value;
 }
 
-function roundRange(start: number, end: number, maximum: number): { start: number; length: number } {
+function roundRange(
+  start: number,
+  end: number,
+  maximum: number,
+): { start: number; length: number } {
   const roundedStart = Math.max(0, Math.min(maximum, Math.round(start)));
   const roundedEnd = Math.max(roundedStart, Math.min(maximum, Math.round(end)));
   return { start: roundedStart, length: roundedEnd - roundedStart };
@@ -263,7 +267,10 @@ export class StreamingPdfExporter {
     const writerPages = payload.pages ?? defaultEditorPages(payload);
     if (writerPages.length === 0) {
       await output.abort().catch(() => undefined);
-      throw exportError("PDF export requires at least one selected page.", "StreamingPdfPagesMissing");
+      throw exportError(
+        "PDF export requires at least one selected page.",
+        "StreamingPdfPagesMissing",
+      );
     }
     const writer = new SequentialRasterPdfWriter(output, writerPages.length);
     const rasterReferences = new Set<string>();
@@ -285,7 +292,10 @@ export class StreamingPdfExporter {
 
       const firstTile = payload.tiles[0];
       if (firstTile === undefined) {
-        throw exportError("PDF export requires at least one stored capture tile.", "StreamingPdfTilesMissing");
+        throw exportError(
+          "PDF export requires at least one stored capture tile.",
+          "StreamingPdfTilesMissing",
+        );
       }
       const renderScaleX = positiveScale(
         firstTile.expectedPixelWidth / firstTile.sourceRectCss.width,
@@ -309,13 +319,18 @@ export class StreamingPdfExporter {
           totalPixelHeight,
         );
         if (pixelXRange.length <= 0 || pixelYRange.length <= 0) {
-          throw exportError("A streamed PDF page pixel range is empty.", "StreamingPdfPagePixelRangeMissing");
+          throw exportError(
+            "A streamed PDF page pixel range is empty.",
+            "StreamingPdfPagePixelRangeMissing",
+          );
         }
         return { page, pixelXRange, pixelYRange };
       });
 
       const maxPagePixelArea = Math.max(
-        ...pagePixelRanges.map(({ pixelXRange, pixelYRange }) => pixelXRange.length * pixelYRange.length),
+        ...pagePixelRanges.map(
+          ({ pixelXRange, pixelYRange }) => pixelXRange.length * pixelYRange.length,
+        ),
       );
       const largestTilePixelArea = Math.max(
         ...payload.tiles.map((tile) => tile.expectedPixelWidth * tile.expectedPixelHeight),
@@ -361,13 +376,18 @@ export class StreamingPdfExporter {
         try {
           const context = canvas.getContext();
           if (context === null) {
-            throw exportError("WebCap could not create a streamed PDF page canvas context.", "StreamingPdfCanvasUnavailable");
+            throw exportError(
+              "WebCap could not create a streamed PDF page canvas context.",
+              "StreamingPdfCanvasUnavailable",
+            );
           }
           context.fillWhite(canvas.width, canvas.height);
           const intersections = planPdfTileIntersections(page.sourceRectCss, payload.tiles);
           for (const intersection of intersections) {
             const record = recordByIndex.get(intersection.tileIndex);
-            const tile = payload.tiles.find((candidate) => candidate.index === intersection.tileIndex);
+            const tile = payload.tiles.find(
+              (candidate) => candidate.index === intersection.tileIndex,
+            );
             if (record?.blob === undefined || tile === undefined) {
               throw storageReadError("A PDF page tile disappeared during streamed export.", {
                 jobId: payload.jobId.slice(0, 24),
@@ -396,12 +416,18 @@ export class StreamingPdfExporter {
               );
               const globalDestinationX = roundRange(
                 (intersection.logicalRectCss.x - payload.targetRect.x) * renderScaleX,
-                (intersection.logicalRectCss.x + intersection.logicalRectCss.width - payload.targetRect.x) * renderScaleX,
+                (intersection.logicalRectCss.x +
+                  intersection.logicalRectCss.width -
+                  payload.targetRect.x) *
+                  renderScaleX,
                 totalPixelWidth,
               );
               const globalDestinationY = roundRange(
                 (intersection.logicalRectCss.y - payload.targetRect.y) * renderScaleY,
-                (intersection.logicalRectCss.y + intersection.logicalRectCss.height - payload.targetRect.y) * renderScaleY,
+                (intersection.logicalRectCss.y +
+                  intersection.logicalRectCss.height -
+                  payload.targetRect.y) *
+                  renderScaleY,
                 totalPixelHeight,
               );
               const destinationX = globalDestinationX.start - pixelXRange.start;
@@ -416,7 +442,10 @@ export class StreamingPdfExporter {
                 destinationY < 0 ||
                 destinationY + globalDestinationY.length > canvas.height
               ) {
-                throw exportError("A streamed PDF tile crop is empty or outside the page.", "StreamingPdfTileCropInvalid");
+                throw exportError(
+                  "A streamed PDF tile crop is empty or outside the page.",
+                  "StreamingPdfTileCropInvalid",
+                );
               }
               context.drawImage(
                 decoded,
@@ -440,7 +469,11 @@ export class StreamingPdfExporter {
           if (jpegBlob.size <= 0) {
             throw exportError("The streamed PDF page JPEG is empty.", "StreamingPdfPageJpegEmpty");
           }
-          const raster = await this.spool.writeRasterPage(payload.outputArtifactId, outputIndex, jpegBlob);
+          const raster = await this.spool.writeRasterPage(
+            payload.outputArtifactId,
+            outputIndex,
+            jpegBlob,
+          );
           rasterReference = raster.reference;
           rasterReferences.add(raster.reference);
 
@@ -504,7 +537,10 @@ export class StreamingPdfExporter {
       const integrity = await assertStreamingPdfStructure(finalized.file.blob, writerPages.length);
       const firstPage = writerPages[0];
       if (firstPage === undefined) {
-        throw exportError("Streamed PDF output page metadata is unavailable.", "StreamingPdfPagesMissing");
+        throw exportError(
+          "Streamed PDF output page metadata is unavailable.",
+          "StreamingPdfPagesMissing",
+        );
       }
 
       const record: ArtifactRecord = {

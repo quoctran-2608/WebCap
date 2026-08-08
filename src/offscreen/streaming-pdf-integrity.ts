@@ -62,7 +62,10 @@ export async function inspectStreamingPdfStructure(
   expectedPageCount: number,
 ): Promise<StreamingPdfIntegrityReport> {
   if (!Number.isInteger(expectedPageCount) || expectedPageCount <= 0) {
-    throw integrityError("Streamed PDF validation requires a positive expected page count.", "StreamingPdfExpectedPageCountInvalid");
+    throw integrityError(
+      "Streamed PDF validation requires a positive expected page count.",
+      "StreamingPdfExpectedPageCountInvalid",
+    );
   }
   if (blob.size <= 0) {
     throw integrityError("The streamed PDF artifact is empty.", "StreamingPdfArtifactEmpty");
@@ -136,8 +139,12 @@ export async function inspectStreamingPdfStructure(
     }
     if (!pagesObject.includes(`/Count ${expectedPageCount}`)) errors.push("page-count");
     const kidsMatch = /\/Kids \[([^\]]*)\]/u.exec(pagesObject)?.[1] ?? "";
-    const kidRefs = [...kidsMatch.matchAll(/(\d+) 0 R/gu)].map((match) => Number.parseInt(match[1] ?? "-1", 10));
-    const expectedKids = Array.from({ length: expectedPageCount }, (_, index) => pageObjectNumber(index));
+    const kidRefs = [...kidsMatch.matchAll(/(\d+) 0 R/gu)].map((match) =>
+      Number.parseInt(match[1] ?? "-1", 10),
+    );
+    const expectedKids = Array.from({ length: expectedPageCount }, (_, index) =>
+      pageObjectNumber(index),
+    );
     if (
       kidRefs.length !== expectedKids.length ||
       kidRefs.some((objectNumber, index) => objectNumber !== expectedKids[index])
@@ -158,7 +165,8 @@ export async function inspectStreamingPdfStructure(
 
   return {
     valid: errors.length === 0,
-    pageCount: errors.includes("page-count") || errors.includes("page-kids") ? 0 : expectedPageCount,
+    pageCount:
+      errors.includes("page-count") || errors.includes("page-kids") ? 0 : expectedPageCount,
     objectCount: expectedSize - 1,
     byteLength: blob.size,
     xrefOffset,

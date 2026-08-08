@@ -27,7 +27,11 @@ export interface StreamingPdfWriterResult {
   checkpoint: StreamingPdfWriterCheckpoint;
 }
 
-function writerError(message: string, causeCode: string, safeContext?: Record<string, number | string>): Error {
+function writerError(
+  message: string,
+  causeCode: string,
+  safeContext?: Record<string, number | string>,
+): Error {
   return createWebCapRuntimeError(
     createWebCapError({
       code: "E_EXPORT_FAILED",
@@ -44,7 +48,10 @@ function writerError(message: string, causeCode: string, safeContext?: Record<st
 
 function pdfNumber(value: number): string {
   if (!Number.isFinite(value)) {
-    throw writerError("The streamed PDF contains an invalid numeric value.", "StreamingPdfInvalidNumber");
+    throw writerError(
+      "The streamed PDF contains an invalid numeric value.",
+      "StreamingPdfInvalidNumber",
+    );
   }
   const rounded = Math.round(value * 10_000) / 10_000;
   return Object.is(rounded, -0) ? "0" : String(rounded);
@@ -76,7 +83,10 @@ export class SequentialRasterPdfWriter {
 
   constructor(output: PdfSpoolWritable, totalPages: number) {
     if (!Number.isInteger(totalPages) || totalPages <= 0) {
-      throw writerError("Streamed PDF output requires a positive page count.", "StreamingPdfPageCountInvalid");
+      throw writerError(
+        "Streamed PDF output requires a positive page count.",
+        "StreamingPdfPageCountInvalid",
+      );
     }
     this.output = output;
     this.totalPages = totalPages;
@@ -104,9 +114,13 @@ export class SequentialRasterPdfWriter {
   private recordOffset(objectNumber: number): void {
     const offset = this.output.byteLength;
     if (offset > MAX_PDF_XREF_OFFSET) {
-      throw writerError("The streamed PDF exceeded the supported xref offset range.", "StreamingPdfXrefOverflow", {
-        byteLength: offset,
-      });
+      throw writerError(
+        "The streamed PDF exceeded the supported xref offset range.",
+        "StreamingPdfXrefOverflow",
+        {
+          byteLength: offset,
+        },
+      );
     }
     this.offsets[objectNumber] = offset;
   }
@@ -115,8 +129,7 @@ export class SequentialRasterPdfWriter {
     if (this.initialized) return;
     await this.writeBytes(
       new Uint8Array([
-        0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0x0a, 0x25, 0xe2, 0xe3, 0xcf, 0xd3,
-        0x0a,
+        0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0x0a, 0x25, 0xe2, 0xe3, 0xcf, 0xd3, 0x0a,
       ]),
     );
     this.initialized = true;
@@ -137,10 +150,16 @@ export class SequentialRasterPdfWriter {
 
   async addJpegPage(page: StreamingPdfPageInput): Promise<StreamingPdfWriterCheckpoint> {
     if (this.finalized) {
-      throw writerError("The streamed PDF writer is already finalized.", "StreamingPdfWriterFinalized");
+      throw writerError(
+        "The streamed PDF writer is already finalized.",
+        "StreamingPdfWriterFinalized",
+      );
     }
     if (this.pagesWritten >= this.totalPages) {
-      throw writerError("The streamed PDF writer received more pages than planned.", "StreamingPdfTooManyPages");
+      throw writerError(
+        "The streamed PDF writer received more pages than planned.",
+        "StreamingPdfTooManyPages",
+      );
     }
     if (
       !Number.isInteger(page.pixelWidth) ||
@@ -153,9 +172,13 @@ export class SequentialRasterPdfWriter {
       page.imageRectPt.width <= 0 ||
       page.imageRectPt.height <= 0
     ) {
-      throw writerError("A streamed PDF page has invalid raster or geometry metadata.", "StreamingPdfPageInvalid", {
-        pageIndex: this.pagesWritten,
-      });
+      throw writerError(
+        "A streamed PDF page has invalid raster or geometry metadata.",
+        "StreamingPdfPageInvalid",
+        {
+          pageIndex: this.pagesWritten,
+        },
+      );
     }
 
     await this.initialize();
@@ -179,7 +202,9 @@ export class SequentialRasterPdfWriter {
     const content = `q\n${pdfNumber(page.imageRectPt.width)} 0 0 ${pdfNumber(page.imageRectPt.height)} ${pdfNumber(page.imageRectPt.x)} ${pdfNumber(page.imageRectPt.y)} cm\n/Im0 Do\nQ\n`;
     const contentBytes = encoder.encode(content);
     this.recordOffset(contentObject);
-    await this.writeText(`${contentObject} 0 obj\n<< /Length ${contentBytes.byteLength} >>\nstream\n`);
+    await this.writeText(
+      `${contentObject} 0 obj\n<< /Length ${contentBytes.byteLength} >>\nstream\n`,
+    );
     await this.writeBytes(contentBytes);
     await this.writeText("endstream\nendobj\n");
 
@@ -189,19 +214,31 @@ export class SequentialRasterPdfWriter {
 
   async finalize(): Promise<StreamingPdfWriterResult> {
     if (this.finalized) {
-      throw writerError("The streamed PDF writer was finalized more than once.", "StreamingPdfWriterFinalized");
+      throw writerError(
+        "The streamed PDF writer was finalized more than once.",
+        "StreamingPdfWriterFinalized",
+      );
     }
     if (this.pagesWritten !== this.totalPages) {
-      throw writerError("The streamed PDF writer cannot finalize before every planned page is written.", "StreamingPdfPagesIncomplete", {
-        pagesWritten: this.pagesWritten,
-        totalPages: this.totalPages,
-      });
+      throw writerError(
+        "The streamed PDF writer cannot finalize before every planned page is written.",
+        "StreamingPdfPagesIncomplete",
+        {
+          pagesWritten: this.pagesWritten,
+          totalPages: this.totalPages,
+        },
+      );
     }
     await this.initialize();
 
     this.recordOffset(2);
-    const kids = Array.from({ length: this.totalPages }, (_, index) => `${pageObjectNumber(index)} 0 R`).join(" ");
-    await this.writeText(`2 0 obj\n<< /Type /Pages /Count ${this.totalPages} /Kids [${kids}] >>\nendobj\n`);
+    const kids = Array.from(
+      { length: this.totalPages },
+      (_, index) => `${pageObjectNumber(index)} 0 R`,
+    ).join(" ");
+    await this.writeText(
+      `2 0 obj\n<< /Type /Pages /Count ${this.totalPages} /Kids [${kids}] >>\nendobj\n`,
+    );
 
     this.recordOffset(1);
     await this.writeText("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
@@ -213,13 +250,19 @@ export class SequentialRasterPdfWriter {
     for (let objectNumber = 1; objectNumber < size; objectNumber += 1) {
       const offset = this.offsets[objectNumber];
       if (offset === undefined || offset < 0 || offset > MAX_PDF_XREF_OFFSET) {
-        throw writerError("The streamed PDF xref table is incomplete.", "StreamingPdfXrefIncomplete", {
-          objectNumber,
-        });
+        throw writerError(
+          "The streamed PDF xref table is incomplete.",
+          "StreamingPdfXrefIncomplete",
+          {
+            objectNumber,
+          },
+        );
       }
       await this.writeText(`${Math.floor(offset).toString().padStart(10, "0")} 00000 n \n`);
     }
-    await this.writeText(`trailer\n<< /Size ${size} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
+    await this.writeText(
+      `trailer\n<< /Size ${size} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`,
+    );
 
     const file = await this.output.close();
     this.finalized = true;
