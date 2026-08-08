@@ -181,7 +181,12 @@ async function renderPdfPageThumbnail(options: PdfThumbnailOptions): Promise<Pdf
   const now = options.now ?? (() => new Date());
   const artifactId = artifactIdFor(options.jobId, options.manifestRevision, options.page.id);
   const cached = await artifacts.get(artifactId);
-  if (cached !== undefined && cached.role === "thumbnail" && cached.blob.size > 0) {
+  if (
+    cached !== undefined &&
+    cached.role === "thumbnail" &&
+    cached.blob !== undefined &&
+    cached.blob.size > 0
+  ) {
     return { metadata: metadata(cached), blob: cached.blob };
   }
 
