@@ -1,0 +1,37 @@
+name: S32 E2E format
+
+on:
+  push:
+    branches:
+      - agent/s32-disk-spool-streaming-writer
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/s32-disk-spool-streaming-writer
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec prettier --write tests/e2e/pdf-export.spec.ts tests/e2e/pdf-scroll-viewer.spec.ts
+      - run: pnpm typecheck
+      - name: Commit format and remove helper
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/s32-e2e-format.yml
+          git add tests/e2e/pdf-export.spec.ts tests/e2e/pdf-scroll-viewer.spec.ts
+          git commit -m "Format S32 disk-backed PDF E2E"
+          git push origin HEAD:agent/s32-disk-spool-streaming-writer
