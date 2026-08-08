@@ -40,9 +40,13 @@ function plannerError(
 
 function requirePositive(value: number, label: string): number {
   if (!Number.isFinite(value) || value <= 0) {
-    throw plannerError(`PDF page ${label} must be positive and finite.`, "PdfPagePlanInvalidInput", {
-      value,
-    });
+    throw plannerError(
+      `PDF page ${label} must be positive and finite.`,
+      "PdfPagePlanInvalidInput",
+      {
+        value,
+      },
+    );
   }
   return value;
 }
@@ -77,10 +81,7 @@ function axisPlan(options: {
   );
   const step = Math.max(1, options.viewportExtent - safeOverlap);
   const distance = Math.max(0, lastScroll - firstScroll);
-  const total = Math.max(
-    1,
-    Math.ceil((distance - TILE_COVERAGE_EPSILON_CSS) / step) + 1,
-  );
+  const total = Math.max(1, Math.ceil((distance - TILE_COVERAGE_EPSILON_CSS) / step) + 1);
   if (!options.materialize) return { stops: [], total };
 
   return {
@@ -94,22 +95,35 @@ function axisPlan(options: {
 function validatePageRect(pageRect: Rect, documentWidth: number, documentHeight: number): void {
   requirePositive(pageRect.width, "width");
   requirePositive(pageRect.height, "height");
-  if (!Number.isFinite(pageRect.x) || !Number.isFinite(pageRect.y) || pageRect.x < 0 || pageRect.y < 0) {
-    throw plannerError("PDF page position must be finite and non-negative.", "PdfPagePlanInvalidPosition", {
-      x: pageRect.x,
-      y: pageRect.y,
-    });
+  if (
+    !Number.isFinite(pageRect.x) ||
+    !Number.isFinite(pageRect.y) ||
+    pageRect.x < 0 ||
+    pageRect.y < 0
+  ) {
+    throw plannerError(
+      "PDF page position must be finite and non-negative.",
+      "PdfPagePlanInvalidPosition",
+      {
+        x: pageRect.x,
+        y: pageRect.y,
+      },
+    );
   }
   if (
     pageRect.x + pageRect.width > documentWidth + TILE_COVERAGE_EPSILON_CSS ||
     pageRect.y + pageRect.height > documentHeight + TILE_COVERAGE_EPSILON_CSS
   ) {
-    throw plannerError("PDF page rectangle exceeds the verified viewer extent.", "PdfPageOutsideViewer", {
-      pageRight: pageRect.x + pageRect.width,
-      pageBottom: pageRect.y + pageRect.height,
-      documentWidth,
-      documentHeight,
-    });
+    throw plannerError(
+      "PDF page rectangle exceeds the verified viewer extent.",
+      "PdfPageOutsideViewer",
+      {
+        pageRight: pageRect.x + pageRect.width,
+        pageBottom: pageRect.y + pageRect.height,
+        documentWidth,
+        documentHeight,
+      },
+    );
   }
 }
 

@@ -63,10 +63,7 @@ function pageResult(request: ScrollAreaPageRequest, includeMap = false): ScrollA
 function setup(options: { discover?: boolean } = {}) {
   const scrollAndSettle = vi.fn((request: ScrollAreaPageRequest) =>
     Promise.resolve(
-      pageResult(
-        request,
-        options.discover !== false && request.expectedScrollWidth === undefined,
-      ),
+      pageResult(request, options.discover !== false && request.expectedScrollWidth === undefined),
     ),
   );
   const cleanup = vi.fn(() =>
@@ -154,7 +151,9 @@ describe("PageNativeCaptureEngine", () => {
     expect(harness.fallbackCapture).not.toHaveBeenCalled();
     expect(harness.scrollAndSettle).toHaveBeenCalledTimes(4);
     expect(
-      harness.scrollAndSettle.mock.calls.slice(1).every(([request]) => request.fixedElementMode === "remove"),
+      harness.scrollAndSettle.mock.calls
+        .slice(1)
+        .every(([request]) => request.fixedElementMode === "remove"),
     ).toBe(true);
   });
 

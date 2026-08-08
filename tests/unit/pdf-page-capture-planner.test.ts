@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { planPdfPageCaptureTiles } from "@capture/pdf-page-capture-planner";
 
-function covered(rect: { x: number; y: number; width: number; height: number }, tiles: ReturnType<typeof planPdfPageCaptureTiles>["tiles"]): boolean {
+function covered(
+  rect: { x: number; y: number; width: number; height: number },
+  tiles: ReturnType<typeof planPdfPageCaptureTiles>["tiles"],
+): boolean {
   const epsilon = 0.01;
   const points = [
     [rect.x + epsilon, rect.y + epsilon],
@@ -92,6 +95,10 @@ describe("planPdfPageCaptureTiles", () => {
         startTileIndex: 0,
         maxTilesPerPage: 10,
       }),
-    ).toThrowError(expect.objectContaining({ data: expect.objectContaining({ causeCode: "PdfPageTileBudgetExceeded" }) }));
+    ).toThrowError(
+      expect.objectContaining({
+        data: expect.objectContaining({ causeCode: "PdfPageTileBudgetExceeded" }),
+      }),
+    );
   });
 });

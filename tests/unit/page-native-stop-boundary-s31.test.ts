@@ -32,7 +32,9 @@ class MutableKeepPartialCancellation implements CaptureCancellation {
   cancelled = false;
   keepPartial = true;
 
-  throwIfCancelled(stage: "prepare" | "measure" | "plan" | "capture" | "cleanup" = "capture"): void {
+  throwIfCancelled(
+    stage: "prepare" | "measure" | "plan" | "capture" | "cleanup" = "capture",
+  ): void {
     if (!this.cancelled) return;
     throw createWebCapRuntimeError(
       createWebCapError({

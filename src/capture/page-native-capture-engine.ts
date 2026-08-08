@@ -9,9 +9,18 @@ import type {
   CaptureEngineResult,
 } from "@capture/capture-engine";
 import { AdaptivePageBatchController } from "@capture/adaptive-page-batch-controller";
-import { planPdfPageCaptureTiles, type PdfPageCapturePlan } from "@capture/pdf-page-capture-planner";
+import {
+  planPdfPageCaptureTiles,
+  type PdfPageCapturePlan,
+} from "@capture/pdf-page-capture-planner";
 import { FALLBACK_OVERLAP_CSS, VISIBLE_CAPTURE_MIN_INTERVAL_MS } from "@shared/constants";
-import type { CaptureTile, DocumentPage, DocumentPageMap, PageMetrics, Rect } from "@shared/contracts/domain";
+import type {
+  CaptureTile,
+  DocumentPage,
+  DocumentPageMap,
+  PageMetrics,
+  Rect,
+} from "@shared/contracts/domain";
 import { createWebCapError, createWebCapRuntimeError } from "@shared/errors/error";
 import { normalizeError } from "@shared/errors/normalize-error";
 
@@ -413,7 +422,11 @@ export class PageNativeCaptureEngine implements CaptureEngine {
                 userMessageKey: "errors.scrollAreaCapture",
                 retryable: true,
                 fallbackAllowed: false,
-                safeContext: { tabId: context.tabId, tileIndex: planned.index, pageIndex: page.index },
+                safeContext: {
+                  tabId: context.tabId,
+                  tileIndex: planned.index,
+                  pageIndex: page.index,
+                },
               }),
             );
           }

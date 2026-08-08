@@ -108,7 +108,10 @@ export class AdaptivePageBatchController {
 
       // A single large page is always allowed to become a one-page batch. The page-local
       // planner owns its own independent safety budget and will reject an unsafe page.
-      if (pageIndexes.length === 1 && (estimatedTiles > maxTiles || estimatedRasterBytes > maxBytes)) {
+      if (
+        pageIndexes.length === 1 &&
+        (estimatedTiles > maxTiles || estimatedRasterBytes > maxBytes)
+      ) {
         break;
       }
     }
@@ -134,7 +137,8 @@ export class AdaptivePageBatchController {
     }
 
     const byteBudget = Math.max(1, this.options.maxEstimatedBytesPerBatch);
-    const comfortablySmall = outcome.storedBytes <= byteBudget / 3 && outcome.durationMs < SLOW_BATCH_MS / 2;
+    const comfortablySmall =
+      outcome.storedBytes <= byteBudget / 3 && outcome.durationMs < SLOW_BATCH_MS / 2;
     if (comfortablySmall) {
       this.targetPages = Math.min(this.maximumPages, this.targetPages + 2);
     }
