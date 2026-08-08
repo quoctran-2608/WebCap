@@ -165,7 +165,9 @@ function declaredCompletion(
 
 function stableGeometryKey(rect: Rect): string {
   const quantize = (value: number) => Math.round(value / STABLE_GEOMETRY_QUANTUM_CSS);
-  return [quantize(rect.x), quantize(rect.y), quantize(rect.width), quantize(rect.height)].join(":");
+  return [quantize(rect.x), quantize(rect.y), quantize(rect.width), quantize(rect.height)].join(
+    ":",
+  );
 }
 
 function hasStableCanvasGeometry(candidates: readonly PdfViewerPageCandidate[]): boolean {
