@@ -19,7 +19,7 @@ import {
 import { shouldRefreshJobFromSummary, subscribeToJobSummaryChanges } from "./job-events-client";
 import { PdfExperienceCard } from "./PdfExperienceCard";
 import { inspectPdfSource } from "./pdf-source-client";
-import { buildPdfUxSnapshot, isDedicatedViewerPdfJob } from "./pdf-ux";
+import { buildPdfUxSnapshot, isDedicatedViewerPdfJob, pdfUxCopy } from "./pdf-ux";
 import { PopupSettingsClient, selectedImageFormat } from "./settings-client";
 import { usePdfDocumentManifest } from "./use-pdf-document-manifest";
 import { getTabCapability } from "./worker-client";
@@ -43,14 +43,14 @@ export function PdfUxCompanion(): React.JSX.Element | null {
   const [capability, setCapability] = useState<PdfSourceCapability>();
   const [job, setJob] = useState<CaptureJob>();
   const [operationBusy, setOperationBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [error, setError] = useState(false);
   const [diagnosticsNotice, setDiagnosticsNotice] = useState<string>();
   const manifest = usePdfDocumentManifest(job);
 
   useEffect(() => {
     const shell = document.querySelector<HTMLElement>(".popup-shell");
     const capturePanel = shell?.querySelector<HTMLElement>(".capture-panel");
-    if (shell === null || shell === undefined || capturePanel === null || capturePanel === undefined) {
+    if (shell === undefined || shell === null || capturePanel === undefined || capturePanel === null) {
       return;
     }
     const container = document.createElement("div");
@@ -81,11 +81,12 @@ export function PdfUxCompanion(): React.JSX.Element | null {
 
   useEffect(() => {
     if (job === undefined || tab?.tabId === undefined) return;
+    const tabId = tab.tabId;
     let latestRevision = job.stateRevision;
     return subscribeToJobSummaryChanges((summary) => {
       if (
         !shouldRefreshJobFromSummary(summary, {
-          tabId: tab.tabId as number,
+          tabId,
           jobId: job.id,
           stateRevision: latestRevision,
         })
@@ -112,7 +113,7 @@ export function PdfUxCompanion(): React.JSX.Element | null {
   const handleCaptureViewer = useCallback(async (): Promise<void> => {
     if (tab?.tabId === undefined || tab.windowId === undefined) return;
     setOperationBusy(true);
-    setError(undefined);
+    setError(false);
     try {
       const settingsSnapshot = await popupSettingsClient.load();
       const imageFormat = selectedImageFormat(settingsSnapshot.outputByMode, "scroll-area");
@@ -122,8 +123,8 @@ export function PdfUxCompanion(): React.JSX.Element | null {
         settings: captureSettingsForOutput(settingsSnapshot.capture, imageFormat),
       });
       setJob(started);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+    } catch {
+      setError(true);
     } finally {
       setOperationBusy(false);
     }
@@ -132,7 +133,7 @@ export function PdfUxCompanion(): React.JSX.Element | null {
   const handleResume = useCallback(async (): Promise<void> => {
     if (job === undefined) return;
     setOperationBusy(true);
-    setError(undefined);
+    setError(false);
     try {
       const resumed = await resumeCaptureJob(job.id);
       setJob(resumed);
@@ -141,8 +142,8 @@ export function PdfUxCompanion(): React.JSX.Element | null {
           .then(setJob)
           .catch(() => undefined);
       }, 250);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+    } catch {
+      setError(true);
     } finally {
       setOperationBusy(false);
     }
@@ -159,7 +160,7 @@ export function PdfUxCompanion(): React.JSX.Element | null {
       extensionVersion: chrome.runtime.getManifest().version,
       locale,
       surface: "popup",
-      tabStatus: tab?.status,
+      ...(tab?.status === undefined ? {} : { tabStatus: tab.status }),
       job: {
         id: job.id,
         mode: job.mode,
@@ -170,7 +171,9 @@ export function PdfUxCompanion(): React.JSX.Element | null {
         ...(job.documentPageMap === undefined
           ? {}
           : {
-              completedDocumentPages: snapshot?.completedPages,
+              ...(snapshot?.completedPages === undefined
+                ? {}
+                : { completedDocumentPages: snapshot.completedPages }),
               totalDocumentPages: job.documentPageMap.sourcePageCount,
             }),
         ...(job.partialCapture === undefined
@@ -230,14 +233,14 @@ export function PdfUxCompanion(): React.JSX.Element | null {
         onCaptureViewer={() => void handleCaptureViewer()}
         onResume={() => void handleResume()}
       />
-      {error !== undefined && (
+      {error && (
         <div className="feedback feedback--error" role="alert">
-          <p>{error}</p>
+          <p>{pdfUxCopy(locale, "operationFailed")}</p>
         </div>
       )}
       {diagnosticsJson !== undefined && (
         <details className="status-details" data-testid="pdf-verification-diagnostics">
-          <summary>PDF verification</summary>
+          <summary>{pdfUxCopy(locale, "diagnosticsSummary")}</summary>
           <button
             className="secondary-action diagnostics-action"
             type="button"
