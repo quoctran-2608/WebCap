@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { createSafeDiagnostics } from "@shared/diagnostics";
 import {
+  JobResumeMessageSchema,
   PdfManifestGetMessageSchema,
   createJobResumeMessage,
   createPdfManifestGetMessage,
@@ -11,21 +12,22 @@ import {
 const sentAt = "2026-08-08T12:00:00.000Z";
 
 describe("S35 PDF UX protocol", () => {
-  it("accepts metadata-only PDF manifest reads and resume requests", () => {
+  it("keeps metadata reads and resume requests on the dedicated S35 router", () => {
     const manifestRequest = createPdfManifestGetMessage({
       requestId: "request-manifest",
       jobId: "job-s35",
       sentAt,
     });
     expect(PdfManifestGetMessageSchema.parse(manifestRequest)).toEqual(manifestRequest);
-    expect(parsePersistentJobRequest(manifestRequest)).toMatchObject({ ok: true });
+    expect(parsePersistentJobRequest(manifestRequest)).toMatchObject({ ok: false });
 
     const resumeRequest = createJobResumeMessage({
       requestId: "request-resume",
       jobId: "job-s35",
       sentAt,
     });
-    expect(parsePersistentJobRequest(resumeRequest)).toMatchObject({ ok: true });
+    expect(JobResumeMessageSchema.parse(resumeRequest)).toEqual(resumeRequest);
+    expect(parsePersistentJobRequest(resumeRequest)).toMatchObject({ ok: false });
     expect(JSON.stringify(resumeRequest)).not.toContain("blob");
   });
 
