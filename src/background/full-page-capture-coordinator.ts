@@ -379,6 +379,13 @@ export class FullPageCaptureCoordinator {
           });
         }
 
+        const pageNativeResumeTiles =
+          job.mode === "scroll-area" &&
+          job.documentPageMap?.complete === true &&
+          job.metrics !== undefined &&
+          job.targetRect !== undefined
+            ? await this.durablePageNativeResumeTiles(job)
+            : undefined;
         const context: CaptureEngineContext = {
           jobId: job.id,
           tabId: job.tabId,
@@ -393,7 +400,7 @@ export class FullPageCaptureCoordinator {
           job.targetRect !== undefined
             ? {
                 pageNativeResume: {
-                  tilePlan: job.tilePlan,
+                  tilePlan: pageNativeResumeTiles ?? [],
                   metrics: job.metrics,
                   targetRect: job.targetRect,
                   documentPageMap: job.documentPageMap,
@@ -606,6 +613,19 @@ export class FullPageCaptureCoordinator {
     });
   }
 
+  private async durablePageNativeResumeTiles(job: CaptureJob): Promise<CaptureTile[]> {
+    const records = await this.tiles.listByJob(job.id);
+    const storedByIndex = new Map(
+      records
+        .filter((record) => record.tile.status === "stored")
+        .map((record) => [record.index, record.tile] as const),
+    );
+    return job.tilePlan
+      .map((tile) => storedByIndex.get(tile.index))
+      .filter((tile): tile is CaptureTile => tile !== undefined)
+      .sort((left, right) => left.index - right.index);
+  }
+
   private async discardTilesFromIndex(jobId: string, firstIndex: number): Promise<void> {
     const records = (await this.tiles.listByJob(jobId)).filter(
       (record) => record.index < firstIndex,
@@ -614,13 +634,6 @@ export class FullPageCaptureCoordinator {
     for (const record of records) {
       await this.tiles.put(record);
     }
-    const job = await this.requireJob(jobId);
-    const tilePlan = job.tilePlan.filter((tile) => tile.index < firstIndex);
-    await this.jobs.update(jobId, {
-      tilePlan,
-      completedTiles: tilePlan.filter((tile) => tile.status === "stored").length,
-      totalTiles: tilePlan.length,
-    });
   }
 
   private async settlePartialStop(jobId: string): Promise<boolean> {

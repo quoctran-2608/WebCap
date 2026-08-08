@@ -195,7 +195,7 @@ export class OffscreenService {
         sentAt: this.now().toISOString(),
         ...options,
       });
-      const response = await this.runtime.sendMessage(request);
+      const response = await this.sendMessage(request);
       throwOffscreenError(response);
       if (!isOffscreenImageProcessedMessage(response) || response.requestId !== request.requestId) {
         throw unavailableError(
@@ -213,7 +213,7 @@ export class OffscreenService {
         sentAt: this.now().toISOString(),
         ...options,
       });
-      const response = await this.runtime.sendMessage(request);
+      const response = await this.sendMessage(request);
       throwOffscreenError(response);
       if (!isOffscreenImageProcessedMessage(response) || response.requestId !== request.requestId) {
         throw unavailableError(
@@ -239,7 +239,7 @@ export class OffscreenService {
               ...options,
               pages: options.pages,
             });
-      const response = await this.runtime.sendMessage(request);
+      const response = await this.sendMessage(request);
       throwOffscreenError(response);
       if (!isOffscreenPdfExportedMessage(response) || response.requestId !== request.requestId) {
         throw unavailableError(
@@ -257,7 +257,7 @@ export class OffscreenService {
         sentAt: this.now().toISOString(),
         ...options,
       });
-      const response = await this.runtime.sendMessage(request);
+      const response = await this.sendMessage(request);
       throwOffscreenError(response);
       if (
         !isOffscreenPdfThumbnailCreatedMessage(response) ||
@@ -278,7 +278,7 @@ export class OffscreenService {
         artifactId,
         sentAt: this.now().toISOString(),
       });
-      const response = await this.runtime.sendMessage(request);
+      const response = await this.sendMessage(request);
       throwOffscreenError(response);
       if (
         !isOffscreenObjectUrlCreatedMessage(response) ||
@@ -299,7 +299,7 @@ export class OffscreenService {
         url,
         sentAt: this.now().toISOString(),
       });
-      const response = await this.runtime.sendMessage(request);
+      const response = await this.sendMessage(request);
       throwOffscreenError(response);
       if (
         !isOffscreenObjectUrlRevokedMessage(response) ||
@@ -311,6 +311,14 @@ export class OffscreenService {
       }
       return response.payload.revoked;
     });
+  }
+
+  private async sendMessage(message: unknown): Promise<unknown> {
+    try {
+      return await this.runtime.sendMessage(message);
+    } catch (error) {
+      throw unavailableError(error);
+    }
   }
 
   private async withDocument<T>(operation: () => Promise<T>): Promise<T> {

@@ -203,13 +203,18 @@ async function createRecoveryJob(
 
 async function assertCompletedPdf(popup: Page, jobId: string): Promise<void> {
   await expect
-    .poll(async () => (await readRecoveryState(popup, jobId)).state ?? "missing", {
-      timeout: 150_000,
-    })
+    .poll(
+      async () => {
+        const state = await readRecoveryState(popup, jobId);
+        if (state.state === "failed") {
+          throw new Error(`S33 recovery failed: ${JSON.stringify(state.error)}`);
+        }
+        return state.state ?? "missing";
+      },
+      { timeout: 150_000 },
+    )
     .toBe("completed");
   const state = await readRecoveryState(popup, jobId);
-  if (state.state === "failed")
-    throw new Error(`S33 recovery failed: ${JSON.stringify(state.error)}`);
   expect(state.documentPageCount).toBe(24);
   expect(state.completedTiles).toBe(state.totalTiles);
   expect(state.output?.pageCount).toBe(24);
@@ -266,9 +271,16 @@ test("@smoke resumes streamed PDF output after the offscreen document is killed"
   if (browser === null) throw new Error("Chromium browser instance is unavailable.");
   await closeOffscreenDocument(browser, serviceWorker);
   await expect
-    .poll(async () => (await readRecoveryState(popup, jobId)).state ?? "missing", {
-      timeout: 20_000,
-    })
+    .poll(
+      async () => {
+        const state = await readRecoveryState(popup, jobId);
+        if (state.state === "failed") {
+          throw new Error(`S33 offscreen recovery failed: ${JSON.stringify(state.error)}`);
+        }
+        return state.state ?? "missing";
+      },
+      { timeout: 20_000 },
+    )
     .toBe("paused");
   const paused = await readRecoveryState(popup, jobId);
   expect(paused.exportProgress?.completedPages ?? 0).toBeGreaterThan(0);

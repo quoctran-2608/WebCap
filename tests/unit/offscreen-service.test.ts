@@ -119,4 +119,59 @@ describe("OffscreenService", () => {
       }),
     ).resolves.toMatchObject({ artifactId: "output-1", mimeType: "image/webp" });
   });
+  it("classifies an offscreen message-channel closure as retryable unavailability", async () => {
+    const runtime: OffscreenRuntimeAdapter = {
+      getUrl: () => "chrome-extension://id/offscreen.html",
+      getContexts: () =>
+        Promise.resolve([
+          {
+            contextType: "OFFSCREEN_DOCUMENT",
+            documentUrl: "chrome-extension://id/offscreen.html",
+          },
+        ]),
+      sendMessage: (message) => {
+        if (isOffscreenPingMessage(message)) {
+          return Promise.resolve(
+            createOffscreenReadyMessage({
+              requestId: message.requestId,
+              sentAt: now.toISOString(),
+            }),
+          );
+        }
+        return Promise.reject(
+          new Error(
+            "A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received",
+          ),
+        );
+      },
+    };
+    const service = new OffscreenService({
+      runtime,
+      offscreen: {
+        createDocument: () => Promise.resolve(),
+        closeDocument: () => Promise.resolve(),
+      },
+      now: () => now,
+      createRequestId: () => "request-channel-closed",
+      idleTimeoutMs: 60_000,
+    });
+
+    await expect(
+      service.processImage({
+        sourceArtifactId: "source-1",
+        outputArtifactId: "output-1",
+        format: "webp",
+        quality: 0.9,
+        filename: "capture.webp",
+        createdAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + 1_000).toISOString(),
+      }),
+    ).rejects.toMatchObject({
+      data: {
+        code: "E_OFFSCREEN_UNAVAILABLE",
+        retryable: true,
+        fallbackAllowed: false,
+      },
+    });
+  });
 });
