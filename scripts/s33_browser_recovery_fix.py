@@ -17,17 +17,13 @@ text = text.replace(
     '''  private async sendMessage(message: unknown): Promise<unknown> {\n    try {\n      return await this.runtime.sendMessage(message);\n    } catch (error) {\n      throw unavailableError(error);\n    }\n  }\n\n  private async withDocument<T>(operation: () => Promise<T>): Promise<T> {''',
     1,
 )
-# Replace operation sends only. Handshake retains its bounded retry loop and direct transport catch.
-for snippet in [
-    "const response = await this.runtime.sendMessage(request);",
-]:
-    # There are six operation call sites before withDocument plus one handshake call after it.
-    # Replace only the first six occurrences so handshake behavior remains unchanged.
-    for _ in range(6):
-        index = text.find(snippet)
-        if index < 0:
-            raise SystemExit("missing offscreen sendMessage operation marker")
-        text = text[:index] + "const response = await this.sendMessage(request);" + text[index + len(snippet):]
+operation_send = "const response = await this.runtime.sendMessage(request);"
+for _ in range(6):
+    index = text.find(operation_send)
+    if index < 0:
+        raise SystemExit("missing offscreen sendMessage operation marker")
+    replacement = "const response = await this.sendMessage(request);"
+    text = text[:index] + replacement + text[index + len(operation_send):]
 p.write_text(text)
 
 # Page-native restart recovery deletes stale stored blobs without mutating the capturing job into
@@ -54,8 +50,8 @@ p.write_text(text)
 # Make browser diagnostics fail immediately with the persisted S33 error.
 p = Path("tests/e2e/pdf-recovery-s33.spec.ts")
 text = p.read_text()
-old = '''  await expect\n    .poll(async () => (await readRecoveryState(popup, jobId)).state ?? "missing", {\n      timeout: 150_000,\n    })\n    .toBe("completed");\n  const state = await readRecoveryState(popup, jobId);\n  if (state.state === "failed") throw new Error(`S33 recovery failed: ${JSON.stringify(state.error)}`);'''
-new = '''  await expect\n    .poll(\n      async () => {\n        const state = await readRecoveryState(popup, jobId);\n        if (state.state === "failed") {\n          throw new Error(`S33 recovery failed: ${JSON.stringify(state.error)}`);\n        }\n        return state.state ?? "missing";\n      },\n      { timeout: 150_000 },\n    )\n    .toBe("completed");\n  const state = await readRecoveryState(popup, jobId);'''
+old = '''async function assertCompletedPdf(popup: Page, jobId: string): Promise<void> {\n  await expect\n    .poll(async () => (await readRecoveryState(popup, jobId)).state ?? "missing", {\n      timeout: 150_000,\n    })\n    .toBe("completed");\n  const state = await readRecoveryState(popup, jobId);\n  if (state.state === "failed")\n    throw new Error(`S33 recovery failed: ${JSON.stringify(state.error)}`);'''
+new = '''async function assertCompletedPdf(popup: Page, jobId: string): Promise<void> {\n  await expect\n    .poll(\n      async () => {\n        const state = await readRecoveryState(popup, jobId);\n        if (state.state === "failed") {\n          throw new Error(`S33 recovery failed: ${JSON.stringify(state.error)}`);\n        }\n        return state.state ?? "missing";\n      },\n      { timeout: 150_000 },\n    )\n    .toBe("completed");\n  const state = await readRecoveryState(popup, jobId);'''
 if old not in text:
     raise SystemExit("e2e completion poll marker missing")
 text = text.replace(old, new, 1)
