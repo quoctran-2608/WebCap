@@ -134,9 +134,7 @@ export const PersistentJobRequestSchema = z.discriminatedUnion("type", [
   JobGetMessageSchema,
   JobGetActiveMessageSchema,
   JobCancelMessageSchema,
-  JobResumeMessageSchema,
   PdfExportStartMessageSchema,
-  PdfManifestGetMessageSchema,
   CaptureResetRequestSchema,
 ]);
 
@@ -155,9 +153,7 @@ export type PersistentJobRequest =
   | z.infer<typeof JobGetMessageSchema>
   | z.infer<typeof JobGetActiveMessageSchema>
   | z.infer<typeof JobCancelMessageSchema>
-  | z.infer<typeof JobResumeMessageSchema>
   | z.infer<typeof PdfExportStartMessageSchema>
-  | z.infer<typeof PdfManifestGetMessageSchema>
   | CaptureResetRequest;
 
 export interface JobMessageCreationOptions {
