@@ -199,10 +199,9 @@ describe("PdfExporter", () => {
       filename: "capture.pdf",
       pageCount: 3,
     });
-    expect(stored?.blob.size ?? 0).toBeGreaterThan(0);
-    const loaded = await PDFDocument.load(
-      new Uint8Array(await (stored as ArtifactRecord).blob.arrayBuffer()),
-    );
+    if (stored?.blob === undefined) throw new Error("Legacy PDF exporter did not persist a Blob.");
+    expect(stored.blob.size).toBeGreaterThan(0);
+    const loaded = await PDFDocument.load(new Uint8Array(await stored.blob.arrayBuffer()));
     expect(loaded.getPageCount()).toBe(3);
     expect(result.diagnostics).toMatchObject({
       pageCount: 3,
@@ -213,7 +212,7 @@ describe("PdfExporter", () => {
       heapLimitBytes: 512 * 1_024 * 1_024,
     });
     expect(result.diagnostics.durationMs).toBeGreaterThanOrEqual(0);
-    expect(result.diagnostics.artifactBytes).toBe(stored?.blob.size);
+    expect(result.diagnostics.artifactBytes).toBe(stored.blob.size);
     expect(result.diagnostics.memoryEstimate.shouldBlock).toBe(false);
     expect(result.diagnostics.peakHeapBytes).toBeGreaterThanOrEqual(48 * 1_024 * 1_024);
     expect(result.diagnostics.maxCanvasPixelArea).toBeLessThan(100 * 300);

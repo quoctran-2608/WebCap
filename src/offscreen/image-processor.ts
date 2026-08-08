@@ -76,7 +76,7 @@ export class ImageProcessor {
 
   async process(payload: OffscreenProcessImageMessage["payload"]): Promise<ArtifactMetadata> {
     const source = await this.artifacts.get(payload.sourceArtifactId);
-    if (source === undefined || source.role !== "source") {
+    if (source === undefined || source.role !== "source" || source.blob === undefined) {
       throw sourceMissingError(payload.sourceArtifactId);
     }
 

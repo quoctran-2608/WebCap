@@ -21,6 +21,8 @@ interface PdfState {
     pageCount: number;
     byteLength: number;
     blobSize: number;
+    backingSize: number;
+    opfsReference?: string;
     signature: string;
   } | null;
 }
@@ -71,14 +73,29 @@ async function readPdfState(serviceWorker: Worker): Promise<PdfState> {
         pageCount?: number;
         byteLength: number;
         blob?: Blob;
+        opfsReference?: string;
       }>
     ).find(
       (candidate) =>
         job?.outputArtifactId !== undefined && candidate.artifactId === job.outputArtifactId,
     );
+
+    let backingBlob = artifact?.blob;
+    if (backingBlob === undefined && artifact?.opfsReference !== undefined) {
+      const prefix = "webcap-pdf-output/";
+      if (!artifact.opfsReference.startsWith(prefix)) {
+        throw new Error("Unexpected PDF output spool reference.");
+      }
+      const fileName = artifact.opfsReference.slice(prefix.length);
+      const root = await navigator.storage.getDirectory();
+      const directory = await root.getDirectoryHandle("webcap-pdf-output");
+      const handle = await directory.getFileHandle(fileName);
+      backingBlob = await handle.getFile();
+    }
+
     let signature = "";
-    if (artifact?.blob !== undefined) {
-      const bytes = new Uint8Array(await artifact.blob.slice(0, 5).arrayBuffer());
+    if (backingBlob !== undefined) {
+      const bytes = new Uint8Array(await backingBlob.slice(0, 5).arrayBuffer());
       signature = String.fromCharCode(...bytes);
     }
     database.close();
@@ -113,6 +130,10 @@ async function readPdfState(serviceWorker: Worker): Promise<PdfState> {
               pageCount: artifact.pageCount ?? 0,
               byteLength: artifact.byteLength,
               blobSize: artifact.blob?.size ?? 0,
+              backingSize: backingBlob?.size ?? 0,
+              ...(artifact.opfsReference === undefined
+                ? {}
+                : { opfsReference: artifact.opfsReference }),
               signature,
             },
     };
@@ -162,8 +183,10 @@ test("@smoke auto-exports a stored full-page tile set as a loadable paged PDF", 
     format: "pdf",
     mimeType: "application/pdf",
     pageCount: completed.job?.totalPages,
+    blobSize: 0,
+    opfsReference: expect.stringMatching(/^webcap-pdf-output\/.+\.pdf$/u),
     signature: "%PDF-",
   });
   expect(completed.artifact?.byteLength ?? 0).toBeGreaterThan(0);
-  expect(completed.artifact?.blobSize).toBe(completed.artifact?.byteLength);
+  expect(completed.artifact?.backingSize).toBe(completed.artifact?.byteLength);
 });

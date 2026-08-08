@@ -8,8 +8,13 @@ export interface ObjectUrlEnvironment {
   clearTimer(timerId: number): void;
 }
 
+export interface DiskArtifactReaderPort {
+  read(reference: string): Promise<Blob>;
+}
+
 export interface ObjectUrlRegistryOptions {
   artifacts: ArtifactRepositoryPort;
+  diskArtifacts?: DiskArtifactReaderPort;
   environment?: ObjectUrlEnvironment;
   ttlMs?: number;
 }
@@ -46,12 +51,14 @@ function missingArtifactError(artifactId: string): Error {
 
 export class ObjectUrlRegistry {
   private readonly artifacts: ArtifactRepositoryPort;
+  private readonly diskArtifacts: DiskArtifactReaderPort | undefined;
   private readonly environment: ObjectUrlEnvironment;
   private readonly ttlMs: number;
   private readonly active = new Map<string, ActiveObjectUrl>();
 
   constructor(options: ObjectUrlRegistryOptions) {
     this.artifacts = options.artifacts;
+    this.diskArtifacts = options.diskArtifacts;
     this.environment = options.environment ?? defaultEnvironment;
     this.ttlMs = options.ttlMs ?? DEFAULT_OBJECT_URL_TTL_MS;
   }
@@ -62,7 +69,16 @@ export class ObjectUrlRegistry {
       throw missingArtifactError(artifactId);
     }
 
-    const url = this.environment.create(artifact.blob);
+    const blob =
+      artifact.blob ??
+      (artifact.opfsReference === undefined
+        ? undefined
+        : await this.diskArtifacts?.read(artifact.opfsReference));
+    if (blob === undefined) {
+      throw missingArtifactError(artifactId);
+    }
+
+    const url = this.environment.create(blob);
     const timerId = this.environment.setTimer(() => {
       this.revoke(url);
     }, this.ttlMs);

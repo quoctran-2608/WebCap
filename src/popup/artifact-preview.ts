@@ -33,7 +33,12 @@ export async function createArtifactPreview(
   const objectUrls = options.objectUrls ?? browserObjectUrls;
   const record = await artifacts.get(artifactId);
 
-  if (record === undefined || record.role !== "output" || record.blob.size <= 0) {
+  if (
+    record === undefined ||
+    record.role !== "output" ||
+    record.blob === undefined ||
+    record.blob.size <= 0
+  ) {
     throw new Error("The preview artifact is unavailable.");
   }
 

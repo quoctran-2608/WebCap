@@ -19,11 +19,14 @@ import {
 } from "@shared/contracts/offscreen";
 import { normalizeError } from "@shared/errors/normalize-error";
 import { IndexedDbArtifactRepository } from "@storage/artifact-repository";
+import { OpfsPdfOutputSpool } from "@storage/pdf-output-spool";
+import { IndexedDbPdfWriterCheckpointRepository } from "@storage/pdf-writer-checkpoint-repository";
 import { IndexedDbTileRepository } from "@storage/tile-repository";
 
 import { ImageProcessor } from "./image-processor";
 import { ObjectUrlRegistry } from "./object-url-registry";
 import { PdfExporter, type PdfExportPayload, type PdfExportProgress } from "./pdf-exporter";
+import { StreamingPdfExporter } from "./streaming-pdf-exporter";
 import { TiledImageExporter } from "./tiled-image-exporter";
 
 export type OffscreenRouterResponse = OffscreenResponse | OffscreenPdfThumbnailCreatedMessage;
@@ -39,10 +42,19 @@ export interface OffscreenRouterDependencies {
 
 const artifacts = new IndexedDbArtifactRepository();
 const tiles = new IndexedDbTileRepository();
+const pdfSpool = new OpfsPdfOutputSpool();
+const pdfCheckpoints = new IndexedDbPdfWriterCheckpointRepository();
+const legacyPdfExporter = new PdfExporter({ artifacts, tiles });
 const defaultDependencies: OffscreenRouterDependencies = {
   processor: new ImageProcessor({ artifacts }),
   tiledImageExporter: new TiledImageExporter({ artifacts, tiles }),
-  pdfExporter: new PdfExporter({ artifacts, tiles }),
+  pdfExporter: new StreamingPdfExporter({
+    artifacts,
+    tiles,
+    spool: pdfSpool,
+    checkpoints: pdfCheckpoints,
+    fallback: legacyPdfExporter,
+  }),
   reportPdfProgress: async (progress) => {
     const request = createOffscreenPdfExportProgressMessage({
       requestId: crypto.randomUUID(),
@@ -58,7 +70,7 @@ const defaultDependencies: OffscreenRouterDependencies = {
       parsed.data.payload.accepted
     );
   },
-  objectUrls: new ObjectUrlRegistry({ artifacts }),
+  objectUrls: new ObjectUrlRegistry({ artifacts, diskArtifacts: pdfSpool }),
   now: () => new Date(),
 };
 
