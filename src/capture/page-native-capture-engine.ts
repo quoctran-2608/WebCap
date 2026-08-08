@@ -10,6 +10,10 @@ import type {
 } from "@capture/capture-engine";
 import { AdaptivePageBatchController } from "@capture/adaptive-page-batch-controller";
 import {
+  PdfStoragePressureController,
+  type PdfStoragePressurePort,
+} from "@capture/pdf-storage-pressure-controller";
+import {
   planPdfPageCaptureTiles,
   type PdfPageCapturePlan,
 } from "@capture/pdf-page-capture-planner";
@@ -41,6 +45,7 @@ export interface PageNativeCaptureEngineOptions {
   limiter?: CaptureRateLimiter;
   overlapCss?: number;
   nowMs?: () => number;
+  storagePressure?: PdfStoragePressurePort;
 }
 
 function captureError(options: {
@@ -176,6 +181,63 @@ function intersectRect(left: Rect, right: Rect): Rect | undefined {
   return { x, y, width: rightEdge - x, height: bottomEdge - y };
 }
 
+function sameRect(left: Rect, right: Rect): boolean {
+  return (
+    Math.abs(left.x - right.x) <= 0.05 &&
+    Math.abs(left.y - right.y) <= 0.05 &&
+    Math.abs(left.width - right.width) <= 0.05 &&
+    Math.abs(left.height - right.height) <= 0.05
+  );
+}
+
+function sameDocumentPageMap(left: DocumentPageMap, right: DocumentPageMap): boolean {
+  return (
+    left.strategy === right.strategy &&
+    left.sourcePageCount === right.sourcePageCount &&
+    left.pages.length === right.pages.length &&
+    left.pages.every((page, index) => {
+      const other = right.pages[index];
+      return (
+        other !== undefined &&
+        page.index === other.index &&
+        sameRect(page.sourceRectCss, other.sourceRectCss)
+      );
+    })
+  );
+}
+
+function estimatedPageRasterBytes(page: DocumentPage, pixelScale: number): number {
+  const scale = Number.isFinite(pixelScale) && pixelScale > 0 ? pixelScale : 1;
+  return Math.max(
+    4,
+    Math.ceil(page.sourceRectCss.width * page.sourceRectCss.height * scale * scale * 4),
+  );
+}
+
+function storagePauseError(
+  pageIndex: number,
+  availableBytes: number | undefined,
+  requiredBytes: number,
+): Error {
+  return createWebCapRuntimeError(
+    createWebCapError({
+      code: "E_STORAGE_QUOTA",
+      stage: "storage",
+      message:
+        "PDF capture paused at a verified page boundary because local storage is under pressure.",
+      userMessageKey: "errors.storageQuota",
+      retryable: true,
+      fallbackAllowed: false,
+      causeCode: "PdfStoragePressurePaused",
+      safeContext: {
+        pageIndex,
+        requiredBytes,
+        ...(availableBytes === undefined ? {} : { availableBytes }),
+      },
+    }),
+  );
+}
+
 function pageCoveredByTiles(page: Rect, tiles: readonly CaptureTile[]): boolean {
   const intersections = tiles
     .filter((tile) => tile.status === "stored")
@@ -223,6 +285,7 @@ export class PageNativeCaptureEngine implements CaptureEngine {
   private readonly limiter: CaptureRateLimiter;
   private readonly overlapCss: number;
   private readonly nowMs: () => number;
+  private readonly storagePressure: PdfStoragePressurePort;
 
   constructor(options: PageNativeCaptureEngineOptions) {
     this.pages = options.pages;
@@ -233,6 +296,7 @@ export class PageNativeCaptureEngine implements CaptureEngine {
       new CaptureRateLimiter({ minimumIntervalMs: VISIBLE_CAPTURE_MIN_INTERVAL_MS });
     this.overlapCss = options.overlapCss ?? FALLBACK_OVERLAP_CSS;
     this.nowMs = options.nowMs ?? (() => Date.now());
+    this.storagePressure = options.storagePressure ?? new PdfStoragePressureController();
   }
 
   async capture(context: CaptureEngineContext): Promise<CaptureEngineResult> {
@@ -316,12 +380,60 @@ export class PageNativeCaptureEngine implements CaptureEngine {
     });
 
     const allTiles: CaptureTile[] = [];
-    let captureScale: CapturePixelScale | undefined;
     let cursor = 0;
-    let completedPages = 0;
+    const resume = context.pageNativeResume;
+    if (resume !== undefined) {
+      if (
+        !sameDocumentPageMap(resume.documentPageMap, documentPageMap) ||
+        !sameRect(resume.targetRect, targetRect)
+      ) {
+        throw captureError({
+          code: "E_LAYOUT_UNSTABLE",
+          message: "The PDF viewer identity or page geometry changed before recovery could resume.",
+          userMessageKey: "errors.layoutChanged",
+          causeCode: "PdfPageResumeIdentityMismatch",
+          retryable: false,
+          safeContext: {
+            previousPages: resume.documentPageMap.sourcePageCount,
+            currentPages: documentPageMap.sourcePageCount,
+          },
+        });
+      }
+      while (cursor < documentPageMap.pages.length) {
+        const page = documentPageMap.pages[cursor];
+        if (page === undefined || !pageCoveredByTiles(page.sourceRectCss, resume.tilePlan)) break;
+        cursor += 1;
+      }
+      const completedRects = documentPageMap.pages
+        .slice(0, cursor)
+        .map((page) => page.sourceRectCss);
+      const ordered = [...resume.tilePlan].sort((left, right) => left.index - right.index);
+      for (const tile of ordered) {
+        const rect = tile.outputRectCss ?? tile.sourceRectCss;
+        if (
+          tile.status !== "stored" ||
+          !completedRects.some(
+            (pageRect) =>
+              rect.x >= pageRect.x - RECT_EPSILON_CSS &&
+              rect.y >= pageRect.y - RECT_EPSILON_CSS &&
+              rect.x + rect.width <= pageRect.x + pageRect.width + RECT_EPSILON_CSS &&
+              rect.y + rect.height <= pageRect.y + pageRect.height + RECT_EPSILON_CSS,
+          )
+        ) {
+          break;
+        }
+        allTiles.push(tile);
+      }
+      if (allTiles.length < resume.tilePlan.length) {
+        await context.discardTilesFromIndex?.(allTiles.length);
+      }
+    }
+
+    let captureScale: CapturePixelScale | undefined;
+    let completedPages = cursor;
     while (cursor < documentPageMap.pages.length) {
       context.cancellation.throwIfCancelled("plan");
-      const batch = batchController.nextBatch(documentPageMap.pages, cursor);
+      let batch = batchController.nextBatch(documentPageMap.pages, cursor);
       if (batch === undefined) {
         throw captureError({
           code: "E_TILE_PLAN",
@@ -332,6 +444,47 @@ export class PageNativeCaptureEngine implements CaptureEngine {
           retryable: false,
           safeContext: { cursor, sourcePageCount: documentPageMap.sourcePageCount },
         });
+      }
+
+      const firstBatchPage = documentPageMap.pages[batch.startPageIndex];
+      if (firstBatchPage === undefined) {
+        throw captureError({
+          code: "E_TILE_PLAN",
+          stage: "plan",
+          message: "The first page in the adaptive PDF batch is unavailable.",
+          userMessageKey: "errors.tilePlan",
+          causeCode: "PdfBatchFirstPageMissing",
+          retryable: false,
+        });
+      }
+      const minimumPageBytes = estimatedPageRasterBytes(
+        firstBatchPage,
+        Math.max(1, initial.devicePixelRatio),
+      );
+      const pressure = await this.storagePressure.assess(
+        batch.estimatedRasterBytes,
+        minimumPageBytes,
+      );
+      if (pressure.pauseRequired) {
+        throw storagePauseError(cursor, pressure.availableBytes, minimumPageBytes);
+      }
+      if (
+        pressure.level === "pressure" &&
+        pressure.safeBatchBytes !== undefined &&
+        pressure.safeBatchBytes < batch.estimatedRasterBytes
+      ) {
+        batchController.recordOutcome({ durationMs: 0, storedBytes: 0, pressure: true });
+        const reduced = batchController.nextBatch(documentPageMap.pages, cursor, {
+          maxEstimatedBytesPerBatch: pressure.safeBatchBytes,
+        });
+        if (
+          reduced === undefined ||
+          (reduced.pageIndexes.length === 1 &&
+            reduced.estimatedRasterBytes > pressure.safeBatchBytes)
+        ) {
+          throw storagePauseError(cursor, pressure.availableBytes, minimumPageBytes);
+        }
+        batch = reduced;
       }
 
       const batchStartedAt = this.nowMs();

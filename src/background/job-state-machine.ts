@@ -7,14 +7,15 @@ export const TERMINAL_JOB_STATES = Object.freeze(["completed", "cancelled"] as c
 
 const ALLOWED_TRANSITIONS: Readonly<Record<JobState, readonly JobState[]>> = Object.freeze({
   created: ["preparing"],
-  preparing: ["capturing", "failed", "cancelling"],
-  capturing: ["processing", "failed", "cancelling"],
+  preparing: ["capturing", "paused", "failed", "cancelling"],
+  capturing: ["processing", "paused", "failed", "cancelling"],
   processing: ["ready", "failed", "cancelling"],
   ready: ["exporting", "cancelling"],
-  exporting: ["completed", "ready", "failed", "cancelling"],
+  exporting: ["completed", "ready", "paused", "failed", "cancelling"],
   // Completed is quiescent by default, but a deliberate PDF-editor mutation may reopen
   // the durable tile source so a replacement artifact can be exported without recapture.
   completed: ["ready"],
+  paused: ["preparing", "capturing", "exporting", "cancelling"],
   failed: ["preparing", "capturing", "exporting", "cancelled"],
   cancelling: ["cancelled"],
   cancelled: [],
@@ -285,6 +286,14 @@ export function validateJobInvariants(
     return err(
       stateError("PDF exporting requires initialized page progress.", "PdfProgressMissing", {
         hasExportProgress: false,
+      }),
+    );
+  }
+
+  if (job.state === "paused" && (job.error === undefined || !job.error.retryable)) {
+    return err(
+      stateError("Paused jobs require a retryable reason.", "PauseReasonMissing", {
+        state: job.state,
       }),
     );
   }

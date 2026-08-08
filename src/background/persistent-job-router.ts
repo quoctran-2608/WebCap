@@ -314,9 +314,20 @@ export function getPersistentJobRouterDependencies(): PersistentJobRouterDepende
           (job.state === "preparing" ||
             (job.state === "capturing" && job.adaptiveFrontier !== undefined)),
       );
-      await Promise.allSettled(
-        resumable.map((job) => runCaptureAndCompletion(job.id, captures, completion)),
+      const resumablePageNative = activeJobs.filter(
+        (job) =>
+          job.mode === "scroll-area" &&
+          job.activeOutputFormat !== "pdf" &&
+          (job.state === "preparing" ||
+            (job.state === "capturing" && job.documentPageMap?.complete === true) ||
+            job.state === "paused"),
       );
+      await Promise.allSettled([
+        ...resumable.map((job) => runCaptureAndCompletion(job.id, captures, completion)),
+        ...resumablePageNative.map((job) =>
+          runCaptureAndCompletion(job.id, scrollAreaCaptures, completion),
+        ),
+      ]);
       await completion.recoverAll();
     })
     .catch(() => undefined);

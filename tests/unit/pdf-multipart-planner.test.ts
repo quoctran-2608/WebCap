@@ -51,9 +51,11 @@ describe("planPdfMultipart", () => {
         estimatedBytes: 35,
       },
     ]);
-    expect(plan.parts.flatMap((part) =>
-      Array.from({ length: part.pageCount }, (_, offset) => part.startPageIndex + offset),
-    )).toEqual([0, 1, 2, 3, 4]);
+    expect(
+      plan.parts.flatMap((part) =>
+        Array.from({ length: part.pageCount }, (_, offset) => part.startPageIndex + offset),
+      ),
+    ).toEqual([0, 1, 2, 3, 4]);
   });
 
   it("keeps an oversized logical page indivisible", () => {

@@ -24,6 +24,7 @@ export const JobStateSchema = z.enum([
   "processing",
   "ready",
   "exporting",
+  "paused",
   "completed",
   "failed",
   "cancelling",

@@ -304,11 +304,26 @@ export class FullPageCaptureCoordinator {
         }),
       );
     }
-    if (job.state !== "created") {
+    const resumablePageNative =
+      job.mode === "scroll-area" &&
+      (job.state === "preparing" ||
+        (job.state === "capturing" && job.documentPageMap?.complete === true) ||
+        job.state === "paused");
+    if (job.state !== "created" && !resumablePageNative) {
       return;
     }
 
-    job = await this.jobs.transition(job.id, "preparing");
+    if (job.state === "created") {
+      job = await this.jobs.transition(job.id, "preparing");
+    } else if (job.state === "paused") {
+      const canResumeCapture =
+        job.tilePlan.length > 0 &&
+        job.activeEngine !== undefined &&
+        job.documentPageMap?.complete === true;
+      job = await this.jobs.transition(job.id, canResumeCapture ? "capturing" : "preparing", {
+        error: undefined,
+      });
+    }
     await this.publish({
       jobId: job.id,
       state: job.state,
@@ -372,6 +387,19 @@ export class FullPageCaptureCoordinator {
           ...(job.targetRect === undefined ? {} : { targetRect: job.targetRect }),
           ...(job.targetDescriptor === undefined ? {} : { targetDescriptor: job.targetDescriptor }),
           ...(preparation === undefined ? {} : { preparation }),
+          ...(job.mode === "scroll-area" &&
+          job.documentPageMap?.complete === true &&
+          job.metrics !== undefined &&
+          job.targetRect !== undefined
+            ? {
+                pageNativeResume: {
+                  tilePlan: job.tilePlan,
+                  metrics: job.metrics,
+                  targetRect: job.targetRect,
+                  documentPageMap: job.documentPageMap,
+                },
+              }
+            : {}),
           cancellation,
           onPlan: (metrics, targetRect, tiles, enginePartialCapture, documentPageMap) => {
             const preparationPartialCapture: PartialCapture | undefined =
@@ -398,6 +426,7 @@ export class FullPageCaptureCoordinator {
               documentPageMap,
             );
           },
+          discardTilesFromIndex: (firstIndex) => this.discardTilesFromIndex(job.id, firstIndex),
           storeTile: (tile, blob) => this.storeTile(job.id, tile, blob),
           reportProgress: (progress) => this.publish(progress),
         };
@@ -577,6 +606,23 @@ export class FullPageCaptureCoordinator {
     });
   }
 
+  private async discardTilesFromIndex(jobId: string, firstIndex: number): Promise<void> {
+    const records = (await this.tiles.listByJob(jobId)).filter(
+      (record) => record.index < firstIndex,
+    );
+    await this.tiles.deleteByJob(jobId);
+    for (const record of records) {
+      await this.tiles.put(record);
+    }
+    const job = await this.requireJob(jobId);
+    const tilePlan = job.tilePlan.filter((tile) => tile.index < firstIndex);
+    await this.jobs.update(jobId, {
+      tilePlan,
+      completedTiles: tilePlan.filter((tile) => tile.status === "stored").length,
+      totalTiles: tilePlan.length,
+    });
+  }
+
   private async settlePartialStop(jobId: string): Promise<boolean> {
     let job = await this.requireJob(jobId);
     if (job.state !== "capturing" || job.completedTiles === 0) {
@@ -662,6 +708,14 @@ export class FullPageCaptureCoordinator {
     }
 
     if (isTerminalJobState(job.state)) {
+      return;
+    }
+    if (
+      primary.code === "E_STORAGE_QUOTA" &&
+      job.mode === "scroll-area" &&
+      (job.state === "preparing" || job.state === "capturing")
+    ) {
+      await this.jobs.transition(job.id, "paused", { cleanup, error: primary });
       return;
     }
     if (job.state === "created") {

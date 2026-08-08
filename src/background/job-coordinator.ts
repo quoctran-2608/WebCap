@@ -387,7 +387,16 @@ export class PersistentJobCoordinator implements PersistentJobCoordinatorPort {
       job.preferredEngine === "scroll" &&
       (job.state === "preparing" ||
         (job.state === "capturing" && job.adaptiveFrontier !== undefined));
-    if (resumableAdaptiveJob) {
+    const resumablePageNativePdf =
+      job.mode === "scroll-area" &&
+      (job.state === "preparing" ||
+        (job.state === "capturing" && job.documentPageMap?.complete === true) ||
+        (job.state === "paused" && job.activeOutputFormat !== "pdf"));
+    const resumablePdfOutput =
+      job.activeOutputFormat === "pdf" &&
+      job.exportProgress !== undefined &&
+      (job.state === "exporting" || job.state === "paused");
+    if (resumableAdaptiveJob || resumablePageNativePdf || resumablePdfOutput) {
       return job;
     }
 
