@@ -1,0 +1,59 @@
+name: S33 capture patch temp
+
+on:
+  push:
+    branches: [agent/s33-recovery-quota-multipart-resilience]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/s33-recovery-quota-multipart-resilience
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply S33 capture patch
+        run: python scripts/s33_capture_patch.py
+      - name: Canonicalize touched files
+        run: >-
+          pnpm exec prettier --write
+          src/shared/contracts/domain.ts
+          src/background/job-state-machine.ts
+          src/capture/capture-engine.ts
+          src/capture/adaptive-page-batch-controller.ts
+          src/capture/page-native-capture-engine.ts
+          src/background/full-page-capture-coordinator.ts
+          src/background/job-coordinator.ts
+          src/background/persistent-job-router.ts
+          src/capture/pdf-storage-pressure-controller.ts
+          tests/unit/pdf-storage-pressure-controller.test.ts
+          src/offscreen/pdf-multipart-planner.ts
+          tests/unit/pdf-multipart-planner.test.ts
+          docs/s33-recovery-quota-multipart-resilience.md
+      - name: Validate compile and focused tests
+        run: |
+          pnpm typecheck
+          pnpm exec vitest run tests/unit/pdf-storage-pressure-controller.test.ts tests/unit/pdf-multipart-planner.test.ts tests/unit/adaptive-page-batch-controller.test.ts tests/unit/page-native-capture-engine.test.ts tests/unit/job-state-machine.test.ts tests/unit/adaptive-recovery.test.ts
+      - name: Remove temporary patch machinery
+        run: rm -f scripts/s33_capture_patch.py .github/workflows/s33-capture-patch-temp.yml
+      - name: Commit patch
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Implement S33 page-boundary capture recovery"
+          git push origin HEAD:agent/s33-recovery-quota-multipart-resilience
