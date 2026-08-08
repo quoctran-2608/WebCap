@@ -77,8 +77,8 @@ describe("S33 capture-owned OPFS cleanup", () => {
         get: () => Promise.resolve(checkpoint),
         delete: deleteCheckpoint,
       },
-      manifests: { load: () => Promise.resolve(undefined), delete: () => Promise.resolve(false) },
-      pdfDocuments: { get: () => Promise.resolve(undefined), delete: () => Promise.resolve() },
+      manifests: { load: () => Promise.resolve(undefined), delete: () => Promise.resolve() },
+      pdfDocuments: { get: () => Promise.resolve(undefined), delete: () => Promise.resolve(false) },
     });
 
     const report = await service.cleanupJob("job-1");
