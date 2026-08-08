@@ -2,8 +2,8 @@ import type { CaptureEngine, CaptureEngineContext, CaptureEngineResult } from "@
 import { PageNativeCaptureEngine } from "@capture/page-native-capture-engine";
 
 import {
-  GenericScrollAreaCaptureEngine,
-  type GenericScrollAreaCaptureEngineOptions,
+  ScrollAreaCaptureEngine as GenericScrollAreaCaptureEngine,
+  type ScrollAreaCaptureEngineOptions as GenericScrollAreaCaptureEngineOptions,
 } from "./generic-scroll-area-capture-engine";
 
 export type ScrollAreaCaptureEngineOptions = GenericScrollAreaCaptureEngineOptions;
