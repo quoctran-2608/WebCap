@@ -141,7 +141,7 @@ test("@smoke discovers all 500 virtualized PDF pages without simultaneous DOM no
   expect(fixtureStats?.renderCount ?? 0).toBeGreaterThan(20);
 
   const cancelPopup = await openPopup();
-  await cancelPopup.getByRole("button", { name: /^Hủy/ }).click();
+  await cancelPopup.getByRole("button", { name: "Hủy chụp", exact: true }).click();
   await expect
     .poll(async () => (await readDiscoveryState(serviceWorker)).state ?? "missing", {
       timeout: 15_000,
