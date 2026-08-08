@@ -22,6 +22,20 @@ function virtualizedCandidate(index: number, y: number): PdfViewerPageCandidate 
   };
 }
 
+function stableCanvasCandidates(): PdfViewerPageCandidate[] {
+  return [0, 1, 2, 3].flatMap((index) => {
+    const candidate = {
+      rect: { x: 120, y: index * 820, width: 600, height: 800 },
+      adapter: "canvas-visual" as const,
+      confidence: 0.76,
+    };
+    return [
+      { ...candidate, sampleIndex: index },
+      { ...candidate, sampleIndex: index + 1 },
+    ];
+  });
+}
+
 describe("finalizePdfViewerDiscovery", () => {
   it("discovers a 500-page virtualized document without simultaneous DOM pages", () => {
     const candidates: PdfViewerPageCandidate[] = [];
@@ -79,13 +93,8 @@ describe("finalizePdfViewerDiscovery", () => {
     ).toBeUndefined();
   });
 
-  it("accepts a canvas-only visual sequence only with stable start/end proof", () => {
-    const candidates: PdfViewerPageCandidate[] = [0, 1, 2, 3].map((index) => ({
-      rect: { x: 120, y: index * 820, width: 600, height: 800 },
-      adapter: "canvas-visual" as const,
-      confidence: 0.76,
-      sampleIndex: index,
-    }));
+  it("accepts a canvas-only visual sequence only with stable repeated geometry and terminal proof", () => {
+    const candidates = stableCanvasCandidates();
     const complete = finalizePdfViewerDiscovery({
       adapter: "canvas-visual",
       scrollWidth: 900,
@@ -108,6 +117,44 @@ describe("finalizePdfViewerDiscovery", () => {
         reachedEnd: false,
         stableEndRounds: 0,
         candidates,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("rejects a single recycled viewport canvas as page-complete evidence", () => {
+    const candidates: PdfViewerPageCandidate[] = [0, 1, 2, 3, 4].map((index) => ({
+      rect: { x: 100, y: index * 600, width: 700, height: 720 },
+      adapter: "canvas-visual" as const,
+      confidence: 0.76,
+      sampleIndex: index,
+    }));
+
+    expect(
+      finalizePdfViewerDiscovery({
+        adapter: "canvas-visual",
+        scrollWidth: 900,
+        scrollHeight: 3120,
+        clientHeight: 720,
+        reachedStart: true,
+        reachedEnd: true,
+        stableEndRounds: 3,
+        candidates,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("rejects canvas geometry when it conflicts with a declared page count", () => {
+    expect(
+      finalizePdfViewerDiscovery({
+        adapter: "canvas-visual",
+        declaredPageCount: 5,
+        scrollWidth: 900,
+        scrollHeight: 3260,
+        clientHeight: 720,
+        reachedStart: true,
+        reachedEnd: true,
+        stableEndRounds: 3,
+        candidates: stableCanvasCandidates(),
       }),
     ).toBeUndefined();
   });
