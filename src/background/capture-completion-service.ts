@@ -101,6 +101,7 @@ function newestOutput(records: ArtifactRecord[]): ArtifactRecord | undefined {
 
 export class CaptureCompletionService {
   private readonly pdfDocuments: PdfCaptureOrchestratorPort | undefined;
+  private readonly recoveredPdfJobs = new Set<string>();
 
   constructor(private readonly options: CaptureCompletionServiceOptions) {
     this.pdfDocuments = options.pdfDocuments ?? getPdfCaptureOrchestrator();
@@ -147,10 +148,24 @@ export class CaptureCompletionService {
     if (reconciled !== undefined) return reconciled;
     if (job.state === "ready") return this.startAuto(job.id);
     if (job.activeOutputFormat === "pdf" && (job.state === "exporting" || job.state === "paused")) {
-      return this.options.pdf.start(job.id);
+      if (job.state === "exporting" && this.recoveredPdfJobs.has(job.id)) return job;
+      this.recoveredPdfJobs.add(job.id);
+      try {
+        return await this.options.pdf.start(job.id);
+      } catch (error) {
+        this.recoveredPdfJobs.delete(job.id);
+        throw error;
+      }
     }
     if (job.state === "failed" && job.error?.causeCode === "ServiceWorkerRestart") {
-      return this.startAuto(job.id);
+      if (this.recoveredPdfJobs.has(job.id)) return job;
+      this.recoveredPdfJobs.add(job.id);
+      try {
+        return await this.startAuto(job.id);
+      } catch (error) {
+        this.recoveredPdfJobs.delete(job.id);
+        throw error;
+      }
     }
     return job;
   }

@@ -237,6 +237,10 @@ export class PdfExportService {
     if (job.state !== "exporting") return job;
     this.cancelledJobs.add(jobId);
     return this.jobs.transition(jobId, "ready", {
+      activeOutputFormat: undefined,
+      outputArtifactId: undefined,
+      output: undefined,
+      error: undefined,
       exportProgress: job.exportProgress ?? { completedPages: 0, totalPages: 1 },
     });
   }
