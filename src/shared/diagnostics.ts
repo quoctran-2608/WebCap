@@ -4,6 +4,7 @@ import type {
   JobState,
   PartialCaptureReason,
 } from "@shared/contracts/domain";
+import type { PdfCaptureStrategy, PdfManifestState } from "@shared/contracts/pdf-capture";
 import type { UiLocale } from "@shared/i18n";
 import type { WebCapErrorCode } from "@shared/errors/error";
 
@@ -34,6 +35,16 @@ export interface SafeDiagnosticsInput {
     status?: string;
     permission?: string;
     errorCode?: WebCapErrorCode;
+    strategy?: PdfCaptureStrategy;
+    manifestState?: PdfManifestState;
+    viewerAdapter?: string;
+    expectedPages?: number;
+    discoveredPages?: number;
+    capturedPages?: number;
+    verifiedPages?: number;
+    outputPages?: number;
+    currentBatch?: number;
+    verifiedComplete?: boolean;
   };
   chromeVersion?: string;
   generatedAt?: string;
@@ -71,6 +82,24 @@ export interface SafeDiagnosticsDocument {
     status?: string;
     permission?: string;
     errorCode?: WebCapErrorCode;
+    strategy?: PdfCaptureStrategy;
+    manifestState?: PdfManifestState;
+    viewerAdapterBucket?:
+      | "s27-dom"
+      | "s27-projected"
+      | "pdfjs"
+      | "semantic"
+      | "shadow-dom"
+      | "virtualized"
+      | "canvas-visual"
+      | "other";
+    expectedPages?: number;
+    discoveredPages?: number;
+    capturedPages?: number;
+    verifiedPages?: number;
+    outputPages?: number;
+    currentBatch?: number;
+    verification?: "verified" | "pending";
   };
 }
 
@@ -90,6 +119,29 @@ function finiteCount(value: number | undefined): number | undefined {
     : undefined;
 }
 
+function viewerAdapterBucket(
+  value: string | undefined,
+): SafeDiagnosticsDocument["pdf"] extends infer Pdf
+  ? Pdf extends { viewerAdapterBucket?: infer Bucket }
+    ? Bucket | undefined
+    : never
+  : never {
+  switch (value) {
+    case "s27-dom":
+    case "s27-projected":
+    case "pdfjs":
+    case "semantic":
+    case "shadow-dom":
+    case "virtualized":
+    case "canvas-visual":
+      return value;
+    case undefined:
+      return undefined;
+    default:
+      return "other";
+  }
+}
+
 export function createSafeDiagnostics(input: SafeDiagnosticsInput): SafeDiagnosticsDocument {
   const compactJobId = compactId(input.job?.id);
   const completedTiles = finiteCount(input.job?.completedTiles);
@@ -97,6 +149,13 @@ export function createSafeDiagnostics(input: SafeDiagnosticsInput): SafeDiagnost
   const completedDocumentPages = finiteCount(input.job?.completedDocumentPages);
   const totalDocumentPages = finiteCount(input.job?.totalDocumentPages);
   const versionBucket = chromeVersionBucket(input.chromeVersion);
+  const expectedPages = finiteCount(input.pdf?.expectedPages);
+  const discoveredPages = finiteCount(input.pdf?.discoveredPages);
+  const capturedPages = finiteCount(input.pdf?.capturedPages);
+  const verifiedPages = finiteCount(input.pdf?.verifiedPages);
+  const outputPages = finiteCount(input.pdf?.outputPages);
+  const currentBatch = finiteCount(input.pdf?.currentBatch);
+  const adapterBucket = viewerAdapterBucket(input.pdf?.viewerAdapter);
 
   return {
     schemaVersion: 1,
@@ -151,6 +210,20 @@ export function createSafeDiagnostics(input: SafeDiagnosticsInput): SafeDiagnost
               ? {}
               : { permission: input.pdf.permission.slice(0, 40) }),
             ...(input.pdf.errorCode === undefined ? {} : { errorCode: input.pdf.errorCode }),
+            ...(input.pdf.strategy === undefined ? {} : { strategy: input.pdf.strategy }),
+            ...(input.pdf.manifestState === undefined
+              ? {}
+              : { manifestState: input.pdf.manifestState }),
+            ...(adapterBucket === undefined ? {} : { viewerAdapterBucket: adapterBucket }),
+            ...(expectedPages === undefined ? {} : { expectedPages }),
+            ...(discoveredPages === undefined ? {} : { discoveredPages }),
+            ...(capturedPages === undefined ? {} : { capturedPages }),
+            ...(verifiedPages === undefined ? {} : { verifiedPages }),
+            ...(outputPages === undefined ? {} : { outputPages }),
+            ...(currentBatch === undefined ? {} : { currentBatch }),
+            ...(input.pdf.verifiedComplete === undefined
+              ? {}
+              : { verification: input.pdf.verifiedComplete ? "verified" : "pending" }),
           },
         }),
   };
