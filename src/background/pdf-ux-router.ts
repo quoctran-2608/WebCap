@@ -107,7 +107,8 @@ export async function routePdfUxMessage(
   const manifestRequest = PdfManifestGetMessageSchema.safeParse(message);
   if (manifestRequest.success) {
     try {
-      const manifest = (await dependencies.manifests.get(manifestRequest.data.payload.jobId)) ?? null;
+      const manifest =
+        (await dependencies.manifests.get(manifestRequest.data.payload.jobId)) ?? null;
       return createPdfManifestResponseMessage({
         requestId,
         manifest,
