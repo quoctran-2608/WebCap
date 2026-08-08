@@ -478,7 +478,11 @@ export class PageNativeCaptureEngine implements CaptureEngine {
           if (position >= 0) allTiles[position] = captured;
         }
 
-        if (!pageCoveredByTiles(page.sourceRectCss, capturedPageTiles)) {
+        const lastCapturedTile = capturedPageTiles.at(-1);
+        if (
+          lastCapturedTile === undefined ||
+          !pageCoveredByTiles(page.sourceRectCss, capturedPageTiles)
+        ) {
           throw captureError({
             code: "E_LAYOUT_UNSTABLE",
             message: "A logical PDF page was not fully verified before advancing.",
@@ -494,9 +498,7 @@ export class PageNativeCaptureEngine implements CaptureEngine {
           stage: "storing",
           completed: completedPages,
           total: documentPageMap.sourcePageCount,
-          ...(capturedPageTiles.at(-1)?.index === undefined
-            ? {}
-            : { tileIndex: capturedPageTiles.at(-1)?.index }),
+          tileIndex: lastCapturedTile.index,
         });
       }
 
