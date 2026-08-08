@@ -19,51 +19,44 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
-          def replace_once(path: str, old: str, new: str) -> None:
-              file = Path(path)
-              text = file.read_text()
-              if old not in text:
-                  raise SystemExit(f"S31 patch anchor missing: {path}")
-              file.write_text(text.replace(old, new, 1))
-
-          replace_once(
-              "src/background/full-page-capture-coordinator.ts",
-              '''      tilePlan: tiles,
-              completedTiles: 0,
-              totalTiles: tiles.length,
-          ''',
-              '''      tilePlan: tiles,
-              completedTiles: tiles.filter((tile) => tile.status === "stored").length,
-              totalTiles: tiles.length,
-          ''',
+          coordinator = Path("src/background/full-page-capture-coordinator.ts")
+          text = coordinator.read_text()
+          text, count = re.subn(
+              r'(?m)^(\s*)completedTiles: 0,\n\1totalTiles: tiles\.length,$',
+              lambda match: (
+                  f'{match.group(1)}completedTiles: tiles.filter((tile) => tile.status === "stored").length,\n'
+                  f'{match.group(1)}totalTiles: tiles.length,'
+              ),
+              text,
+              count=1,
           )
+          if count != 1:
+              raise SystemExit("S31 coordinator invariant anchor missing")
+          coordinator.write_text(text)
 
-          replace_once(
-              "src/background/scroll-area-page-adapter.ts",
-              '''    request.row === 0 &&
-              request.column === 0 &&
-              request.rows === 1 &&
-              request.columns === 1
-          ''',
-              '''    request.row === 0 &&
-              request.column === 0 &&
-              request.rows === 1 &&
-              request.columns === 1 &&
-              request.expectedScrollWidth === undefined &&
-              request.expectedScrollHeight === undefined &&
-              request.expectedClientWidth === undefined &&
-              request.expectedClientHeight === undefined
-          ''',
+          adapter = Path("src/background/scroll-area-page-adapter.ts")
+          text = adapter.read_text()
+          text, count = re.subn(
+              r'(?m)^(\s*)request\.columns === 1$',
+              lambda match: (
+                  f'{match.group(1)}request.columns === 1 &&\n'
+                  f'{match.group(1)}request.expectedScrollWidth === undefined &&\n'
+                  f'{match.group(1)}request.expectedScrollHeight === undefined &&\n'
+                  f'{match.group(1)}request.expectedClientWidth === undefined &&\n'
+                  f'{match.group(1)}request.expectedClientHeight === undefined'
+              ),
+              text,
+              count=1,
           )
-
-          replace_once(
-              "src/background/scroll-area-page-adapter.ts",
-              '''  const hint = [descriptor.tagName, ...descriptor.classNames].join(" ");
-          ''',
-              '''  const hint = [descriptor.tagName, descriptor.id ?? "", ...descriptor.classNames].join(" ");
-          ''',
-          )
+          if count != 1:
+              raise SystemExit("S31 discovery probe invariant anchor missing")
+          old_hint = 'const hint = [descriptor.tagName, ...descriptor.classNames].join(" ");'
+          new_hint = 'const hint = [descriptor.tagName, descriptor.id ?? "", ...descriptor.classNames].join(" ");'
+          if old_hint not in text:
+              raise SystemExit("S31 PDF descriptor hint anchor missing")
+          adapter.write_text(text.replace(old_hint, new_hint, 1))
           PY
           git rm .github/workflows/s31-invariant-fix.yml
       - uses: pnpm/action-setup@v4
