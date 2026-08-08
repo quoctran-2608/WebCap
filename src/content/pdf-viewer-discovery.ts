@@ -199,7 +199,8 @@ export async function discoverPdfViewerSnapshot(
 
     const key = geometryKey(candidate);
     const observations = geometryCandidates.get(key) ?? [];
-    if (observations.some((observation) => observation.sampleIndex === candidate.sampleIndex)) return;
+    if (observations.some((observation) => observation.sampleIndex === candidate.sampleIndex))
+      return;
     if (observations.length < MAX_GEOMETRY_OBSERVATIONS) {
       observations.push(candidate);
       geometryCandidates.set(key, observations);
@@ -263,10 +264,7 @@ export async function discoverPdfViewerSnapshot(
     target.scrollTop = 0;
     await frames();
     sample();
-    const requestedSettleMs = Math.min(
-      MAX_TERMINAL_SETTLE_MS,
-      Math.max(0, Math.round(settleMs)),
-    );
+    const requestedSettleMs = Math.min(MAX_TERMINAL_SETTLE_MS, Math.max(0, Math.round(settleMs)));
     const intermediateSettleMs = Math.min(MAX_INTERMEDIATE_SETTLE_MS, requestedSettleMs);
     const step = Math.max(128, Math.round(Math.max(1, target.clientHeight) * 0.8));
     let nextTop = 0;
@@ -278,10 +276,7 @@ export async function discoverPdfViewerSnapshot(
       await frames();
 
       const provisionalHeight = Math.max(1, target.scrollHeight);
-      const provisionalMaxTop = Math.max(
-        0,
-        provisionalHeight - Math.max(1, target.clientHeight),
-      );
+      const provisionalMaxTop = Math.max(0, provisionalHeight - Math.max(1, target.clientHeight));
       const nearTerminal = target.scrollTop >= provisionalMaxTop - 1;
       const currentSettleMs = nearTerminal ? requestedSettleMs : intermediateSettleMs;
       if (currentSettleMs > 0) await delay(currentSettleMs);
