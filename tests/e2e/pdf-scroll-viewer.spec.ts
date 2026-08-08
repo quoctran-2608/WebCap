@@ -26,6 +26,7 @@ interface PdfViewerState {
       byteLength: number;
     };
   } | null;
+  outputReference?: string;
   pdfBytes: number[];
 }
 
@@ -92,14 +93,28 @@ async function readPdfViewerState(serviceWorker: Worker): Promise<PdfViewerState
       .filter((candidate) => candidate.mode === "scroll-area")
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
 
+    let outputReference: string | undefined;
     let pdfBytes: number[] = [];
     if (job?.outputArtifactId !== undefined) {
       const artifactTransaction = database.transaction("artifacts", "readonly");
       const artifact = (await read<unknown>(
         artifactTransaction.objectStore("artifacts").get(job.outputArtifactId),
-      )) as { blob?: Blob } | undefined;
-      if (artifact?.blob !== undefined) {
-        pdfBytes = Array.from(new Uint8Array(await artifact.blob.arrayBuffer()));
+      )) as { blob?: Blob; opfsReference?: string } | undefined;
+      let blob = artifact?.blob;
+      if (blob === undefined && artifact?.opfsReference !== undefined) {
+        outputReference = artifact.opfsReference;
+        const prefix = "webcap-pdf-output/";
+        if (!artifact.opfsReference.startsWith(prefix)) {
+          throw new Error("Unexpected PDF output spool reference.");
+        }
+        const fileName = artifact.opfsReference.slice(prefix.length);
+        const root = await navigator.storage.getDirectory();
+        const directory = await root.getDirectoryHandle("webcap-pdf-output");
+        const handle = await directory.getFileHandle(fileName);
+        blob = await handle.getFile();
+      }
+      if (blob !== undefined) {
+        pdfBytes = Array.from(new Uint8Array(await blob.arrayBuffer()));
       }
     }
     database.close();
@@ -120,6 +135,7 @@ async function readPdfViewerState(serviceWorker: Worker): Promise<PdfViewerState
                 : { documentPageMap: job.documentPageMap }),
               ...(job.output === undefined ? {} : { output: job.output }),
             },
+      ...(outputReference === undefined ? {} : { outputReference }),
       pdfBytes,
     };
   });
@@ -168,6 +184,7 @@ test("@smoke exports one PDF page per detected viewer page with source orientati
   expect(state.job?.completedTiles).toBe(state.job?.totalTiles);
   expect(state.job?.completedTiles ?? 0).toBeGreaterThan(1);
   expect(state.job?.partialCaptureReason).toBeUndefined();
+  expect(state.outputReference).toMatch(/^webcap-pdf-output\/.+\.pdf$/u);
   expect(state.pdfBytes.length).toBeGreaterThan(4);
   expect(String.fromCharCode(...state.pdfBytes.slice(0, 5))).toBe("%PDF-");
 
