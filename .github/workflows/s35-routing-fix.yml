@@ -1,0 +1,87 @@
+name: S35 Routing Fix
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'agent/s35-pdf-ux-verification-rc'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out S35 branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.15.1
+          run_install: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply routing ownership patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          job_messages = Path('src/shared/contracts/job-messages.ts')
+          text = job_messages.read_text()
+          marker = '''export function isPersistentJobRequest(value: unknown): value is PersistentJobRequest {\n'''
+          addition = '''export function isPdfUxMessageType(value: unknown): boolean {\n  if (typeof value !== "object" || value === null || !("type" in value)) {\n    return false;\n  }\n  const type = (value as { type?: unknown }).type;\n  return type === "PDF_MANIFEST_GET" || type === "JOB_RESUME";\n}\n\n'''
+          assert marker in text and addition not in text
+          job_messages.write_text(text.replace(marker, addition + marker))
+
+          message_router = Path('src/background/message-router.ts')
+          text = message_router.read_text()
+          import_marker = '''import { isOffscreenPdfExportProgressMessage } from "@shared/contracts/offscreen";\n'''
+          import_addition = '''import { isPdfUxMessageType } from "@shared/contracts/job-messages";\n'''
+          assert import_marker in text and import_addition not in text
+          text = text.replace(import_marker, import_addition + import_marker)
+          target_marker = '''    !isPersistentJobMessageType(value) &&\n    !isOffscreenPdfExportProgressMessage(value) &&\n'''
+          target_replacement = '''    !isPersistentJobMessageType(value) &&\n    !isPdfUxMessageType(value) &&\n    !isOffscreenPdfExportProgressMessage(value) &&\n'''
+          assert target_marker in text
+          message_router.write_text(text.replace(target_marker, target_replacement))
+
+          pdf_router = Path('src/background/pdf-ux-router.ts')
+          text = pdf_router.read_text()
+          import_marker = '''  JobResumeMessageSchema,\n  PdfManifestGetMessageSchema,\n'''
+          import_replacement = '''  JobResumeMessageSchema,\n  PdfManifestGetMessageSchema,\n  isPdfUxMessageType,\n'''
+          assert import_marker in text
+          text = text.replace(import_marker, import_replacement)
+          local_predicate = '''function isPdfUxMessage(value: unknown): boolean {\n  if (typeof value !== "object" || value === null || !("type" in value)) return false;\n  const type = (value as { type?: unknown }).type;\n  return type === "PDF_MANIFEST_GET" || type === "JOB_RESUME";\n}\n\n'''
+          assert local_predicate in text
+          text = text.replace(local_predicate, '')
+          text = text.replace('if (!isPdfUxMessage(message)) return undefined;', 'if (!isPdfUxMessageType(message)) return undefined;')
+          text = text.replace('if (!isPdfUxMessage(message)) return false;', 'if (!isPdfUxMessageType(message)) return false;')
+          pdf_router.write_text(text)
+
+          test_file = Path('tests/unit/message-router.test.ts')
+          text = test_file.read_text()
+          import_marker = '''import type { VisibleSessionSnapshot } from "@shared/contracts/visible-session";\n'''
+          import_addition = '''import {\n  createJobResumeMessage,\n  createPdfManifestGetMessage,\n} from "@shared/contracts/job-messages";\n'''
+          assert import_marker in text and import_addition not in text
+          text = text.replace(import_marker, import_addition + import_marker)
+          test_marker = '''  it("returns a normalized protocol error for addressed invalid messages", async () => {\n'''
+          test_addition = '''  it("leaves S35 PDF UX messages to the dedicated router", async () => {\n    const { dependencies } = createDependencies();\n    await expect(\n      routeRuntimeMessage(\n        createPdfManifestGetMessage({\n          requestId: "request-pdf-manifest",\n          jobId: "job-s35",\n          sentAt: now.toISOString(),\n        }),\n        dependencies,\n      ),\n    ).resolves.toBeUndefined();\n    await expect(\n      routeRuntimeMessage(\n        createJobResumeMessage({\n          requestId: "request-pdf-resume",\n          jobId: "job-s35",\n          sentAt: now.toISOString(),\n        }),\n        dependencies,\n      ),\n    ).resolves.toBeUndefined();\n  });\n\n'''
+          assert test_marker in text and test_addition not in text
+          test_file.write_text(text.replace(test_marker, test_addition + test_marker))
+          PY
+      - name: Format patched files
+        run: pnpm exec prettier --write src/shared/contracts/job-messages.ts src/background/message-router.ts src/background/pdf-ux-router.ts tests/unit/message-router.test.ts
+      - name: Commit routing fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/shared/contracts/job-messages.ts src/background/message-router.ts src/background/pdf-ux-router.ts tests/unit/message-router.test.ts
+          git commit -m "Fix S35 PDF UX message routing ownership"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
