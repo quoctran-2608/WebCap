@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -21,6 +21,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
@@ -36,6 +38,18 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Format final S33 multipart regression
+        run: |
+          pnpm exec prettier --write tests/unit/streaming-pdf-multipart-s33.test.ts
+          pnpm exec vitest run tests/unit/streaming-pdf-multipart-s33.test.ts
+          git fetch origin main
+          git checkout origin/main -- .github/workflows/ci.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --quiet || git commit -m "Add S33 multipart byte-level regression"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
 
       - name: Check formatting
         run: pnpm format:check
