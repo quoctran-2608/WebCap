@@ -83,7 +83,9 @@ function expectedObjectSize(totalPages: number): number {
 }
 
 async function readAscii(blob: Blob, offset: number, maximum: number): Promise<string> {
-  return decoder.decode(await blob.slice(offset, Math.min(blob.size, offset + maximum)).arrayBuffer());
+  return decoder.decode(
+    await blob.slice(offset, Math.min(blob.size, offset + maximum)).arrayBuffer(),
+  );
 }
 
 async function expectAscii(blob: Blob, offset: number, expected: string): Promise<void> {
@@ -131,9 +133,9 @@ export async function recoverStreamingPdfWriterState(
       pagesWritten: 0,
       totalPages,
       byteLength: 0,
-      offsets: new Array<number>(expectedObjectSize(totalPages)).fill(-1).map((value, index) =>
-        index === 0 ? 0 : value,
-      ),
+      offsets: new Array<number>(expectedObjectSize(totalPages))
+        .fill(-1)
+        .map((value, index) => (index === 0 ? 0 : value)),
     };
   }
   if (blob.size < PDF_HEADER_BYTES) {
@@ -356,7 +358,9 @@ export class SequentialRasterPdfWriter {
     const content = `q\n${pdfNumber(page.imageRectPt.width)} 0 0 ${pdfNumber(page.imageRectPt.height)} ${pdfNumber(page.imageRectPt.x)} ${pdfNumber(page.imageRectPt.y)} cm\n/Im0 Do\nQ\n`;
     const contentBytes = encoder.encode(content);
     this.recordOffset(contentObject);
-    await this.writeText(`${contentObject} 0 obj\n<< /Length ${contentBytes.byteLength} >>\nstream\n`);
+    await this.writeText(
+      `${contentObject} 0 obj\n<< /Length ${contentBytes.byteLength} >>\nstream\n`,
+    );
     await this.writeBytes(contentBytes);
     await this.writeText("endstream\nendobj\n");
 

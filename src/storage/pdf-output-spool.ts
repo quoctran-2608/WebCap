@@ -158,7 +158,10 @@ export class OpfsPdfOutputSpool implements PdfOutputSpoolPort {
       const handle = await directory.getFileHandle(fileName);
       const file = await handle.getFile();
       if (file.size < durableBytes) {
-        throw new DOMException("PDF spool file is shorter than its durable checkpoint.", "DataError");
+        throw new DOMException(
+          "PDF spool file is shorter than its durable checkpoint.",
+          "DataError",
+        );
       }
       return this.openWritable(directory, handle, fileName, reference, durableBytes, true);
     } catch (error) {

@@ -22,7 +22,7 @@ import type {
   PdfExporter,
 } from "./pdf-exporter";
 import { assertStreamingPdfStructure } from "./streaming-pdf-integrity";
-import { SequentialRasterPdfWriter } from "./streaming-pdf-writer";
+import { SequentialRasterPdfWriter, recoverStreamingPdfWriterState } from "./streaming-pdf-writer";
 
 export interface StreamingPdfExportEnvironment {
   decode(blob: Blob): Promise<DecodedPdfTile>;
@@ -144,6 +144,42 @@ function storageReadError(message: string, safeContext: Record<string, string | 
   );
 }
 
+function storagePressurePause(
+  jobId: string,
+  pageIndex: number,
+  availableBytes: number,
+  requiredBytes: number,
+): Error {
+  return createWebCapRuntimeError(
+    createWebCapError({
+      code: "E_STORAGE_QUOTA",
+      stage: "storage",
+      message:
+        "PDF export paused at a durable page boundary because local storage is under pressure.",
+      userMessageKey: "errors.storageQuota",
+      retryable: true,
+      fallbackAllowed: false,
+      causeCode: "StreamingPdfStoragePressurePaused",
+      safeContext: {
+        jobId: jobId.slice(0, 24),
+        pageIndex,
+        availableBytes,
+        requiredBytes,
+      },
+    }),
+  );
+}
+
+function resumableStorageError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null || !("data" in error)) return false;
+  const data = (error as { data?: { code?: unknown; retryable?: unknown; stage?: unknown } }).data;
+  return (
+    data?.retryable === true &&
+    data.stage === "storage" &&
+    (data.code === "E_STORAGE_QUOTA" || data.code === "E_STORAGE_WRITE")
+  );
+}
+
 function cancelledError(jobId: string): Error {
   return createWebCapRuntimeError(
     createWebCapError({
@@ -251,27 +287,65 @@ export class StreamingPdfExporter {
     reportProgress: (progress: PdfExportProgress) => Promise<boolean> = () => Promise.resolve(true),
   ): Promise<PdfExportResult> {
     const startedAt = nowMilliseconds(this.environment);
-    await this.checkpoints.delete(payload.jobId).catch(() => false);
-
-    let output;
-    try {
-      output = await this.spool.createOutput(payload.outputArtifactId);
-    } catch (error) {
-      if (isPdfSpoolFallbackAllowed(error)) {
-        return this.fallback.export(payload, reportProgress);
-      }
-      throw error;
-    }
-
     const writerPages = payload.pages ?? defaultEditorPages(payload);
     if (writerPages.length === 0) {
-      await output.abort().catch(() => undefined);
       throw exportError(
         "PDF export requires at least one selected page.",
         "StreamingPdfPagesMissing",
       );
     }
-    const writer = new SequentialRasterPdfWriter(output, writerPages.length);
+
+    let output;
+    let writer: SequentialRasterPdfWriter | undefined;
+    let startOutputIndex = 0;
+    const durableCheckpoint = await this.checkpoints.get(payload.jobId).catch(() => undefined);
+    if (
+      durableCheckpoint !== undefined &&
+      durableCheckpoint.outputArtifactId === payload.outputArtifactId &&
+      durableCheckpoint.totalPages === writerPages.length &&
+      durableCheckpoint.pagesWritten <= writerPages.length &&
+      this.spool.resumeOutput !== undefined
+    ) {
+      try {
+        const persisted = await this.spool.read(durableCheckpoint.spoolReference);
+        if (persisted.size < durableCheckpoint.byteLength) {
+          throw exportError(
+            "The streamed PDF spool is shorter than its writer checkpoint.",
+            "StreamingPdfResumeSpoolTruncated",
+          );
+        }
+        const durableBlob = persisted.slice(0, durableCheckpoint.byteLength, "application/pdf");
+        const resume = await recoverStreamingPdfWriterState(
+          durableBlob,
+          durableCheckpoint.pagesWritten,
+          writerPages.length,
+        );
+        output = await this.spool.resumeOutput(
+          durableCheckpoint.spoolReference,
+          durableCheckpoint.byteLength,
+        );
+        writer = new SequentialRasterPdfWriter(output, writerPages.length, resume);
+        startOutputIndex = durableCheckpoint.pagesWritten;
+      } catch {
+        await this.spool.delete(durableCheckpoint.spoolReference).catch(() => undefined);
+        await this.checkpoints.delete(payload.jobId).catch(() => false);
+      }
+    } else if (durableCheckpoint !== undefined) {
+      await this.spool.delete(durableCheckpoint.spoolReference).catch(() => undefined);
+      await this.checkpoints.delete(payload.jobId).catch(() => false);
+    }
+
+    if (writer === undefined) {
+      try {
+        output = await this.spool.createOutput(payload.outputArtifactId);
+      } catch (error) {
+        if (isPdfSpoolFallbackAllowed(error)) {
+          return this.fallback.export(payload, reportProgress);
+        }
+        throw error;
+      }
+      writer = new SequentialRasterPdfWriter(output, writerPages.length);
+    }
     const rasterReferences = new Set<string>();
 
     try {
@@ -395,8 +469,32 @@ export class StreamingPdfExporter {
         if (snapshot.limitBytes !== undefined) heapLimitBytes = snapshot.limitBytes;
       };
 
-      for (const [outputIndex, entry] of pagePixelRanges.entries()) {
+      for (
+        let outputIndex = startOutputIndex;
+        outputIndex < pagePixelRanges.length;
+        outputIndex += 1
+      ) {
+        const entry = pagePixelRanges[outputIndex];
+        if (entry === undefined) {
+          throw exportError(
+            "A streamed PDF page plan is unavailable during recovery.",
+            "StreamingPdfRecoveryPageMissing",
+          );
+        }
         const { page, pixelXRange, pixelYRange } = entry;
+        const estimatedPageBytes = Math.max(
+          1,
+          Math.ceil(pixelXRange.length * pixelYRange.length * 4 * 2 + 64 * 1024),
+        );
+        const availableBytes = await this.spool.availableBytes();
+        if (availableBytes !== undefined && availableBytes < estimatedPageBytes) {
+          throw storagePressurePause(
+            payload.jobId,
+            outputIndex,
+            availableBytes,
+            estimatedPageBytes,
+          );
+        }
         const canvasWidth = pixelXRange.length;
         const canvasHeight = pixelYRange.length;
         const canvas = this.environment.createCanvas(canvasWidth, canvasHeight);
@@ -511,7 +609,7 @@ export class StreamingPdfExporter {
           rasterReference = raster.reference;
           rasterReferences.add(raster.reference);
 
-          const checkpoint = await writer.addJpegPage({
+          await writer.addJpegPage({
             jpeg: raster.blob,
             pixelWidth: canvasWidth,
             pixelHeight: canvasHeight,
@@ -519,6 +617,9 @@ export class StreamingPdfExporter {
             pageHeightPt: page.pageHeightPt,
             imageRectPt: page.imageRectPt,
           });
+          // The OPFS page boundary is committed before the IndexedDB checkpoint. A crash
+          // between these operations is recovered by truncating back to the older checkpoint.
+          const checkpoint = await writer.commit();
           const now = new Date();
           const durableCheckpoint: PdfWriterCheckpoint = {
             schemaVersion: 1,
@@ -555,19 +656,9 @@ export class StreamingPdfExporter {
       }
 
       const finalized = await writer.finalize();
-      const finalCheckpoint: PdfWriterCheckpoint = {
-        schemaVersion: 1,
-        jobId: payload.jobId,
-        outputArtifactId: payload.outputArtifactId,
-        spoolReference: finalized.checkpoint.spoolReference,
-        pagesWritten: finalized.checkpoint.pagesWritten,
-        totalPages: finalized.checkpoint.totalPages,
-        byteLength: finalized.checkpoint.byteLength,
-        createdAt: payload.createdAt,
-        updatedAt: new Date().toISOString(),
-        expiresAt: payload.expiresAt,
-      };
-      await this.checkpoints.put(finalCheckpoint);
+      // Keep the last page-only durable checkpoint until job cleanup. If the background loses
+      // the completion response, recovery truncates the final xref/trailer and re-finalizes
+      // deterministically without re-rendering verified pages.
       const integrity = await assertStreamingPdfStructure(finalized.file.blob, writerPages.length);
       const firstPage = writerPages[0];
       if (firstPage === undefined) {
@@ -619,7 +710,12 @@ export class StreamingPdfExporter {
         },
       };
     } catch (error) {
-      await writer.abort().catch(() => undefined);
+      if (resumableStorageError(error)) {
+        await writer.suspend().catch(() => undefined);
+      } else {
+        await writer.abort().catch(() => undefined);
+        await this.checkpoints.delete(payload.jobId).catch(() => false);
+      }
       for (const reference of rasterReferences) {
         await this.spool.delete(reference).catch(() => undefined);
       }
