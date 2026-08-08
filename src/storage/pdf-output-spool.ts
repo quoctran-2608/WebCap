@@ -15,6 +15,10 @@ export interface PdfSpoolWritable {
   readonly reference: string;
   readonly byteLength: number;
   write(chunk: Uint8Array): Promise<void>;
+  /** Commit the current bytes and reopen at the same durable boundary. */
+  commit?(): Promise<void>;
+  /** Discard uncommitted bytes while preserving the last committed file. */
+  rollback?(): Promise<void>;
   close(): Promise<PdfSpoolFile>;
   abort(): Promise<void>;
 }
@@ -22,6 +26,7 @@ export interface PdfSpoolWritable {
 export interface PdfOutputSpoolPort {
   availableBytes(): Promise<number | undefined>;
   createOutput(outputArtifactId: string): Promise<PdfSpoolWritable>;
+  resumeOutput?(reference: string, byteLength: number): Promise<PdfSpoolWritable>;
   writeRasterPage(outputArtifactId: string, pageIndex: number, blob: Blob): Promise<PdfSpoolFile>;
   read(reference: string): Promise<Blob>;
   delete(reference: string): Promise<void>;
@@ -87,7 +92,7 @@ function spoolError(error: unknown): Error {
         ? "WebCap does not have enough local storage for the streamed PDF output."
         : "WebCap could not use local disk spool storage for PDF output.",
       userMessageKey: quota ? "errors.storageQuota" : "errors.storageWrite",
-      retryable: !quota,
+      retryable: quota || !unsupported,
       fallbackAllowed: unsupported,
       ...(cause === undefined ? {} : { causeCode: cause }),
     }),
@@ -137,71 +142,127 @@ export class OpfsPdfOutputSpool implements PdfOutputSpoolPort {
       const root = await this.getRoot();
       const directory = await root.getDirectoryHandle(PDF_OUTPUT_SPOOL_DIRECTORY, { create: true });
       const fileName = outputFileName(outputArtifactId);
-      const reference = referenceFor(fileName);
       const handle = await directory.getFileHandle(fileName, { create: true });
-      const writable = await handle.createWritable({ keepExistingData: false });
-      let bytes = 0;
-      let closed = false;
-
-      const remove = async (): Promise<void> => {
-        try {
-          await directory.removeEntry(fileName);
-        } catch (error) {
-          if (!(error instanceof DOMException && error.name === "NotFoundError")) throw error;
-        }
-      };
-
-      return {
-        reference,
-        get byteLength() {
-          return bytes;
-        },
-        write: async (chunk) => {
-          if (closed)
-            throw spoolError(new DOMException("PDF output spool is closed.", "InvalidStateError"));
-          try {
-            await writable.write(ownedArrayBuffer(chunk));
-            bytes += chunk.byteLength;
-          } catch (error) {
-            throw spoolError(error);
-          }
-        },
-        close: async () => {
-          if (!closed) {
-            try {
-              await writable.close();
-              closed = true;
-            } catch (error) {
-              throw spoolError(error);
-            }
-          }
-          try {
-            const file = await handle.getFile();
-            const blob = file.slice(0, file.size, "application/pdf");
-            return {
-              reference,
-              byteLength: file.size,
-              mimeType: "application/pdf",
-              blob,
-            };
-          } catch (error) {
-            throw spoolError(error);
-          }
-        },
-        abort: async () => {
-          if (!closed) {
-            try {
-              await writable.abort();
-            } finally {
-              closed = true;
-            }
-          }
-          await remove().catch(() => undefined);
-        },
-      };
+      return this.openWritable(directory, handle, fileName, referenceFor(fileName), 0, false);
     } catch (error) {
       throw spoolError(error);
     }
+  }
+
+  async resumeOutput(reference: string, byteLength: number): Promise<PdfSpoolWritable> {
+    try {
+      const durableBytes = Math.max(0, Math.floor(byteLength));
+      const root = await this.getRoot();
+      const directory = await root.getDirectoryHandle(PDF_OUTPUT_SPOOL_DIRECTORY);
+      const fileName = fileNameFromReference(reference);
+      const handle = await directory.getFileHandle(fileName);
+      const file = await handle.getFile();
+      if (file.size < durableBytes) {
+        throw new DOMException("PDF spool file is shorter than its durable checkpoint.", "DataError");
+      }
+      return this.openWritable(directory, handle, fileName, reference, durableBytes, true);
+    } catch (error) {
+      throw spoolError(error);
+    }
+  }
+
+  private async openWritable(
+    directory: FileSystemDirectoryHandle,
+    handle: FileSystemFileHandle,
+    fileName: string,
+    reference: string,
+    initialBytes: number,
+    keepExistingData: boolean,
+  ): Promise<PdfSpoolWritable> {
+    let writable = await handle.createWritable({ keepExistingData });
+    let bytes = initialBytes;
+    let closed = false;
+    if (keepExistingData) {
+      await writable.truncate(bytes);
+      await writable.seek(bytes);
+    }
+
+    const remove = async (): Promise<void> => {
+      try {
+        await directory.removeEntry(fileName);
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "NotFoundError")) throw error;
+      }
+    };
+    const ensureOpen = (): void => {
+      if (closed) {
+        throw spoolError(new DOMException("PDF output spool is closed.", "InvalidStateError"));
+      }
+    };
+    const reopen = async (): Promise<void> => {
+      writable = await handle.createWritable({ keepExistingData: true });
+      await writable.seek(bytes);
+    };
+
+    return {
+      reference,
+      get byteLength() {
+        return bytes;
+      },
+      write: async (chunk) => {
+        ensureOpen();
+        try {
+          await writable.write(ownedArrayBuffer(chunk));
+          bytes += chunk.byteLength;
+        } catch (error) {
+          throw spoolError(error);
+        }
+      },
+      commit: async () => {
+        ensureOpen();
+        try {
+          await writable.close();
+          await reopen();
+        } catch (error) {
+          throw spoolError(error);
+        }
+      },
+      rollback: async () => {
+        if (closed) return;
+        try {
+          await writable.abort();
+        } finally {
+          closed = true;
+        }
+      },
+      close: async () => {
+        if (!closed) {
+          try {
+            await writable.close();
+            closed = true;
+          } catch (error) {
+            throw spoolError(error);
+          }
+        }
+        try {
+          const file = await handle.getFile();
+          const blob = file.slice(0, file.size, "application/pdf");
+          return {
+            reference,
+            byteLength: file.size,
+            mimeType: "application/pdf",
+            blob,
+          };
+        } catch (error) {
+          throw spoolError(error);
+        }
+      },
+      abort: async () => {
+        if (!closed) {
+          try {
+            await writable.abort();
+          } finally {
+            closed = true;
+          }
+        }
+        await remove().catch(() => undefined);
+      },
+    };
   }
 
   async writeRasterPage(
