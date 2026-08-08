@@ -13,7 +13,7 @@ def patch(path: str, old: str, new: str) -> None:
 patch(
     "src/background/pdf-capture-orchestrator.ts",
     '  recordFailure(jobId: string, error: WebCapErrorData): Promise<void>;\n  getManifest',
-    '  recordPause(jobId: string, error: WebCapErrorData): Promise<void>;\n  recordFailure(jobId: string, error: WebCapErrorData): Promise<void>;\n  getManifest',
+    '  recordPause?(jobId: string, error: WebCapErrorData): Promise<void>;\n  recordFailure(jobId: string, error: WebCapErrorData): Promise<void>;\n  getManifest',
 )
 patch(
     "src/background/pdf-capture-orchestrator.ts",
@@ -45,7 +45,7 @@ text = text.replace(
     1,
 )
 old = '''      await this.pdfDocuments?.recordFailure(job.id, normalized).catch(() => undefined);\n      await this.jobs.transition(job.id, "failed", {\n        activeOutputFormat: "pdf",\n        error: normalized,\n      });'''
-new = '''      const resumable =\n        normalized.retryable &&\n        (normalized.code === "E_STORAGE_QUOTA" ||\n          normalized.code === "E_STORAGE_WRITE" ||\n          normalized.code === "E_OFFSCREEN_UNAVAILABLE");\n      if (resumable) {\n        await this.pdfDocuments?.recordPause(job.id, normalized).catch(() => undefined);\n        await this.jobs.transition(job.id, "paused", {\n          activeOutputFormat: "pdf",\n          error: normalized,\n        });\n        return;\n      }\n      await this.pdfDocuments?.recordFailure(job.id, normalized).catch(() => undefined);\n      await this.jobs.transition(job.id, "failed", {\n        activeOutputFormat: "pdf",\n        error: normalized,\n      });'''
+new = '''      const resumable =\n        normalized.retryable &&\n        (normalized.code === "E_STORAGE_QUOTA" ||\n          normalized.code === "E_STORAGE_WRITE" ||\n          normalized.code === "E_OFFSCREEN_UNAVAILABLE");\n      if (resumable) {\n        await this.pdfDocuments?.recordPause?.(job.id, normalized).catch(() => undefined);\n        await this.jobs.transition(job.id, "paused", {\n          activeOutputFormat: "pdf",\n          error: normalized,\n        });\n        return;\n      }\n      await this.pdfDocuments?.recordFailure(job.id, normalized).catch(() => undefined);\n      await this.jobs.transition(job.id, "failed", {\n        activeOutputFormat: "pdf",\n        error: normalized,\n      });'''
 if old not in text:
     raise SystemExit("pdf export failure marker missing")
 text = text.replace(old, new, 1)
@@ -69,12 +69,6 @@ text = text.replace(
     '    if (!["ready", "failed", "exporting", "paused"].includes(job.state)) return undefined;',
     1,
 )
-text = text.replace(
-    '    if (job.state !== "exporting") {\n      exporting = await this.options.jobs.transition(',
-    '    if (job.state !== "exporting") {\n      exporting = await this.options.jobs.transition(',
-    1,
-)
-# Ensure a paused -> exporting reconciliation clears the pause reason.
 text = text.replace(
     '          activeOutputFormat: artifact.format,\n          exportProgress: { completedPages: 0, totalPages },',
     '          activeOutputFormat: artifact.format,\n          error: undefined,\n          exportProgress: { completedPages: 0, totalPages },',
