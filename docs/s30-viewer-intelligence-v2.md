@@ -10,7 +10,7 @@ Supported discovery buckets:
 
 - PDF.js page containers and `data-page-number` semantics;
 - generic numbered/semantic page containers;
-- open-shadow-root page trees;
+- open-shadow-root page trees, including page trees owned directly by the selected shadow host;
 - virtualized viewers where only a small moving window of pages exists in the DOM;
 - canvas-only visual fallback when independent PDF context or declared page-count evidence exists.
 
@@ -46,7 +46,9 @@ existing S27 page-aware capture/export
 
 The selected DOM node never crosses the runtime boundary. The content runtime that already owns the opaque element target performs the scan, while background receives only typed metadata and applies completion verification. This avoids relying on a separately executed isolated-world function to recover private content-runtime state.
 
-The discovery pass does not capture screenshots and does not allocate a full-document canvas. It only records bounded page geometry metadata. Ordinary scroll containers without page evidence or a PDF/document/viewer descriptor skip this pass entirely.
+The discovery pass does not capture screenshots and does not allocate a full-document canvas. It only records bounded page geometry metadata. Indexed page observations are collapsed by logical page identity as discovery proceeds, and repeated unindexed geometry is retained only in a small bounded observation set. Ordinary scroll containers without page evidence or a PDF/document/viewer descriptor skip this pass entirely.
+
+Intermediate scroll positions use a short bounded settle window after animation frames, while terminal observations retain the longer requested settle window. This keeps very large virtualized documents responsive without weakening the stable-end proof used for completion.
 
 ## Completion rules
 
@@ -70,9 +72,10 @@ Used when a stable page index is unavailable:
 - page candidates have sufficient confidence;
 - repeated/recycled geometry is deduplicated;
 - the first and last page cover the document edges within tolerance;
-- the ordered sequence has no implausibly large internal gap.
+- the ordered sequence has no implausibly large internal gap;
+- if a declared page count exists, the geometry sequence must agree with it.
 
-Canvas candidates require independent PDF context or declared page-count evidence before they are considered. This prevents an arbitrary scrollable dashboard containing canvases from being promoted to a PDF viewer.
+Canvas candidates require independent PDF context or declared page-count evidence before they are considered. Canvas-only completion additionally requires repeated stable geometry across distinct observations and more than one page surface in at least one observation. A single viewport-sized canvas that is merely recycled while scrolling therefore cannot manufacture a fake multipage `DocumentPageMap`.
 
 ## Projection boundary
 
@@ -99,7 +102,7 @@ After a complete page map is proven, the scroll-area adapter expands the planned
 - camelCase and tokenized viewer descriptors such as `pdfViewer`, `pdf-viewer` and `documentViewer` are recognized;
 - no new Chrome permission is added;
 - no backend, telemetry, remote code or page-content upload is introduced;
-- discovery returns no complete map when terminal proof or page continuity is missing;
+- discovery returns no complete map when terminal proof, stable canvas evidence, declared-count agreement or page continuity is missing;
 - the existing S28 completion verifier remains authoritative after capture/output.
 
 ## Regression coverage
@@ -109,7 +112,9 @@ S30 adds deterministic tests for:
 - a virtualized 500-page document discovered from sequential observations rather than simultaneous DOM nodes;
 - mixed portrait/landscape page geometry;
 - missing declared page identity preventing completion;
-- canvas-only completion requiring stable terminal proof;
+- canvas-only completion requiring stable terminal and repeated-geometry proof;
+- rejection of a single recycled viewport canvas as fake multipage evidence;
+- rejection of canvas geometry that conflicts with a declared page count;
 - recycled geometry deduplication without collapsing adjacent logical pages;
 - adapter integration only on the initial measurement probe;
 - lazy viewer height growth expanding capture planning from the verified page-map extent;
