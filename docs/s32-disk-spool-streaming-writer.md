@@ -94,7 +94,7 @@ The streamed path owns at most:
 
 The final PDF grows on disk. Therefore output raster/PDF memory is bounded by the current page rather than document length.
 
-The memory guard follows the same ownership boundary. It evaluates the maximum tile count and stored tile bytes intersecting any one selected logical page, not the aggregate tile count or byte size of the captured document. A document may therefore contain more than the legacy 4,096-tile threshold without being rejected merely because the PDF is long; a genuinely oversized single logical page can still be blocked by the page-local safety budget.
+The memory guard follows the same ownership boundary. It evaluates the maximum tile count and stored tile bytes intersecting any one selected logical page, not the aggregate tile count or byte size of the captured document. A document may therefore contain more than the legacy 4,096-tile threshold without being rejected merely because the PDF is long; a genuinely oversized single logical page can still be blocked by the page-local safety budget. Memory diagnostics report those maximum active-page values rather than document totals.
 
 ## S32 validation targets
 
