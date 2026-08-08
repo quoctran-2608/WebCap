@@ -16,16 +16,17 @@
         font-family: system-ui, sans-serif;
       }
       main {
-        padding: 32px;
+        padding: 8px;
       }
       h1 {
-        margin: 0 0 16px;
+        margin: 0 0 8px;
         font-size: 22px;
       }
       #pdf-scroll {
         position: relative;
-        width: 940px;
-        height: 610px;
+        width: calc(100vw - 16px);
+        height: calc(100vh - 56px);
+        min-height: 360px;
         overflow: auto;
         border: 1px solid #8b929a;
         background: #3c4148;
