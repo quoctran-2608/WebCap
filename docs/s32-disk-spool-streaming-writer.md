@@ -94,6 +94,8 @@ The streamed path owns at most:
 
 The final PDF grows on disk. Therefore output raster/PDF memory is bounded by the current page rather than document length.
 
+The memory guard follows the same ownership boundary. It evaluates the maximum tile count and stored tile bytes intersecting any one selected logical page, not the aggregate tile count or byte size of the captured document. A document may therefore contain more than the legacy 4,096-tile threshold without being rejected merely because the PDF is long; a genuinely oversized single logical page can still be blocked by the page-local safety budget.
+
 ## S32 validation targets
 
 S32 adds regressions for:
@@ -104,6 +106,7 @@ S32 adds regressions for:
 - per-page durable checkpoint advancement;
 - no final PDF Blob duplication in IndexedDB on the streamed path;
 - deletion of temporary page raster files;
+- document-wide tile counts above the legacy 4,096 threshold without treating them as active-page memory;
 - safe legacy fallback only when OPFS is unavailable before writing.
 
 The existing S29 source passthrough, S30 viewer discovery, S31 page-native capture, PDF editor/export, generic capture modes, full extension E2E matrix, and packaged lifecycle remain release gates.
