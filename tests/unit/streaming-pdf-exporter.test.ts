@@ -317,6 +317,115 @@ describe("StreamingPdfExporter", () => {
     expect(loaded.getPageCount()).toBe(3);
   });
 
+  it("does not treat document-wide tile count as active streaming memory", async () => {
+    const tileCount = 4_097;
+    const tiles: CaptureTile[] = [];
+    const records: StoredTileRecord[] = [];
+    for (let index = 0; index < tileCount; index += 1) {
+      const tile: CaptureTile = {
+        id: `job-stream:${index}`,
+        jobId: "job-stream",
+        index,
+        row: index,
+        column: 0,
+        sourceRectCss: { x: 0, y: index, width: 1, height: 1 },
+        outputRectCss: { x: 0, y: index, width: 1, height: 1 },
+        captureViewportCss: { x: 0, y: index, width: 1, height: 1 },
+        expectedPixelWidth: 1,
+        expectedPixelHeight: 1,
+        overlapTopCss: 0,
+        overlapLeftCss: 0,
+        overlapRightCss: 0,
+        overlapBottomCss: 0,
+        status: "stored",
+        attempts: 1,
+        byteLength: 1,
+        mimeType: "image/png",
+      };
+      tiles.push(tile);
+      records.push({
+        schemaVersion: 1,
+        jobId: tile.jobId,
+        index,
+        tile,
+        blob: new Blob([new Uint8Array([index & 0xff])], { type: "image/png" }),
+        createdAt: "2026-08-08T03:00:00.000Z",
+        updatedAt: "2026-08-08T03:00:00.000Z",
+      });
+    }
+    let artifact: ArtifactRecord | undefined;
+    const spool = new MemorySpool();
+    const checkpoints = checkpointRepository();
+    const exporter = new StreamingPdfExporter({
+      tiles: {
+        put: () => Promise.resolve(),
+        get: (_jobId, index) => Promise.resolve(records[index]),
+        listByJob: () => Promise.resolve(records),
+        deleteByJob: () => Promise.resolve(0),
+      },
+      artifacts: {
+        put: (next) => {
+          artifact = next;
+          return Promise.resolve();
+        },
+        get: () => Promise.resolve(artifact),
+        delete: () => Promise.resolve(false),
+        deleteExpired: () => Promise.resolve(0),
+      },
+      spool,
+      checkpoints: checkpoints.repository,
+      fallback: { export: () => Promise.reject(new Error("fallback must not run")) },
+      environment: {
+        decode: () =>
+          Promise.resolve({
+            width: 1,
+            height: 1,
+            source: {} as CanvasImageSource,
+            close: () => undefined,
+          }),
+        createCanvas(width, height): PdfPageCanvasPort {
+          return {
+            width,
+            height,
+            getContext: () => ({ fillWhite: () => undefined, drawImage: () => undefined }),
+            convertToJpeg: () =>
+              Promise.resolve(
+                new Blob([Uint8Array.from(ONE_PIXEL_JPEG).buffer], { type: "image/jpeg" }),
+              ),
+            release: () => undefined,
+          };
+        },
+      },
+    });
+
+    const result = await exporter.export({
+      jobId: "job-stream",
+      outputArtifactId: "long-document-selected-page",
+      targetRect: { x: 0, y: 0, width: 1, height: tileCount },
+      tiles,
+      pages: [
+        {
+          id: "selected-page-1",
+          originalIndex: 0,
+          sourceRectCss: { x: 0, y: 0, width: 1, height: 1 },
+          pageWidthPt: 595,
+          pageHeightPt: 842,
+          imageRectPt: { x: 0, y: 0, width: 595, height: 842 },
+        },
+      ],
+      settings: DEFAULT_CAPTURE_SETTINGS.pdf,
+      filename: "selected-page.pdf",
+      createdAt: "2026-08-08T03:00:00.000Z",
+      expiresAt: "2026-08-08T03:30:00.000Z",
+    });
+
+    expect(result.diagnostics.pageCount).toBe(1);
+    expect(result.diagnostics.memoryEstimate.reasons).not.toContain("tile-count");
+    expect(result.diagnostics.memoryEstimate.reasons).not.toContain("tile-bytes");
+    expect(result.diagnostics.memoryEstimate.shouldBlock).toBe(false);
+    expect(artifact?.opfsReference).toBe("webcap-pdf-output/long-document-selected-page.pdf");
+  });
+
   it("falls back to the legacy exporter only when OPFS is unavailable before writing", async () => {
     const source = sourceTile();
     const repo = repositories(source.record);
