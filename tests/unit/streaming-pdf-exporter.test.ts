@@ -215,10 +215,11 @@ function fallbackResult(): PdfExportResult {
         estimatedPageRgbaBytes: 4,
         estimatedDecodedTileBytes: 4,
         estimatedEncodedPageBytes: 1,
-        estimatedPdfStructureBytes: 1,
         estimatedWorkingSetBytes: 10,
         thresholdBytes: 100,
         shouldBlock: false,
+        reasons: [],
+        alternatives: ["lower-quality", "split-output", "multi-page-pdf"],
       },
       integrity: { valid: true, pageCount: 1, imageObjectCount: 1, nonEmptyStreamCount: 1 },
     },
@@ -321,7 +322,13 @@ describe("StreamingPdfExporter", () => {
     const fallback = vi.fn(() => Promise.resolve(fallbackResult()));
     const unavailableSpool: PdfOutputSpoolPort = {
       availableBytes: () => Promise.resolve(undefined),
-      createOutput: () => Promise.reject({ data: { fallbackAllowed: true } }),
+      createOutput: () => {
+        const error = new Error("OPFS unavailable") as Error & {
+          data: { fallbackAllowed: boolean };
+        };
+        error.data = { fallbackAllowed: true };
+        return Promise.reject(error);
+      },
       writeRasterPage: () => Promise.reject(new Error("must not write raster")),
       read: () => Promise.reject(new Error("must not read")),
       delete: () => Promise.resolve(),
