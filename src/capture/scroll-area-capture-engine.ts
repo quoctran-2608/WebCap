@@ -1,4 +1,10 @@
-import type { CaptureEngine, CaptureEngineContext, CaptureEngineResult } from "@capture/capture-engine";
+import type {
+  CaptureCancellation,
+  CaptureEngine,
+  CaptureEngineContext,
+  CaptureEngineResult,
+  CaptureProgress,
+} from "@capture/capture-engine";
 import { PageNativeCaptureEngine } from "@capture/page-native-capture-engine";
 
 import {
@@ -15,6 +21,33 @@ function descriptorSuggestsPdf(context: CaptureEngineContext): boolean {
     .join(" ")
     .toLowerCase();
   return /(?:pdf|document|viewer)/u.test(hint);
+}
+
+class PageBoundaryCancellation implements CaptureCancellation {
+  private deferKeepPartial = false;
+
+  constructor(private readonly source: CaptureCancellation) {}
+
+  get cancelled(): boolean {
+    return this.source.cancelled;
+  }
+
+  get keepPartial(): boolean {
+    return this.source.keepPartial;
+  }
+
+  markCaptureStarted(): void {
+    this.deferKeepPartial = true;
+  }
+
+  markBoundary(): void {
+    this.deferKeepPartial = false;
+  }
+
+  throwIfCancelled(stage?: "prepare" | "measure" | "plan" | "capture" | "cleanup"): void {
+    if (this.cancelled && this.keepPartial && this.deferKeepPartial) return;
+    this.source.throwIfCancelled(stage);
+  }
 }
 
 export class ScrollAreaCaptureEngine implements CaptureEngine {
@@ -34,9 +67,15 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
   }
 
   capture(context: CaptureEngineContext): Promise<CaptureEngineResult> {
-    return descriptorSuggestsPdf(context)
-      ? this.pageNative.capture(context)
-      : this.generic.capture(context);
+    if (!descriptorSuggestsPdf(context)) return this.generic.capture(context);
+
+    const cancellation = new PageBoundaryCancellation(context.cancellation);
+    const reportProgress = async (progress: CaptureProgress): Promise<void> => {
+      if (progress.stage === "capturing") cancellation.markCaptureStarted();
+      if (progress.stage === "storing") cancellation.markBoundary();
+      await context.reportProgress(progress);
+    };
+    return this.pageNative.capture({ ...context, cancellation, reportProgress });
   }
 
   cleanup(context: CaptureEngineContext): Promise<void> {
