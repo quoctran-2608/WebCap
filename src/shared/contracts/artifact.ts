@@ -37,6 +37,8 @@ export interface ArtifactRecord extends ArtifactMetadata {
   jobId: string;
   role: ArtifactRole;
   blob?: Blob;
+  // Disk-backed outputs keep bytes in extension-origin OPFS.
+  // The file is resolved on demand for preview and download.
   opfsReference?: string;
   sourceTitle?: string;
   sourceDomain?: string;
