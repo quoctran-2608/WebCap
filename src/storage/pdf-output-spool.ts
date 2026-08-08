@@ -30,6 +30,7 @@ export interface PdfOutputSpoolPort {
   writeRasterPage(outputArtifactId: string, pageIndex: number, blob: Blob): Promise<PdfSpoolFile>;
   read(reference: string): Promise<Blob>;
   delete(reference: string): Promise<void>;
+  deleteOutputFamily?(outputArtifactId: string, totalPages: number): Promise<void>;
 }
 
 export interface OpfsPdfOutputSpoolOptions {
@@ -320,6 +321,22 @@ export class OpfsPdfOutputSpool implements PdfOutputSpoolPort {
     } catch (error) {
       if (error instanceof DOMException && error.name === "NotFoundError") return;
       throw spoolError(error);
+    }
+  }
+
+  async deleteOutputFamily(outputArtifactId: string, totalPages: number): Promise<void> {
+    const pages = Math.max(0, Math.floor(totalPages));
+    const references = [
+      referenceFor(outputFileName(outputArtifactId)),
+      ...Array.from({ length: pages }, (_, pageIndex) =>
+        referenceFor(rasterFileName(outputArtifactId, pageIndex)),
+      ),
+    ];
+    for (const reference of references) {
+      await this.delete(reference).catch((error) => {
+        if (error instanceof DOMException && error.name === "NotFoundError") return;
+        throw error;
+      });
     }
   }
 }

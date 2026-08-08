@@ -145,6 +145,9 @@ export class CaptureCompletionService {
     const reconciled = await this.reconcileExistingOutput(job);
     if (reconciled !== undefined) return reconciled;
     if (job.state === "ready") return this.startAuto(job.id);
+    if (job.activeOutputFormat === "pdf" && (job.state === "exporting" || job.state === "paused")) {
+      return this.options.pdf.start(job.id);
+    }
     if (job.state === "failed" && job.error?.causeCode === "ServiceWorkerRestart") {
       return this.startAuto(job.id);
     }
@@ -153,7 +156,12 @@ export class CaptureCompletionService {
 
   async recoverAll(): Promise<CaptureJob[]> {
     const jobs = (await this.options.jobs.listActive?.()) ?? [];
-    const candidates = jobs.filter((job) => job.state === "ready" || job.state === "failed");
+    const candidates = jobs.filter(
+      (job) =>
+        job.state === "ready" ||
+        job.state === "failed" ||
+        (job.activeOutputFormat === "pdf" && (job.state === "exporting" || job.state === "paused")),
+    );
     const settled = await Promise.allSettled(candidates.map((job) => this.recover(job.id)));
     return settled.flatMap((result) => (result.status === "fulfilled" ? [result.value] : []));
   }
@@ -178,7 +186,7 @@ export class CaptureCompletionService {
   }
 
   private async reconcileExistingOutput(job: CaptureJob): Promise<CaptureJob | undefined> {
-    if (!["ready", "failed", "exporting"].includes(job.state)) return undefined;
+    if (!["ready", "failed", "exporting", "paused"].includes(job.state)) return undefined;
     const artifact = newestOutput(await this.options.artifacts.listByJob(job.id));
     if (artifact === undefined) return undefined;
     const totalPages = artifact.format === "pdf" ? (artifact.pageCount ?? 1) : 1;
@@ -196,6 +204,7 @@ export class CaptureCompletionService {
         "exporting",
         {
           activeOutputFormat: artifact.format,
+          error: undefined,
           exportProgress: { completedPages: 0, totalPages },
         },
         { sourceArtifactExists: true },

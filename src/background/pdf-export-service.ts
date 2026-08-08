@@ -142,10 +142,15 @@ export class PdfExportService {
     const current = await this.jobs.get(jobId);
     if (current === undefined) throw exportSourceError(jobId, "PdfExportJobMissing");
     if (current.state === "completed" && current.outputArtifactId !== undefined) return current;
-    if (current.state === "exporting") return current;
-    if (!["ready", "failed"].includes(current.state) || current.targetRect === undefined) {
+    if (current.state === "exporting" && this.operations.has(jobId)) return current;
+    const resumablePaused =
+      current.state === "paused" &&
+      current.activeOutputFormat === "pdf" &&
+      current.exportProgress !== undefined;
+    if (!["ready", "failed", "exporting"].includes(current.state) && !resumablePaused) {
       throw jobNotReadyError(current);
     }
+    if (current.targetRect === undefined) throw jobNotReadyError(current);
 
     const records = await this.tiles.listByJob(jobId);
     const storedIndexes = new Set(
@@ -185,18 +190,31 @@ export class PdfExportService {
     }
 
     this.cancelledJobs.delete(jobId);
-    const exporting = await this.jobs.transition(
-      jobId,
-      "exporting",
-      {
-        activeOutputFormat: "pdf",
-        error: undefined,
-        output: undefined,
-        outputArtifactId: undefined,
-        exportProgress: { completedPages: 0, totalPages },
-      },
-      { sourceArtifactExists: true },
-    );
+    const outputArtifactId = current.outputArtifactId ?? this.createId();
+    const preservedProgress =
+      current.exportProgress?.totalPages === totalPages
+        ? current.exportProgress
+        : { completedPages: 0, totalPages };
+    let exporting: CaptureJob;
+    if (current.state === "exporting") {
+      exporting =
+        current.outputArtifactId === outputArtifactId
+          ? current
+          : await this.jobs.update(jobId, { outputArtifactId });
+    } else {
+      exporting = await this.jobs.transition(
+        jobId,
+        "exporting",
+        {
+          activeOutputFormat: "pdf",
+          error: undefined,
+          output: undefined,
+          outputArtifactId,
+          exportProgress: resumablePaused ? preservedProgress : { completedPages: 0, totalPages },
+        },
+        { sourceArtifactExists: true },
+      );
+    }
 
     if (!this.operations.has(jobId)) {
       const operation = this.run(exporting, pdfSettings, pages).finally(() => {
@@ -261,7 +279,10 @@ export class PdfExportService {
     if (targetRect === undefined) throw exportSourceError(job.id, "PdfExportTargetMissing");
     const createdAt = this.now();
     const sourceDomain = domainFromOrigin(job.source.origin);
-    const outputArtifactId = this.createId();
+    const outputArtifactId = job.outputArtifactId;
+    if (outputArtifactId === undefined) {
+      throw exportSourceError(job.id, "PdfOutputArtifactIdMissing");
+    }
     try {
       const artifact = await this.offscreen.exportPdf({
         jobId: job.id,
@@ -325,6 +346,19 @@ export class PdfExportService {
         fallbackAllowed: false,
         safeContext: { jobId: job.id.slice(0, 24) },
       });
+      const resumable =
+        normalized.retryable &&
+        (normalized.code === "E_STORAGE_QUOTA" ||
+          normalized.code === "E_STORAGE_WRITE" ||
+          normalized.code === "E_OFFSCREEN_UNAVAILABLE");
+      if (resumable) {
+        await this.pdfDocuments?.recordPause?.(job.id, normalized).catch(() => undefined);
+        await this.jobs.transition(job.id, "paused", {
+          activeOutputFormat: "pdf",
+          error: normalized,
+        });
+        return;
+      }
       await this.pdfDocuments?.recordFailure(job.id, normalized).catch(() => undefined);
       await this.jobs.transition(job.id, "failed", {
         activeOutputFormat: "pdf",
