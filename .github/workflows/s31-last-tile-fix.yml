@@ -19,55 +19,54 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+
           path = Path("src/capture/page-native-capture-engine.ts")
-          text = path.read_text()
-          old = '''        if (!pageCoveredByTiles(page.sourceRectCss, capturedPageTiles)) {
-            throw captureError({
-              code: "E_LAYOUT_UNSTABLE",
-              message: "A logical PDF page was not fully verified before advancing.",
-              userMessageKey: "errors.layoutChanged",
-              causeCode: "PdfPageCoverageGap",
-              safeContext: { pageIndex: page.index, pageTiles: capturedPageTiles.length },
-            });
-          }
-          completedPages += 1;
-          await context.reportProgress({
-            jobId: context.jobId,
-            state: "capturing",
-            stage: "storing",
-            completed: completedPages,
-            total: documentPageMap.sourcePageCount,
-            ...(capturedPageTiles.at(-1)?.index === undefined
-              ? {}
-              : { tileIndex: capturedPageTiles.at(-1)?.index }),
-          });
-          '''
-          new = '''        const lastCapturedTile = capturedPageTiles.at(-1);
-          if (
-            lastCapturedTile === undefined ||
-            !pageCoveredByTiles(page.sourceRectCss, capturedPageTiles)
-          ) {
-            throw captureError({
-              code: "E_LAYOUT_UNSTABLE",
-              message: "A logical PDF page was not fully verified before advancing.",
-              userMessageKey: "errors.layoutChanged",
-              causeCode: "PdfPageCoverageGap",
-              safeContext: { pageIndex: page.index, pageTiles: capturedPageTiles.length },
-            });
-          }
-          completedPages += 1;
-          await context.reportProgress({
-            jobId: context.jobId,
-            state: "capturing",
-            stage: "storing",
-            completed: completedPages,
-            total: documentPageMap.sourcePageCount,
-            tileIndex: lastCapturedTile.index,
-          });
-          '''
-          if old not in text:
-              raise SystemExit("S31 last-tile patch anchor missing")
-          path.write_text(text.replace(old, new, 1))
+          lines = path.read_text().splitlines()
+          try:
+              start = next(
+                  index
+                  for index, line in enumerate(lines)
+                  if "if (!pageCoveredByTiles(page.sourceRectCss, capturedPageTiles))" in line
+              )
+              progress = next(
+                  index
+                  for index in range(start, len(lines))
+                  if "await context.reportProgress({" in lines[index]
+              )
+              end = next(
+                  index
+                  for index in range(progress + 1, len(lines))
+                  if lines[index].strip() == "});"
+              )
+          except StopIteration as error:
+              raise SystemExit("S31 last-tile line anchor missing") from error
+
+          indent = lines[start][: len(lines[start]) - len(lines[start].lstrip())]
+          replacement = [
+              f"{indent}const lastCapturedTile = capturedPageTiles.at(-1);",
+              f"{indent}if (",
+              f"{indent}  lastCapturedTile === undefined ||",
+              f"{indent}  !pageCoveredByTiles(page.sourceRectCss, capturedPageTiles)",
+              f"{indent}) {{",
+              f"{indent}  throw captureError({{",
+              f'{indent}    code: "E_LAYOUT_UNSTABLE",',
+              f'{indent}    message: "A logical PDF page was not fully verified before advancing.",',
+              f'{indent}    userMessageKey: "errors.layoutChanged",',
+              f'{indent}    causeCode: "PdfPageCoverageGap",',
+              f"{indent}    safeContext: {{ pageIndex: page.index, pageTiles: capturedPageTiles.length }},",
+              f"{indent}  }});",
+              f"{indent}}}",
+              f"{indent}completedPages += 1;",
+              f"{indent}await context.reportProgress({{",
+              f"{indent}  jobId: context.jobId,",
+              f'{indent}  state: "capturing",',
+              f'{indent}  stage: "storing",',
+              f"{indent}  completed: completedPages,",
+              f"{indent}  total: documentPageMap.sourcePageCount,",
+              f"{indent}  tileIndex: lastCapturedTile.index,",
+              f"{indent}}});",
+          ]
+          path.write_text("\n".join(lines[:start] + replacement + lines[end + 1 :]) + "\n")
           PY
           git rm .github/workflows/s31-last-tile-fix.yml
       - uses: pnpm/action-setup@v4
