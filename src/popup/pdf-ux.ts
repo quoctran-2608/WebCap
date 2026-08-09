@@ -7,7 +7,7 @@ import type {
 } from "@shared/contracts/pdf-capture";
 import type { UiLocale } from "@shared/i18n";
 
-export type PdfUxStage = "capturing" | "verifying" | "writing" | "paused" | "completed";
+export type PdfUxStage = "capturing" | "verifying" | "writing" | "paused" | "failed" | "completed";
 export type PdfUxResultKind = "viewer" | "multipart" | "legacy";
 
 export interface PdfUxSnapshot {
@@ -43,13 +43,21 @@ function manifestOutputTotal(manifest: PdfDocumentManifest): number {
   return manifest.outputPlan?.sourcePageIndexes.length ?? manifest.expectedPageCount ?? 0;
 }
 
-export function isDedicatedViewerPdfJob(job: CaptureJob | undefined): boolean {
+function hasVerifiedLegacyPageMap(job: CaptureJob): boolean {
+  const pageMap = job.documentPageMap;
   return (
-    job?.mode === "scroll-area" &&
-    job.documentPageMap?.complete === true &&
-    job.documentPageMap.pages.length === job.documentPageMap.sourcePageCount &&
+    pageMap?.strategy === "dom" &&
+    pageMap.complete &&
+    pageMap.sourcePageCount > 0 &&
+    pageMap.pages.length === pageMap.sourcePageCount &&
+    pageMap.pages.every((page, index) => page.index === index) &&
     job.partialCapture === undefined
   );
+}
+
+export function isDedicatedViewerPdfJob(job: CaptureJob | undefined): boolean {
+  if (job?.mode !== "scroll-area") return false;
+  return job.settings.outputFormat === "pdf" || hasVerifiedLegacyPageMap(job);
 }
 
 export function buildPdfUxSnapshot(job: CaptureJob, manifest?: PdfDocumentManifest): PdfUxSnapshot {
@@ -61,7 +69,9 @@ export function buildPdfUxSnapshot(job: CaptureJob, manifest?: PdfDocumentManife
   let completedPages = pageProgress?.completed ?? 0;
   let totalPages = pageProgress?.total ?? sourceTotal;
 
-  if (job.state === "paused") {
+  if (job.state === "failed") {
+    stage = "failed";
+  } else if (job.state === "paused") {
     stage = "paused";
   } else if (manifest?.state === "completed" || job.state === "completed") {
     stage = "completed";
@@ -162,7 +172,7 @@ const COPY: Record<UiLocale, Record<PdfUxCopyKey, string>> = {
     eyebrow: "PDF",
     entryTitle: "Chụp PDF đang hiển thị",
     entryDetail:
-      "WebCap có thể nhận diện từng trang trong viewer, chụp theo ranh giới trang và chỉ báo 100% sau khi xác minh đầu ra.",
+      "Dùng chế độ này cho PDF hoặc tài liệu nhiều trang đang nằm trong một khung cuộn, kể cả khi website không tự nhận diện là PDF. WebCap sẽ chụp theo ranh giới từng trang và chỉ báo 100% sau khi xác minh đầu ra.",
     entryAction: "Chụp PDF đang hiển thị",
     progressTitle: "Đang xử lý PDF",
     resultTitle: "Kết quả PDF",
@@ -177,13 +187,14 @@ const COPY: Record<UiLocale, Record<PdfUxCopyKey, string>> = {
     pageProgress: "Trang {completed} / {total}",
     batch: "Đợt {batch}",
     diagnosticsSummary: "Xác minh PDF",
-    operationFailed: "Không thể tiếp tục thao tác PDF. Hãy thử lại.",
+    operationFailed:
+      "Không thể xác minh đầy đủ các trang PDF. WebCap đã dừng thay vì xuất một file thiếu hoặc cắt sai ranh giới.",
   },
   en: {
     eyebrow: "PDF",
     entryTitle: "Capture the displayed PDF",
     entryDetail:
-      "WebCap can identify viewer pages, capture on page boundaries, and only report 100% after output verification.",
+      "Use this mode for a PDF or multi-page document inside a scrollable viewer even when the website is not detected as a PDF source. WebCap captures on page boundaries and only reports 100% after output verification.",
     entryAction: "Capture displayed PDF",
     progressTitle: "Processing PDF",
     resultTitle: "PDF result",
@@ -198,7 +209,8 @@ const COPY: Record<UiLocale, Record<PdfUxCopyKey, string>> = {
     pageProgress: "Page {completed} / {total}",
     batch: "Batch {batch}",
     diagnosticsSummary: "PDF verification",
-    operationFailed: "Unable to continue the PDF operation. Please try again.",
+    operationFailed:
+      "WebCap could not verify every PDF page, so it stopped instead of exporting an incomplete or incorrectly split file.",
   },
 };
 

@@ -25,6 +25,10 @@ The 0.2.0 release candidate retains the same platform boundaries: restricted Chr
 
 ## Dedicated PDF capture safety
 
-For viewer-based PDF capture, WebCap treats verified logical source-page boundaries as a correctness requirement. The dedicated **Capture PDF / Chụp PDF** action must discover a complete high-confidence source-page map before it can use page-native export. If the viewer does not expose enough evidence to verify every logical page, WebCap fails clearly and allows a retry instead of silently falling back to fixed-height continuous-raster pagination.
+For viewer-based PDF capture, WebCap treats verified logical source-page boundaries as a correctness requirement. The dedicated **Capture PDF / Chụp PDF** action is user-selected and is available on supported web tabs even when URL, content type, or source inspection reports `not-pdf`. Source inspection remains useful for original-byte passthrough, but it does not gate viewer capture intent.
+
+The dedicated action must discover a complete high-confidence source-page map before it can use page-native export. Discovery supports known PDF viewer semantics, open shadow roots, rendered canvas surfaces, and bounded repeated paper-like page structures for neutral viewers that do not expose PDF-specific naming. If the viewer still does not expose enough evidence to verify every logical page, WebCap fails clearly and allows a retry instead of silently falling back to fixed-height continuous-raster pagination.
 
 This fail-closed behavior is intentional. It prevents three classes of silent corruption: exporting only a virtualized prefix of a long PDF, reporting 100% when the source-page count was never proven, and placing arbitrary output-page seams through source content such as a line of text. Generic **Scrollable area / Vùng cuộn** capture remains available for non-PDF scroll containers and should not be used as a substitute for the dedicated PDF action when exact source-page preservation is required.
+
+The historical `v0.2.0` draft remains blocked for publication while issue #51 is open. Automated regression coverage now includes a neutral 220-page viewer with no PDF-specific URL or DOM naming, but the release blocker is not accepted until the original real-world >200-page document is retested with the post-fix build.

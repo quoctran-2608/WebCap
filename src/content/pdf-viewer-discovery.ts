@@ -10,9 +10,18 @@ const PAGE_SELECTOR = [
   ".page[data-page-number]",
   "[data-page-number]",
   "[data-page-index]",
+  "[data-page]",
+  "[data-page-id]",
   ".pageContainer",
   ".page-container",
+  ".page-wrapper",
+  ".page-view",
+  ".viewer-page",
   ".pdf-page",
+  ".pf",
+  '[role="document"]',
+  '[role="group"][aria-label*="page" i]',
+  '[role="group"][aria-label*="trang" i]',
   "viewer-pdf-page",
   "pdf-viewer-page",
 ].join(",");
@@ -21,6 +30,8 @@ const MAX_SAMPLES = 10_000;
 const MAX_INTERMEDIATE_SETTLE_MS = 80;
 const MAX_TERMINAL_SETTLE_MS = 250;
 const MAX_GEOMETRY_OBSERVATIONS = 2;
+const GENERIC_SCAN_DEPTH = 6;
+const GENERIC_CHILD_LIMIT = 96;
 
 function positiveAttribute(element: Element, names: readonly string[]): number | undefined {
   for (const name of names) {
@@ -33,12 +44,20 @@ function positiveAttribute(element: Element, names: readonly string[]): number |
 }
 
 function pageIndex(element: Element): number | undefined {
-  const direct = element.getAttribute("data-page-index") ?? element.getAttribute("page-index");
+  const direct =
+    element.getAttribute("data-page-index") ??
+    element.getAttribute("page-index") ??
+    element.getAttribute("data-index");
   if (direct !== null) {
     const parsed = Number.parseInt(direct, 10);
     if (Number.isInteger(parsed) && parsed >= 0) return parsed;
   }
-  const numbered = positiveAttribute(element, ["data-page-number", "page-number"]);
+  const numbered = positiveAttribute(element, [
+    "data-page-number",
+    "page-number",
+    "data-page",
+    "data-page-id",
+  ]);
   if (numbered !== undefined) return numbered - 1;
   const label = element.getAttribute("aria-label") ?? "";
   const match = /(?:page|trang)\s*(\d+)/iu.exec(label)?.[1];
@@ -88,7 +107,16 @@ function rectInsideTarget(target: HTMLElement, element: Element): Rect | undefin
 
 function declaredPageCount(target: HTMLElement, elements: readonly Element[]): number | undefined {
   let count = 0;
-  const attributes = ["data-page-count", "data-pages-count", "page-count", "aria-setsize"];
+  const attributes = [
+    "data-page-count",
+    "data-pages-count",
+    "data-total-pages",
+    "data-page-total",
+    "page-count",
+    "total-pages",
+    "aria-setsize",
+    "aria-rowcount",
+  ];
   const inspect = (element: Element | null) => {
     if (element === null) return;
     count = Math.max(count, positiveAttribute(element, attributes) ?? 0);
@@ -157,29 +185,117 @@ function pageRenderState(element: Element): PdfViewerRenderState {
   return "unknown";
 }
 
-function pdfContextSignal(target: HTMLElement): boolean {
-  if (document.contentType.toLowerCase().includes("pdf")) return true;
-  if (/\.pdf(?:$|[?#])/iu.test(globalThis.location.href)) return true;
-  const hint = [target.tagName, ...target.classList].join(" ");
-  if (/(pdf|document|viewer)/iu.test(hint)) return true;
-  for (const root of collectRoots(target)) {
-    if (
-      root.querySelector(
-        [
-          'embed[type="application/pdf"]',
-          'object[type="application/pdf"]',
-          'source[type="application/pdf"]',
-          'embed[src^="blob:"]',
-          'object[data^="blob:"]',
-          'iframe[src^="blob:"]',
-          'iframe[src*=".pdf"]',
-        ].join(","),
-      ) !== null
-    ) {
-      return true;
-    }
+function pageSemanticSignal(element: Element): boolean {
+  const hint = [
+    element.tagName,
+    element.id,
+    ...element.classList,
+    element.getAttribute("role") ?? "",
+    element.getAttribute("aria-label") ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+  if (/(?:page|trang|sheet|paper|pdf|document)/u.test(hint)) return true;
+  return [
+    "data-page-number",
+    "data-page-index",
+    "data-page",
+    "data-page-id",
+    "page-number",
+    "page-index",
+  ].some((name) => element.hasAttribute(name));
+}
+
+function isTransparentColor(value: string): boolean {
+  const normalized = value.replaceAll(" ", "").toLowerCase();
+  return normalized === "transparent" || normalized === "rgba(0,0,0,0)";
+}
+
+function paperSurfaceSignal(element: Element): boolean {
+  if (pageSemanticSignal(element)) return true;
+  const style = getComputedStyle(element);
+  if (style.boxShadow !== "none") return true;
+  const borderWidth =
+    Number.parseFloat(style.borderTopWidth) +
+    Number.parseFloat(style.borderRightWidth) +
+    Number.parseFloat(style.borderBottomWidth) +
+    Number.parseFloat(style.borderLeftWidth);
+  if (Number.isFinite(borderWidth) && borderWidth > 0) return true;
+  if (isTransparentColor(style.backgroundColor)) return false;
+  const parent = element.parentElement;
+  if (parent === null) return true;
+  return style.backgroundColor !== getComputedStyle(parent).backgroundColor;
+}
+
+function genericPageRect(target: HTMLElement, element: Element): Rect | undefined {
+  const rect = rectInsideTarget(target, element);
+  if (rect === undefined) return undefined;
+  const minWidth = Math.max(160, target.clientWidth * 0.5);
+  const minHeight = Math.max(180, target.clientHeight * 0.5);
+  if (rect.width < minWidth || rect.height < minHeight) return undefined;
+  const aspect = rect.width / rect.height;
+  if (aspect < 0.35 || aspect > 2.2) return undefined;
+  if (rect.width >= target.scrollWidth * 0.94 && rect.height >= target.scrollHeight * 0.72) {
+    return undefined;
   }
-  return false;
+  return rect;
+}
+
+function dimensionsSimilar(left: Rect, right: Rect): boolean {
+  const widthRatio =
+    Math.max(left.width, right.width) / Math.max(1, Math.min(left.width, right.width));
+  const heightRatio =
+    Math.max(left.height, right.height) / Math.max(1, Math.min(left.height, right.height));
+  return widthRatio <= 1.35 && heightRatio <= 1.35;
+}
+
+function directChildren(element: Element): Element[] {
+  const children = Array.from(element.children);
+  if (element.shadowRoot?.mode === "open") {
+    children.push(...Array.from(element.shadowRoot.children));
+  }
+  return children.slice(0, GENERIC_CHILD_LIMIT);
+}
+
+function collectRepeatedPageBlocks(target: HTMLElement): Element[] {
+  const selected = new Set<Element>();
+  let frontier: Element[] = [target];
+  const seen = new Set<Element>();
+
+  for (let depth = 0; depth < GENERIC_SCAN_DEPTH && frontier.length > 0; depth += 1) {
+    const next: Element[] = [];
+    for (const parent of frontier) {
+      if (seen.has(parent)) continue;
+      seen.add(parent);
+      const children = directChildren(parent);
+      const pageSized = children
+        .map((element) => ({ element, rect: genericPageRect(target, element) }))
+        .filter(
+          (candidate): candidate is { element: Element; rect: Rect } =>
+            candidate.rect !== undefined,
+        );
+
+      for (const candidate of pageSized) {
+        const repeated =
+          pageSized.filter((other) => dimensionsSimilar(candidate.rect, other.rect)).length >= 2;
+        if (repeated || paperSurfaceSignal(candidate.element)) selected.add(candidate.element);
+      }
+
+      for (const child of children) {
+        if (seen.has(child)) continue;
+        const rect = rectInsideTarget(target, child);
+        const largeContainer =
+          rect !== undefined &&
+          rect.width >= Math.max(120, target.clientWidth * 0.4) &&
+          (rect.height >= Math.max(160, target.clientHeight * 0.4) ||
+            (child instanceof HTMLElement && child.scrollHeight > target.clientHeight * 1.4));
+        if (largeContainer || child.shadowRoot?.mode === "open") next.push(child);
+      }
+    }
+    frontier = next.slice(0, ROOT_SCAN_LIMIT);
+  }
+
+  return [...selected];
 }
 
 function adapterConfidence(adapter: PdfViewerAdapterKind): number {
@@ -276,8 +392,9 @@ export async function discoverPdfViewerSnapshot(
 
     const key = geometryKey(candidate);
     const observations = geometryCandidates.get(key) ?? [];
-    if (observations.some((observation) => observation.sampleIndex === candidate.sampleIndex))
+    if (observations.some((observation) => observation.sampleIndex === candidate.sampleIndex)) {
       return;
+    }
     if (observations.length < MAX_GEOMETRY_OBSERVATIONS) {
       observations.push(candidate);
       geometryCandidates.set(key, observations);
@@ -295,6 +412,13 @@ export async function discoverPdfViewerSnapshot(
       }
       for (const element of Array.from(root.querySelectorAll(PAGE_SELECTOR))) selected.add(element);
     }
+
+    let usedGenericHeuristic = false;
+    if (selected.size === 0) {
+      for (const element of collectRepeatedPageBlocks(target)) selected.add(element);
+      usedGenericHeuristic = selected.size > 0;
+    }
+
     observedPageCount = Math.max(
       observedPageCount ?? 0,
       declaredPageCount(target, [...selected]) ?? 0,
@@ -305,13 +429,17 @@ export async function discoverPdfViewerSnapshot(
       sampleAdapter = "pdfjs";
     } else if (sawShadow && selected.size > 0) {
       sampleAdapter = "shadow-root";
+    } else if (usedGenericHeuristic) {
+      sampleAdapter = "virtualized";
     }
-    if (selected.size === 0 && ((observedPageCount ?? 0) > 0 || pdfContextSignal(target))) {
+
+    if (selected.size === 0) {
       for (const root of roots) {
         for (const canvas of Array.from(root.querySelectorAll("canvas"))) selected.add(canvas);
       }
       if (selected.size > 0) sampleAdapter = "canvas-visual";
     }
+
     if (
       (observedPageCount ?? 0) > selected.size &&
       selected.size > 0 &&
@@ -320,7 +448,8 @@ export async function discoverPdfViewerSnapshot(
       sampleAdapter = "virtualized";
     }
     adapter = sampleAdapter;
-    const confidence = adapterConfidence(sampleAdapter);
+    const baseConfidence = adapterConfidence(sampleAdapter);
+    const confidence = usedGenericHeuristic ? Math.min(baseConfidence, 0.86) : baseConfidence;
     for (const element of selected) {
       const rect = rectInsideTarget(target, element);
       if (rect === undefined) continue;

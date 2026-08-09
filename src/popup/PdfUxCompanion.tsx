@@ -221,16 +221,13 @@ export function PdfUxCompanion(): React.JSX.Element | null {
   }, [diagnosticsJson, locale]);
 
   if (host === undefined) return null;
-  const relevant =
-    isDedicatedViewerPdfJob(job) ||
-    (tab?.status === "supported" && capability?.canCaptureViewer === true);
+  const relevant = isDedicatedViewerPdfJob(job) || tab?.status === "supported";
   if (!relevant) return null;
 
   return createPortal(
     <>
       <PdfExperienceCard
         locale={locale}
-        capability={capability}
         job={job}
         manifest={manifest}
         busy={operationBusy || isBusy(job)}
