@@ -15,7 +15,7 @@ import type { CaptureTile, DocumentPageMap } from "@shared/contracts/domain";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
 
 const HUNDRED_PIXEL_PNG =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAIAAAD/gAIDAAAAnklEQVR42u3QMQEAAAgDILV/51nBzwci0CmuRoEsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWd8Wil4Bx2r6t7cAAAAASUVORK5CYII=";
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGQAAABkCAIAAAD/gAIDAAAAnklEQVR42u3QMQEAAAgDILV/51nBzwci0CmuRoEsWbJkyZKlQJYsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWbJkyVIgS5YsWbJkKZAlS5YsWbIUyJIlS5YsWQpkyZIlS5YsBbJkyZIlS5YCWbJkyZIlS4EsWd8Wil4Bx2r6t7cAAAAASUVORK5CYII=";
 
 const descriptor = {
   schemaVersion: 1 as const,
@@ -51,9 +51,7 @@ function pageResult(
     actualScrollTop: request.scrollTop,
     scrollWidth: 100,
     scrollHeight:
-      documentPageMap?.sourcePageCount === undefined
-        ? 220
-        : documentPageMap.sourcePageCount * 100,
+      documentPageMap?.sourcePageCount === undefined ? 220 : documentPageMap.sourcePageCount * 100,
     clientWidth: 100,
     clientHeight: 100,
     viewportWidth: 100,
