@@ -29,6 +29,7 @@ export interface ScrollAreaPageRequest {
   columns: number;
   fixedElementMode: FixedElementMode;
   settleMs: number;
+  forcePdfDiscovery?: boolean;
   expectedScrollWidth?: number;
   expectedScrollHeight?: number;
   expectedClientWidth?: number;
@@ -115,7 +116,9 @@ function shouldDiscoverPdfViewer(
 ): boolean {
   return (
     isInitialDiscoveryProbe(request) &&
-    (legacyPageMap !== undefined || descriptorSuggestsPdf(request.descriptor))
+    (request.forcePdfDiscovery === true ||
+      legacyPageMap !== undefined ||
+      descriptorSuggestsPdf(request.descriptor))
   );
 }
 
