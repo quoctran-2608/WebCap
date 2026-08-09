@@ -1,13 +1,11 @@
 import type { CaptureJob } from "@shared/contracts/domain";
 import type { PdfDocumentManifest } from "@shared/contracts/pdf-capture";
-import type { PdfSourceCapability } from "@shared/contracts/pdf-source";
 import type { UiLocale } from "@shared/i18n";
 
 import { buildPdfUxSnapshot, isDedicatedViewerPdfJob, pdfUxCopy } from "./pdf-ux";
 
 export interface PdfExperienceCardProps {
   locale: UiLocale;
-  capability: PdfSourceCapability | undefined;
   job: CaptureJob | undefined;
   manifest: PdfDocumentManifest | undefined;
   busy: boolean;
@@ -35,17 +33,13 @@ function stageCopy(
 
 export function PdfExperienceCard({
   locale,
-  capability,
   job,
   manifest,
   busy,
   onCaptureViewer,
   onResume,
-}: PdfExperienceCardProps): React.JSX.Element | null {
+}: PdfExperienceCardProps): React.JSX.Element {
   const dedicated = isDedicatedViewerPdfJob(job);
-  const canSuggestViewerCapture = !dedicated && capability?.canCaptureViewer === true;
-
-  if (!dedicated && !canSuggestViewerCapture) return null;
 
   if (!dedicated || job === undefined) {
     return (
