@@ -90,6 +90,7 @@ test("@smoke discovers a neutral 220-page document through explicit PDF intent",
             background: #2f2f2f;
           }
           #neutral-stack { width: 580px; margin: 0 auto; }
+          .batch { width: 580px; }
           .unit {
             width: 560px;
             height: 760px;
@@ -107,11 +108,17 @@ test("@smoke discovers a neutral 220-page document through explicit PDF intent",
         </div>
         <script>
           const stack = document.getElementById("neutral-stack");
-          for (let index = 0; index < 220; index += 1) {
-            const node = document.createElement("section");
-            node.className = "unit";
-            node.innerHTML = "<h2>Mục " + (index + 1) + "</h2><p>Nội dung kiểm thử " + (index + 1) + "</p>";
-            stack.append(node);
+          for (let batchIndex = 0; batchIndex < 4; batchIndex += 1) {
+            const batch = document.createElement("div");
+            batch.className = "batch";
+            stack.append(batch);
+            for (let offset = 0; offset < 55; offset += 1) {
+              const index = batchIndex * 55 + offset;
+              const node = document.createElement("section");
+              node.className = "unit";
+              node.innerHTML = "<h2>Mục " + (index + 1) + "</h2><p>Nội dung kiểm thử " + (index + 1) + "</p>";
+              batch.append(node);
+            }
           }
         </script>
       </body>
