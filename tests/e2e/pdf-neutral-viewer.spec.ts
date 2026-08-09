@@ -52,7 +52,8 @@ async function readDiscoveryState(serviceWorker: Worker): Promise<DiscoveryState
     }>;
     const job = jobs
       .filter(
-        (candidate) => candidate.mode === "scroll-area" && candidate.settings.outputFormat === "pdf",
+        (candidate) =>
+          candidate.mode === "scroll-area" && candidate.settings.outputFormat === "pdf",
       )
       .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
     return job === undefined
