@@ -43,8 +43,21 @@ function manifestOutputTotal(manifest: PdfDocumentManifest): number {
   return manifest.outputPlan?.sourcePageIndexes.length ?? manifest.expectedPageCount ?? 0;
 }
 
+function hasVerifiedLegacyPageMap(job: CaptureJob): boolean {
+  const pageMap = job.documentPageMap;
+  return (
+    pageMap?.strategy === "dom" &&
+    pageMap.complete &&
+    pageMap.sourcePageCount > 0 &&
+    pageMap.pages.length === pageMap.sourcePageCount &&
+    pageMap.pages.every((page, index) => page.index === index) &&
+    job.partialCapture === undefined
+  );
+}
+
 export function isDedicatedViewerPdfJob(job: CaptureJob | undefined): boolean {
-  return job?.mode === "scroll-area" && job.settings.outputFormat === "pdf";
+  if (job?.mode !== "scroll-area") return false;
+  return job.settings.outputFormat === "pdf" || hasVerifiedLegacyPageMap(job);
 }
 
 export function buildPdfUxSnapshot(job: CaptureJob, manifest?: PdfDocumentManifest): PdfUxSnapshot {
