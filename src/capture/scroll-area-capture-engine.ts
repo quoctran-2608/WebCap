@@ -23,6 +23,10 @@ function descriptorSuggestsPdf(context: CaptureEngineContext): boolean {
   return /(?:pdf|document|viewer)/u.test(hint);
 }
 
+function isExplicitPdfCapture(context: CaptureEngineContext): boolean {
+  return context.settings.outputFormat === "pdf";
+}
+
 class PageBoundaryCancellation implements CaptureCancellation {
   private deferKeepPartial = false;
 
@@ -67,7 +71,9 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
   }
 
   capture(context: CaptureEngineContext): Promise<CaptureEngineResult> {
-    if (!descriptorSuggestsPdf(context)) return this.generic.capture(context);
+    if (!isExplicitPdfCapture(context) && !descriptorSuggestsPdf(context)) {
+      return this.generic.capture(context);
+    }
 
     const cancellation = new PageBoundaryCancellation(context.cancellation);
     const reportProgress = async (progress: CaptureProgress): Promise<void> => {
