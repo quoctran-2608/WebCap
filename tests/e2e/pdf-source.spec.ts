@@ -49,6 +49,7 @@ test("downloads byte-identical original PDF without rasterization @smoke", async
   const card = popup.getByTestId("pdf-source-card");
   await expect(card).toHaveAttribute("data-status", "original-passthrough");
   await expect(card).toHaveAttribute("data-permission", "granted");
+  await expect(popup.getByRole("button", { name: "Chụp PDF đang hiển thị" })).toBeVisible();
 
   await popup.getByRole("button", { name: "Tải PDF gốc" }).click();
   const success = popup.getByTestId("pdf-source-download-success");
@@ -72,6 +73,7 @@ test("detects PDF by content type when URL has no PDF suffix @smoke", async ({
   const card = popup.getByTestId("pdf-source-card");
   await expect(card).toHaveAttribute("data-status", "original-passthrough");
   await expect(popup.getByRole("button", { name: "Tải PDF gốc" })).toBeVisible();
+  await expect(popup.getByRole("button", { name: "Chụp PDF đang hiển thị" })).toBeVisible();
 });
 
 test("reports auth-required without creating an original artifact @smoke", async ({
@@ -102,6 +104,7 @@ test("reports auth-required without creating an original artifact @smoke", async
   await expect(card).toHaveAttribute("data-status", "auth-required");
   await expect(popup.getByText("Nguồn PDF cần đăng nhập")).toBeVisible();
   await expect(popup.getByRole("button", { name: "Tải PDF gốc" })).toHaveCount(0);
+  await expect(popup.getByRole("button", { name: "Chụp PDF đang hiển thị" })).toBeVisible();
 
   const after = await serviceWorker.evaluate(async () => {
     const database = await new Promise<IDBDatabase>((resolve, reject) => {
