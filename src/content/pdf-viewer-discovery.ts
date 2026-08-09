@@ -235,17 +235,15 @@ function genericPageRect(target: HTMLElement, element: Element): Rect | undefine
   if (rect.width < minWidth || rect.height < minHeight) return undefined;
   const aspect = rect.width / rect.height;
   if (aspect < 0.35 || aspect > 2.2) return undefined;
-  if (
-    rect.width >= target.scrollWidth * 0.94 &&
-    rect.height >= target.scrollHeight * 0.72
-  ) {
+  if (rect.width >= target.scrollWidth * 0.94 && rect.height >= target.scrollHeight * 0.72) {
     return undefined;
   }
   return rect;
 }
 
 function dimensionsSimilar(left: Rect, right: Rect): boolean {
-  const widthRatio = Math.max(left.width, right.width) / Math.max(1, Math.min(left.width, right.width));
+  const widthRatio =
+    Math.max(left.width, right.width) / Math.max(1, Math.min(left.width, right.width));
   const heightRatio =
     Math.max(left.height, right.height) / Math.max(1, Math.min(left.height, right.height));
   return widthRatio <= 1.35 && heightRatio <= 1.35;
@@ -273,7 +271,8 @@ function collectRepeatedPageBlocks(target: HTMLElement): Element[] {
       const pageSized = children
         .map((element) => ({ element, rect: genericPageRect(target, element) }))
         .filter(
-          (candidate): candidate is { element: Element; rect: Rect } => candidate.rect !== undefined,
+          (candidate): candidate is { element: Element; rect: Rect } =>
+            candidate.rect !== undefined,
         );
 
       for (const candidate of pageSized) {
