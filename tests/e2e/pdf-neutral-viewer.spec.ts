@@ -109,7 +109,7 @@ test("@smoke discovers a neutral 220-page document through explicit PDF intent",
           for (let index = 0; index < 220; index += 1) {
             const node = document.createElement("section");
             node.className = "unit";
-            node.innerHTML = `<h2>Mục ${index + 1}</h2><p>Nội dung kiểm thử ${index + 1}</p>`;
+            node.innerHTML = "<h2>Mục " + (index + 1) + "</h2><p>Nội dung kiểm thử " + (index + 1) + "</p>";
             stack.append(node);
           }
         </script>
