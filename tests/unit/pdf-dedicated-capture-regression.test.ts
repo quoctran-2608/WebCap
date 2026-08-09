@@ -50,7 +50,10 @@ function pageResult(
     actualScrollLeft: request.scrollLeft,
     actualScrollTop: request.scrollTop,
     scrollWidth: 100,
-    scrollHeight: documentPageMap?.sourcePageCount === undefined ? 220 : documentPageMap.sourcePageCount * 100,
+    scrollHeight:
+      documentPageMap?.sourcePageCount === undefined
+        ? 220
+        : documentPageMap.sourcePageCount * 100,
     clientWidth: 100,
     clientHeight: 100,
     viewportWidth: 100,
@@ -108,7 +111,11 @@ function engineHarness(map: DocumentPageMap | undefined) {
     },
     targetRect: { x: 0, y: 0, width: 100, height: 220 },
     targetDescriptor: descriptor,
-    cancellation: { cancelled: false, keepPartial: false, throwIfCancelled: () => undefined },
+    cancellation: {
+      cancelled: false,
+      keepPartial: false,
+      throwIfCancelled: () => undefined,
+    },
     onPlan: () => Promise.resolve(),
     storeTile(tile: CaptureTile) {
       stored.push(tile);
@@ -120,7 +127,7 @@ function engineHarness(map: DocumentPageMap | undefined) {
 }
 
 describe("dedicated PDF capture regression", () => {
-  it("captures all 220 logical pages through neutral DOM without a document-wide maxTiles cap", async () => {
+  it("captures 220 logical pages through neutral DOM", async () => {
     const harness = engineHarness(pageMap(220));
 
     const result = await harness.engine.capture(harness.context);
@@ -134,7 +141,7 @@ describe("dedicated PDF capture regression", () => {
     );
   }, 30_000);
 
-  it("fails closed instead of silently raster-paginating when logical pages cannot be verified", async () => {
+  it("fails closed when logical pages cannot be verified", async () => {
     const harness = engineHarness(undefined);
 
     await expect(harness.engine.capture(harness.context)).rejects.toMatchObject({
@@ -147,7 +154,7 @@ describe("dedicated PDF capture regression", () => {
     expect(harness.stored).toHaveLength(0);
   });
 
-  it("lets an explicit force flag invoke viewer discovery even for neutral container names", async () => {
+  it("forces discovery for neutral container names", async () => {
     const now = new Date("2026-08-09T11:00:00.000Z");
     const browserResponse = {
       protocolVersion: PROTOCOL_VERSION,
