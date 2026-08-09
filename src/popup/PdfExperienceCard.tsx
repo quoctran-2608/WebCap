@@ -24,6 +24,8 @@ function stageCopy(
       return pdfUxCopy(locale, "writing");
     case "paused":
       return pdfUxCopy(locale, "paused");
+    case "failed":
+      return pdfUxCopy(locale, "operationFailed");
     case "completed":
       return pdfUxCopy(locale, "resultTitle");
     case "capturing":
