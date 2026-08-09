@@ -32,6 +32,19 @@ Tracking issue: #46 — `Release owner handoff — WebCap 0.2.0`.
 - [x] Packaged install/update/uninstall lifecycle passes on Linux, Windows and macOS.
 - [x] `0.1.0 -> 0.2.0` migration preserves extension identity and supported stored state.
 
+## Publication provenance gate
+
+Pull-request workflows validate the GitHub merge-test ref. Therefore their release manifest legitimately records the merge-test SHA rather than a permanent `main`/tag commit. For example, the fully passing release-handoff RC run `31267525400` produced the expected 1,341,084-byte ZIP with SHA-256 `8bade485ee0672a2b160abf59f45c1772062ffc00724889c5aaa39294e7edb34`, while its `webcap-0.2.0.release.json` records `sourceCommit: fc91c80c524895f8a46f2b40ceb0e27e745f5e93`, the PR merge-test ref.
+
+That PR artifact is valid validation evidence, but it is **not** the canonical publication artifact. The canonical publication artifact must come from the Release Candidate workflow triggered by the final `v0.2.0` tag.
+
+- [ ] Create `v0.2.0` on the explicitly approved final `main` commit.
+- [ ] Wait for the tag-triggered **Release Candidate** workflow to complete successfully.
+- [ ] Download the deterministic release artifact from that tag-triggered workflow run.
+- [ ] Verify the tag-run `webcap-0.2.0.zip` remains exactly 1,341,084 bytes with SHA-256 `8bade485ee0672a2b160abf59f45c1772062ffc00724889c5aaa39294e7edb34`.
+- [ ] Verify `webcap-0.2.0.release.json.sourceCommit` exactly equals the commit SHA referenced by `v0.2.0`.
+- [ ] Use the tag-run ZIP, checksum and release manifest for publication; do not substitute a PR merge-ref artifact even when its extension ZIP bytes are identical.
+
 ## Product, correctness and privacy review
 
 - [x] PDF Engine V2 acceptance criteria AC-41–AC-60 have release traceability in `docs/release/acceptance-criteria-pdf-engine-v2.md`.
@@ -46,11 +59,10 @@ Tracking issue: #46 — `Release owner handoff — WebCap 0.2.0`.
 ## GitHub release-owner actions
 
 - [ ] Review `docs/release/0.2.0.md` and this checklist against the exact approved candidate.
-- [ ] Retain the exact `webcap-0.2.0.zip`, checksum and validation reports from the successful Release Candidate run.
-- [ ] Create tag `v0.2.0` only after explicit release-owner approval.
-- [ ] Create the GitHub Release from the approved tag and use the final 0.2.0 release notes.
-- [ ] Attach or otherwise retain the exact reproducible ZIP/checksum/evidence required by the project release policy.
-- [ ] Verify the GitHub Release points to the intended S35-complete source commit and does not silently rebuild a different package.
+- [ ] Complete the publication provenance gate above and retain the tag-triggered ZIP, checksum, release manifest and validation reports.
+- [ ] Create the GitHub Release from `v0.2.0` only after the tag-triggered Release Candidate workflow is green.
+- [ ] Use the final 0.2.0 release notes and attach or otherwise retain the canonical tag-run publication evidence required by project policy.
+- [ ] Verify the GitHub Release points to the same commit recorded by the tag-run release manifest.
 
 ## Chrome Web Store — manual owner actions
 
@@ -60,7 +72,7 @@ Tracking issue: #46 — `Release owner handoff — WebCap 0.2.0`.
 - [ ] Review Vietnamese and English listing copy against actual 0.2.0 behavior; do not advertise unsupported OCR, annotation, cloud or unlimited capture claims.
 - [ ] Upload/review a 128x128 store icon, at least one human-reviewed 1280x800 or 640x400 screenshot, and a 440x280 small promo tile.
 - [ ] Complete Privacy practices declarations so they match `docs/privacy.md`, `docs/permissions.md` and actual product behavior.
-- [ ] Upload the exact approved `webcap-0.2.0.zip` and review every dashboard-parsed permission warning.
+- [ ] Upload the canonical `webcap-0.2.0.zip` from the successful tag-triggered Release Candidate run and review every dashboard-parsed permission warning.
 - [ ] Prefer private/trusted-tester distribution for the first external validation unless the release owner deliberately chooses broader distribution.
 - [ ] Submit for review only after explicit release-owner approval.
 - [ ] Do not enable automatic publication unless it is deliberately chosen.
@@ -70,7 +82,7 @@ Tracking issue: #46 — `Release owner handoff — WebCap 0.2.0`.
 - [x] `package.json` and `public/manifest.json` identify version `0.2.0`.
 - [x] Release notes and the approved package evidence identify `0.2.0`.
 - [ ] Confirm tag/GitHub Release naming uses `v0.2.0` consistently.
-- [ ] Retain the exact ZIP, SHA-256, source commit and validation evidence after publication.
+- [ ] Retain the canonical tag-run ZIP, SHA-256, release manifest, source commit and validation evidence after publication.
 - [ ] If a store-uploaded build requires correction, use a strictly larger manifest version; an uploaded Chrome Web Store version number cannot be reused.
 - [ ] Rollback planning must use distribution controls or a corrected higher version rather than attempting to replace an already-published `0.2.0` artifact.
 
