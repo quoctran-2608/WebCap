@@ -4,7 +4,7 @@ import type { CaptureJob, CaptureTile } from "@shared/contracts/domain";
 import type { PdfDocumentManifest } from "@shared/contracts/pdf-capture";
 import { createWebCapError } from "@shared/errors/error";
 import { DEFAULT_CAPTURE_SETTINGS } from "@shared/settings";
-import { buildPdfUxSnapshot, pdfUxCopy } from "@popup/pdf-ux";
+import { buildPdfUxSnapshot, isDedicatedViewerPdfJob, pdfUxCopy } from "@popup/pdf-ux";
 
 const now = "2026-08-08T12:00:00.000Z";
 
@@ -63,7 +63,7 @@ function viewerJob(state: CaptureJob["state"] = "completed"): CaptureJob {
     tilePlan: tiles,
     completedTiles: 2,
     totalTiles: 2,
-    settings: DEFAULT_CAPTURE_SETTINGS,
+    settings: { ...DEFAULT_CAPTURE_SETTINGS, outputFormat: "pdf" },
     completionPolicy: {
       primaryOutput: "pdf",
       autoExport: true,
@@ -159,6 +159,16 @@ describe("S35 PDF UX", () => {
       verifiedComplete: true,
       resultKind: "viewer",
     });
+  });
+
+  it("keeps explicit PDF intent dedicated before a page map exists", () => {
+    const job = viewerJob("failed");
+    delete job.documentPageMap;
+    job.completedTiles = 0;
+    job.totalTiles = 0;
+    job.tilePlan = [];
+    expect(isDedicatedViewerPdfJob(job)).toBe(true);
+    expect(buildPdfUxSnapshot(job).stage).toBe("failed");
   });
 
   it("falls back to durable job export progress when a legacy job has no manifest", () => {
