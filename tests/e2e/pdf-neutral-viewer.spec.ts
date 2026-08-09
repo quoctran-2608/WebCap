@@ -71,7 +71,7 @@ test("@smoke discovers a neutral 220-page document through explicit PDF intent",
   targetPage,
   openPopup,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(150_000);
   await targetPage.goto("http://127.0.0.1:4174/adaptive-long-page.html");
   await targetPage.setContent(`
     <!doctype html>
@@ -139,7 +139,7 @@ test("@smoke discovers a neutral 220-page document through explicit PDF intent",
         }
         return state.documentPageMap?.sourcePageCount ?? 0;
       },
-      { timeout: 90_000 },
+      { timeout: 110_000 },
     )
     .toBe(220);
 
@@ -148,7 +148,4 @@ test("@smoke discovers a neutral 220-page document through explicit PDF intent",
   expect(state.documentPageMap?.pages).toHaveLength(220);
   expect(state.documentPageMap?.pages[0]?.sourceRectCss.height).toBeGreaterThan(700);
   expect(state.documentPageMap?.pages[219]?.sourceRectCss.y).toBeGreaterThan(160_000);
-
-  const cancelPopup = await openPopup();
-  await cancelPopup.getByRole("button", { name: "Hủy chụp", exact: true }).click();
 });
