@@ -81,21 +81,21 @@ test("@smoke discovers a neutral 220-page document through explicit PDF intent",
         <style>
           html, body { margin: 0; background: #ececec; font-family: Arial, sans-serif; }
           #neutral-scroll {
-            width: 820px;
-            height: 620px;
+            width: 680px;
+            height: 520px;
             overflow: auto;
-            margin: 24px;
-            padding: 24px;
+            margin: 20px;
+            padding: 20px;
             box-sizing: border-box;
             background: #2f2f2f;
           }
-          #neutral-stack { width: 700px; margin: 0 auto; }
+          #neutral-stack { width: 580px; margin: 0 auto; }
           .unit {
-            width: 660px;
-            height: 860px;
+            width: 560px;
+            height: 760px;
             box-sizing: border-box;
             margin: 0 auto 18px;
-            padding: 48px;
+            padding: 42px;
             background: white;
             color: #111;
           }
@@ -139,8 +139,8 @@ test("@smoke discovers a neutral 220-page document through explicit PDF intent",
   const state = await readDiscoveryState(serviceWorker);
   expect(state.documentPageMap?.complete).toBe(true);
   expect(state.documentPageMap?.pages).toHaveLength(220);
-  expect(state.documentPageMap?.pages[0]?.sourceRectCss.height).toBeGreaterThan(800);
-  expect(state.documentPageMap?.pages[219]?.sourceRectCss.y).toBeGreaterThan(180_000);
+  expect(state.documentPageMap?.pages[0]?.sourceRectCss.height).toBeGreaterThan(700);
+  expect(state.documentPageMap?.pages[219]?.sourceRectCss.y).toBeGreaterThan(160_000);
 
   const cancelPopup = await openPopup();
   await cancelPopup.getByRole("button", { name: "Hủy chụp", exact: true }).click();
