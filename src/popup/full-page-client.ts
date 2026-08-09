@@ -104,6 +104,23 @@ export function startScrollAreaCapture(options: {
   return startTiledCapture({ ...options, mode: "scroll-area" });
 }
 
+/**
+ * Starts a fail-closed, source-page-aware PDF viewer capture. The explicit PDF
+ * output format is the persisted intent signal used by the scroll capture
+ * stack; ordinary scroll-area capture keeps its existing behavior.
+ */
+export function startPdfViewerCapture(options: {
+  tabId: number;
+  windowId: number;
+  settings: CaptureSettings;
+}): Promise<CaptureJob> {
+  return startTiledCapture({
+    ...options,
+    mode: "scroll-area",
+    settings: { ...options.settings, outputFormat: "pdf" },
+  });
+}
+
 export function getCaptureJob(jobId: string): Promise<CaptureJob> {
   return sendJobRequest(
     createJobGetMessage({

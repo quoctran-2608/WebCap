@@ -19,6 +19,16 @@ describe("createCaptureCompletionPolicy", () => {
     });
   });
 
+  it("keeps explicit PDF scroll capture fail closed through completion", () => {
+    const pdfSettings = { ...DEFAULT_CAPTURE_SETTINGS, outputFormat: "pdf" as const };
+    expect(createCaptureCompletionPolicy("scroll-area", pdfSettings)).toEqual({
+      primaryOutput: "pdf",
+      autoExport: true,
+      openEditorAfterCapture: false,
+      allowGuardedImageFallback: false,
+    });
+  });
+
   it("auto-exports region and element captures using a guarded image format", () => {
     const jpegSettings = { ...DEFAULT_CAPTURE_SETTINGS, outputFormat: "jpeg" as const };
     expect(createCaptureCompletionPolicy("region", jpegSettings)).toMatchObject({

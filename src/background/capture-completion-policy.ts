@@ -19,7 +19,7 @@ export function createCaptureCompletionPolicy(
       primaryOutput: "pdf",
       autoExport: true,
       openEditorAfterCapture: false,
-      allowGuardedImageFallback: mode === "scroll-area",
+      allowGuardedImageFallback: mode === "scroll-area" && settings.outputFormat !== "pdf",
     };
   }
   if (mode === "region" || mode === "element") {

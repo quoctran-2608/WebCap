@@ -14,7 +14,7 @@ import {
   getActiveCaptureJob,
   getCaptureJob,
   resumeCaptureJob,
-  startScrollAreaCapture,
+  startPdfViewerCapture,
 } from "./full-page-client";
 import { shouldRefreshJobFromSummary, subscribeToJobSummaryChanges } from "./job-events-client";
 import { PdfExperienceCard } from "./PdfExperienceCard";
@@ -122,7 +122,7 @@ export function PdfUxCompanion(): React.JSX.Element | null {
     try {
       const settingsSnapshot = await popupSettingsClient.load();
       const imageFormat = selectedImageFormat(settingsSnapshot.outputByMode, "scroll-area");
-      const started = await startScrollAreaCapture({
+      const started = await startPdfViewerCapture({
         tabId: tab.tabId,
         windowId: tab.windowId,
         settings: captureSettingsForOutput(settingsSnapshot.capture, imageFormat),
@@ -223,8 +223,7 @@ export function PdfUxCompanion(): React.JSX.Element | null {
   if (host === undefined) return null;
   const relevant =
     isDedicatedViewerPdfJob(job) ||
-    (capability?.canCaptureViewer === true &&
-      (capability.status === "viewer-capture" || capability.status === "auth-required"));
+    (tab?.status === "supported" && capability?.canCaptureViewer === true);
   if (!relevant) return null;
 
   return createPortal(

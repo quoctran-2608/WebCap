@@ -43,10 +43,7 @@ export function PdfExperienceCard({
   onResume,
 }: PdfExperienceCardProps): React.JSX.Element | null {
   const dedicated = isDedicatedViewerPdfJob(job);
-  const canSuggestViewerCapture =
-    !dedicated &&
-    capability?.canCaptureViewer === true &&
-    (capability.status === "viewer-capture" || capability.status === "auth-required");
+  const canSuggestViewerCapture = !dedicated && capability?.canCaptureViewer === true;
 
   if (!dedicated && !canSuggestViewerCapture) return null;
 

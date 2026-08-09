@@ -22,3 +22,9 @@ No known P0 or P1 defect is accepted for the 0.1.0 release candidate. Any newly 
 # S26 0.2.0 confirmation
 
 The 0.2.0 release candidate retains the same platform boundaries: restricted Chrome surfaces, DRM/hardware overlays, cross-origin DOM and closed shadow roots are not bypassed; visible-scroll engines require the source tab to remain active; original PDF passthrough requires explicit optional permission and source access. Compatibility claims are limited to desktop Chrome 116+, previous stable and current stable evidence.
+
+## Dedicated PDF capture safety
+
+For viewer-based PDF capture, WebCap treats verified logical source-page boundaries as a correctness requirement. The dedicated **Capture PDF / Chụp PDF** action must discover a complete high-confidence source-page map before it can use page-native export. If the viewer does not expose enough evidence to verify every logical page, WebCap fails clearly and allows a retry instead of silently falling back to fixed-height continuous-raster pagination.
+
+This fail-closed behavior is intentional. It prevents three classes of silent corruption: exporting only a virtualized prefix of a long PDF, reporting 100% when the source-page count was never proven, and placing arbitrary output-page seams through source content such as a line of text. Generic **Scrollable area / Vùng cuộn** capture remains available for non-PDF scroll containers and should not be used as a substitute for the dedicated PDF action when exact source-page preservation is required.
