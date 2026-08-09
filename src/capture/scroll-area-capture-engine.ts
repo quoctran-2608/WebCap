@@ -89,7 +89,8 @@ export class ScrollAreaCaptureEngine implements CaptureEngine {
     const forcedPdfPages = {
       scrollAndSettle: (request: Parameters<typeof options.pages.scrollAndSettle>[0]) =>
         options.pages.scrollAndSettle({ ...request, forcePdfDiscovery: true }),
-      cleanup: (...args: Parameters<typeof options.pages.cleanup>) => options.pages.cleanup(...args),
+      cleanup: (...args: Parameters<typeof options.pages.cleanup>) =>
+        options.pages.cleanup(...args),
     };
     const failClosedFallback: CaptureEngine = {
       kind: "scroll",
