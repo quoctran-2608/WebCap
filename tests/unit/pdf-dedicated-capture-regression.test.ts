@@ -70,9 +70,10 @@ function pageResult(
 }
 
 function engineHarness(map: DocumentPageMap | undefined) {
-  const scrollAndSettle = vi.fn((request: ScrollAreaPageRequest) =>
-    Promise.resolve(pageResult(request, request.forcePdfDiscovery === true ? map : undefined)),
-  );
+  const scrollAndSettle = vi.fn((request: ScrollAreaPageRequest) => {
+    const discovered = request.forcePdfDiscovery === true ? map : undefined;
+    return Promise.resolve(pageResult(request, discovered));
+  });
   const pages: ScrollAreaPageAdapter = {
     scrollAndSettle,
     cleanup: vi.fn(() =>
@@ -139,7 +140,7 @@ describe("dedicated PDF capture regression", () => {
     expect(harness.scrollAndSettle).toHaveBeenCalledWith(
       expect.objectContaining({ forcePdfDiscovery: true }),
     );
-  }, 30_000);
+  });
 
   it("fails closed when logical pages cannot be verified", async () => {
     const harness = engineHarness(undefined);
