@@ -40,6 +40,22 @@ describe("explicit PDF viewer intent", () => {
     expect(isDedicatedViewerPdfJob(pdfJob)).toBe(true);
   });
 
+  it("preserves legacy page-native PDF recognition after verification", () => {
+    const legacy = job("png", "completed");
+    legacy.documentPageMap = {
+      schemaVersion: 1,
+      strategy: "dom",
+      confidence: 0.9,
+      complete: true,
+      sourcePageCount: 2,
+      pages: [
+        { index: 0, sourceRectCss: { x: 0, y: 0, width: 600, height: 800 } },
+        { index: 1, sourceRectCss: { x: 0, y: 820, width: 600, height: 800 } },
+      ],
+    };
+    expect(isDedicatedViewerPdfJob(legacy)).toBe(true);
+  });
+
   it("does not misclassify ordinary scroll-area capture as dedicated PDF", () => {
     expect(isDedicatedViewerPdfJob(job("png", "created"))).toBe(false);
   });
