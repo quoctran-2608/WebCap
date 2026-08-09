@@ -37,11 +37,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Print exact Prettier diff for PDF regression test
-        run: |
-          pnpm exec prettier --write tests/unit/pdf-dedicated-capture-regression.test.ts
-          git diff -- tests/unit/pdf-dedicated-capture-regression.test.ts
-          exit 1
+      - name: Check formatting
+        run: pnpm format:check
 
       - name: Lint
         run: pnpm lint
